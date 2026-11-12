@@ -70,9 +70,7 @@ final class CardapioRepository
         $valores = $this->soColunasPermitidas($recurso, $valores);
         $colunas = array_keys($valores);
         $sql = sprintf('INSERT INTO %s (%s) VALUES (%s)', $recurso, implode(', ', $colunas), implode(', ', array_fill(0, count($colunas), '?')));
-        $pdo = Banco::conexao();
-        $pdo->prepare($sql)->execute(array_values($valores));
-        return (int) $pdo->lastInsertId();
+        return Banco::inserir(Banco::conexao(), $sql, array_values($valores));
     }
 
     /** @param array<string,mixed> $valores já validados */

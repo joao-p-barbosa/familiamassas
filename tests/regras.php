@@ -6,6 +6,7 @@ declare(strict_types=1);
 
 require dirname(__DIR__) . '/app/bootstrap.php';
 
+use App\Core\Banco;
 use App\Core\Env;
 use App\Core\ErroHttp;
 use App\Repositories\CardapioRepository;
@@ -21,14 +22,39 @@ use App\Services\PrecoService;
 use App\Services\TempoDePreparo;
 use App\Services\TokenWhatsApp;
 
+// Banco dos testes. Padrão: um SQLite temporário. Com TEST_DATABASE_URL (a connection string do Neon, no .env ou no ambiente)
+// a mesma suíte roda no Postgres de verdade, dentro de um schema que ela cria e apaga no fim: os dados reais não são tocados.
+$urlPgTeste = Env::get('TEST_DATABASE_URL');
+$emPg = $urlPgTeste !== '';
 $banco = sys_get_temp_dir() . '/familiamassas-teste-' . bin2hex(random_bytes(4)) . '.sqlite';
-Env::definir('DB_DRIVER', 'sqlite');
-Env::definir('DB_SQLITE_PATH', $banco);
-register_shutdown_function(static function () use ($banco): void {
-    foreach ([$banco, $banco . '-wal', $banco . '-shm'] as $arquivo) {
-        @unlink($arquivo);
+$configBancoDeTeste = [];   // o que os processos filhos precisam saber para abrir o mesmo banco
+if ($emPg) {
+    $urlDireta = (string) preg_replace('/-pooler(?=\.)/', '', $urlPgTeste);   // a criação do schema pede conexão direta, não o pooler
+    $criarSchemaDeTeste = static function () use ($urlDireta): array {
+        $schema = 'teste_' . bin2hex(random_bytes(5));
+        Env::definir('DATABASE_URL', $urlDireta);
+        [$dsn, $usuario, $senha] = Banco::dadosDoPostgres();
+        $admin = new PDO($dsn, $usuario, $senha, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC]);
+        $admin->exec("CREATE SCHEMA \"{$schema}\"");
+        register_shutdown_function(static function () use ($admin, $schema): void {
+            $admin->exec("DROP SCHEMA IF EXISTS \"{$schema}\" CASCADE");
+        });
+        return [$schema, $admin, ['DB_DRIVER' => 'pgsql', 'DATABASE_URL' => $urlDireta, 'DB_PG_SCHEMA' => $schema]];
+    };
+    [$schemaDeTeste, $adminPg, $configBancoDeTeste] = $criarSchemaDeTeste();
+    foreach ($configBancoDeTeste as $chave => $valor) {
+        Env::definir($chave, $valor);
     }
-});
+    echo "Rodando no Postgres (schema temporário {$schemaDeTeste}).\n";
+} else {
+    Env::definir('DB_DRIVER', 'sqlite');
+    Env::definir('DB_SQLITE_PATH', $banco);
+    register_shutdown_function(static function () use ($banco): void {
+        foreach ([$banco, $banco . '-wal', $banco . '-shm'] as $arquivo) {
+            @unlink($arquivo);
+        }
+    });
+}
 
 $falhas = 0;
 $total = 0;
@@ -355,16 +381,84 @@ conferir('Terça 12:00', $loja->estado($em('2026-11-10 12:00')), ['aberta' => fa
 conferir('Fechada à mão vence o horário', $loja->estado($em('2026-11-11 12:00'))['aberta'], false);
 conferir('Loja fechada recusa pedido', codigoDoErro(fn () => $pedidos->criar($base)), '409 loja_fechada');
 
+echo "\nOS DOIS ESQUEMAS (SQLite e Postgres) DESCREVEM AS MESMAS TABELAS\n";
+$tabelasDoEsquema = static function (string $arquivo): array {
+    $sql = (string) file_get_contents(dirname(__DIR__) . '/data/' . $arquivo);
+    $tabelas = [];
+    preg_match_all('/CREATE TABLE (\w+) \((.*?)\n\);/s', $sql, $achadas, PREG_SET_ORDER);
+    foreach ($achadas as [, $nome, $corpo]) {
+        preg_match_all('/^  ([a-z_]+)\s/m', $corpo, $colunas);   // coluna = linha que começa com 2 espaços e um nome em minúsculas
+        $tabelas[$nome] = $colunas[1];
+    }
+    return $tabelas;
+};
+$esquemaSqlite = $tabelasDoEsquema('schema.sqlite.sql');
+$esquemaPg = $tabelasDoEsquema('schema.pgsql.sql');
+$soNoPostgres = ['esquema_versao', 'sessoes', 'imagens'];
+conferir('Postgres: as mesmas tabelas do SQLite, mais as que só existem lá (versão, sessões e fotos)', array_values(array_diff(array_keys($esquemaPg), $soNoPostgres)), array_keys($esquemaSqlite));
+$colunasDiferentes = [];
+foreach ($esquemaSqlite as $tabela => $colunas) {
+    if (($esquemaPg[$tabela] ?? null) !== $colunas) {
+        $colunasDiferentes[] = $tabela;
+    }
+}
+conferir('Cada tabela tem as mesmas colunas, na mesma ordem, nos dois esquemas', $colunasDiferentes, []);
+conferir('As tabelas só do Postgres existem no esquema dele', array_values(array_intersect($soNoPostgres, array_keys($esquemaPg))), $soNoPostgres);
+
+if ($emPg) {
+    echo "\nPOSTGRES: sessões e fotos no banco\n";
+    $sessoes = new App\Core\SessaoNoBanco();
+    $idSessao = bin2hex(random_bytes(16));
+    conferir('Sessão que não existe: leitura vazia e id inválido (use_strict_mode)', [$sessoes->read($idSessao), $sessoes->validateId($idSessao)], ['', false]);
+    $sessoes->write($idSessao, 'usuario|a:1:{s:4:"nome";s:7:"Joaquim";}csrf|s:3:"abc";');
+    conferir('Sessão gravada: volta igual e o id passa a valer', [$sessoes->read($idSessao), $sessoes->validateId($idSessao)], ['usuario|a:1:{s:4:"nome";s:7:"Joaquim";}csrf|s:3:"abc";', true]);
+    $sessoes->write($idSessao, 'csrf|s:3:"xyz";');
+    conferir('Gravar de novo troca o conteúdo (uma linha só por sessão)', [$sessoes->read($idSessao), (int) Banco::conexao()->query('SELECT COUNT(*) FROM sessoes')->fetchColumn()], ['csrf|s:3:"xyz";', 1]);
+    Banco::conexao()->prepare('UPDATE sessoes SET atualizado_em = ? WHERE id = ?')->execute([gmdate('Y-m-d H:i:s', time() - 13 * 3600), $idSessao]);
+    conferir('Sessão parada há mais de 12 h não vale mais', [$sessoes->read($idSessao), $sessoes->validateId($idSessao)], ['', false]);
+    $sessoes->gc(43200);
+    conferir('A limpeza (gc) apaga a sessão vencida', (int) Banco::conexao()->query('SELECT COUNT(*) FROM sessoes')->fetchColumn(), 0);
+    $sessoes->write($idSessao, 'a|b;');
+    $sessoes->destroy($idSessao);
+    conferir('Sair apaga a sessão', $sessoes->read($idSessao), '');
+
+    $imagens = new App\Repositories\ImagemRepository();
+    $bytes = "\x89PNG\r\n\x1a\n" . "\x00\x01\x02\xff\xfe\x00" . str_repeat("\x00\xff", 2000);   // com zeros e bytes altos, como uma foto de verdade
+    $nomeFoto = bin2hex(random_bytes(12)) . '.png';
+    $imagens->guardar($nomeFoto, 'image/png', $bytes);
+    $volta = $imagens->porNome($nomeFoto);
+    conferir('Foto no banco: os bytes voltam idênticos (inclusive zeros) e o tipo também', [$volta['tipo'] ?? null, ($volta['dados'] ?? '') === $bytes, strlen($volta['dados'] ?? '')], ['image/png', true, strlen($bytes)]);
+    conferir('Foto que não existe', $imagens->porNome(bin2hex(random_bytes(12)) . '.png'), null);
+    $reqFoto = new Requisicao();
+    $reqFoto->parametros = ['nome' => $nomeFoto];
+    ob_start();
+    (new App\Controllers\PublicoController())->foto($reqFoto);
+    $entregue = (string) ob_get_clean();
+    conferir('GET /uploads/{nome} entrega a foto guardada', $entregue === $bytes, true);
+    $reqFoto->parametros = ['nome' => '../../etc/passwd'];
+    ob_start();
+    (new App\Controllers\PublicoController())->foto($reqFoto);
+    ob_end_clean();
+    conferir('Nome fora do padrão (../) não é entregue: 404', http_response_code(), 404);
+    http_response_code(200);
+}
+
 echo "\nPRIMEIRO ACESSO EM PARALELO (corrida na criação do banco)\n";
 // Na hospedagem, o Apache atende várias requisições ao mesmo tempo, e as primeiras chegam juntas (a Render ainda manda a
 // verificação de saúde). Aqui 8 processos PHP abrem o MESMO banco novo ao mesmo tempo: o esquema e os dados de exemplo
-// precisam ser criados uma vez só, e nenhum deles pode falhar.
-/** Abre o banco $arquivo em vários processos PHP ao mesmo tempo, como o Apache faz. Devolve o que cada um respondeu ("ok" ou o erro). */
-$abrirEmParalelo = static function (string $arquivo, int $quantos = 8): array {
-    $codigo = 'require ' . var_export(dirname(__DIR__) . '/app/bootstrap.php', true) . ';'
-        . ' App\\Core\\Env::definir("DB_DRIVER", "sqlite"); App\\Core\\Env::definir("APP_ENV", "dev");'
-        . ' App\\Core\\Env::definir("DB_SQLITE_PATH", ' . var_export($arquivo, true) . ');'
-        . ' try { $v = (int) App\\Core\\Banco::conexao()->query("PRAGMA user_version")->fetchColumn(); echo $v === App\\Core\\Banco::VERSAO_DO_ESQUEMA ? "ok" : "versao " . $v; }'
+// precisam ser criados uma vez só, e nenhum deles pode falhar. Vale para o SQLite e para o Postgres.
+/**
+ * Abre o banco descrito em $config (pares de Env: DB_DRIVER, DB_SQLITE_PATH ou DATABASE_URL + DB_PG_SCHEMA) em vários processos
+ * PHP ao mesmo tempo, como o Apache faz. Devolve o que cada um respondeu ("ok" ou o erro).
+ * @param array<string,string> $config
+ */
+$abrirEmParalelo = static function (array $config, int $quantos = 8): array {
+    $ajustes = '';
+    foreach ($config + ['APP_ENV' => 'dev'] as $chave => $valor) {
+        $ajustes .= ' App\Core\Env::definir(' . var_export($chave, true) . ', ' . var_export($valor, true) . ');';
+    }
+    $codigo = 'require ' . var_export(dirname(__DIR__) . '/app/bootstrap.php', true) . ';' . $ajustes
+        . ' try { $pdo = App\Core\Banco::conexao(); $v = App\Core\Banco::versaoDoBanco($pdo); echo $v === App\Core\Banco::VERSAO_DO_ESQUEMA ? "ok" : "versao " . $v; }'
         . ' catch (Throwable $e) { echo "ERRO: " . $e->getMessage(); }';
     $filhos = [];
     for ($i = 0; $i < $quantos; $i++) {
@@ -382,15 +476,23 @@ $abrirEmParalelo = static function (string $arquivo, int $quantos = 8): array {
 };
 $pastaCorrida = sys_get_temp_dir() . '/familiamassas-corrida-' . bin2hex(random_bytes(4));
 mkdir($pastaCorrida);
-$arquivoCorrida = $pastaCorrida . '/novo.sqlite';
-$resultados = $abrirEmParalelo($arquivoCorrida);
+if ($emPg) {
+    [$schemaCorrida, $adminCorrida, $configCorrida] = $criarSchemaDeTeste();   // um schema novo e vazio só para esta corrida
+} else {
+    $configCorrida = ['DB_DRIVER' => 'sqlite', 'DB_SQLITE_PATH' => $pastaCorrida . '/novo.sqlite'];
+}
+$resultados = $abrirEmParalelo($configCorrida);
 conferir('Os 8 acessos simultâneos ao banco novo funcionam (nenhum 500)', array_count_values($resultados), ['ok' => 8]);
-$bancoCorrida = new PDO('sqlite:' . $arquivoCorrida, null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
-conferir('Os dados de exemplo foram criados uma vez só (2 usuários) e o banco já está na versão atual', [
-    (int) $bancoCorrida->query('SELECT COUNT(*) FROM usuarios')->fetchColumn(),
-    (int) $bancoCorrida->query('PRAGMA user_version')->fetchColumn(),
-], [2, App\Core\Banco::VERSAO_DO_ESQUEMA]);
-$bancoCorrida = null;
+if ($emPg) {
+    $usuariosCorrida = (int) $adminCorrida->query("SELECT COUNT(*) FROM \"{$schemaCorrida}\".usuarios")->fetchColumn();
+    $versaoCorrida = (int) $adminCorrida->query("SELECT versao FROM \"{$schemaCorrida}\".esquema_versao")->fetchColumn();
+} else {
+    $bancoCorrida = new PDO('sqlite:' . $configCorrida['DB_SQLITE_PATH'], null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+    $usuariosCorrida = (int) $bancoCorrida->query('SELECT COUNT(*) FROM usuarios')->fetchColumn();
+    $versaoCorrida = (int) $bancoCorrida->query('PRAGMA user_version')->fetchColumn();
+    $bancoCorrida = null;
+}
+conferir('Os dados de exemplo foram criados uma vez só (2 usuários) e o banco já está na versão atual', [$usuariosCorrida, $versaoCorrida], [2, Banco::VERSAO_DO_ESQUEMA]);
 foreach (glob($pastaCorrida . '/*') ?: [] as $restante) {
     @unlink($restante);
 }
@@ -437,6 +539,10 @@ ini_set('error_log', $logAntes);
 @unlink(sys_get_temp_dir() . '/familiamassas-seed-teste.log');
 
 echo "\nATUALIZAÇÃO DO BANCO (migrações)\n";
+if ($emPg) {
+    echo "  (só no SQLite: as migrações 001 e 002 foram escritas para o banco antigo, que nunca existiu no Postgres)\n";
+}
+if (!$emPg) {
 $ultima = max(array_map(static fn (string $caminho): int => (int) basename($caminho), glob(dirname(__DIR__) . '/data/migracoes/*.php') ?: [0]));
 conferir('A versão do esquema é a da última migração', App\Core\Banco::VERSAO_DO_ESQUEMA, $ultima);
 
@@ -494,7 +600,7 @@ $antigo2->exec("INSERT INTO usuarios (nome, login, senha_hash, perfil, ativo, cr
 $antigo2->exec("INSERT INTO pedidos (codigo, cliente_nome, cliente_telefone, tipo, pagamento, subtotal_centavos, total_centavos, status, origem, criado_por, status_atualizado_em, atualizado_em, criado_em)
                 SELECT 'P' || n, 'Cliente', '', 'viagem', 'caixa', 1690, 1690, 'novo', 'balcao', 1, '{$agoraAntigo}', '{$agoraAntigo}', '{$agoraAntigo}' FROM (SELECT 1 AS n UNION SELECT 2 UNION SELECT 3)");
 $antigo2 = null;
-$respostasAntigo = $abrirEmParalelo($arquivoAntigo2);
+$respostasAntigo = $abrirEmParalelo(['DB_DRIVER' => 'sqlite', 'DB_SQLITE_PATH' => $arquivoAntigo2]);
 conferir('Os 8 acessos simultâneos a um banco antigo funcionam (a migração roda uma vez só)', array_count_values($respostasAntigo), ['ok' => 8]);
 $antigo2 = new PDO('sqlite:' . $arquivoAntigo2, null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
 conferir('Sem duplicar: um atendimento por pedido antigo do salão, e o banco na versão atual', [
@@ -522,6 +628,8 @@ foreach (array_merge(glob($pastaMigracao . '/backups/*') ?: [], glob($pastaMigra
 }
 @rmdir($pastaMigracao . '/backups');
 @rmdir($pastaMigracao);
+
+}
 
 echo "\n" . ($falhas === 0 ? "Todos os {$total} testes passaram." : "{$falhas} de {$total} testes falharam.") . "\n";
 exit($falhas === 0 ? 0 : 1);

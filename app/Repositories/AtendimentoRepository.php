@@ -25,9 +25,11 @@ final class AtendimentoRepository
     {
         return Banco::transacao(function (\PDO $pdo) use ($atendimento, $pedido, $itens, $usuarioId): array {
             $agora = Relogio::agora();
-            $pdo->prepare("INSERT INTO atendimentos (cliente_nome, modalidade, mesa, status, aberto_por, aberto_em, atualizado_em) VALUES (?, ?, ?, 'aberto', ?, ?, ?)")
-                ->execute([$atendimento['cliente_nome'], $atendimento['modalidade'], $atendimento['mesa'], $usuarioId, $agora, $agora]);
-            $id = (int) $pdo->lastInsertId();
+            $id = Banco::inserir(
+                $pdo,
+                "INSERT INTO atendimentos (cliente_nome, modalidade, mesa, status, aberto_por, aberto_em, atualizado_em) VALUES (?, ?, ?, 'aberto', ?, ?, ?)",
+                [$atendimento['cliente_nome'], $atendimento['modalidade'], $atendimento['mesa'], $usuarioId, $agora, $agora],
+            );
             return ['atendimento_id' => $id] + $this->pedidos->inserir($pdo, $pedido + ['atendimento_id' => $id], $itens, $usuarioId);
         });
     }
@@ -119,7 +121,7 @@ final class AtendimentoRepository
                                           LEFT JOIN usuarios ua ON ua.id = a.aberto_por
                                           LEFT JOIN usuarios ue ON ue.id = a.encerrado_por
                                           WHERE COALESCE(a.encerrado_em, a.aberto_em) >= ? AND COALESCE(a.encerrado_em, a.aberto_em) < ?
-                                            AND (? IS NULL OR a.status = ?)
+                                            AND (CAST(? AS TEXT) IS NULL OR a.status = ?)
                                           ORDER BY COALESCE(a.encerrado_em, a.aberto_em) DESC, a.id DESC LIMIT {$limite}");
         $sql->execute([$de, $ate, $status, $status]);
         return array_map($this->converter(...), $sql->fetchAll());

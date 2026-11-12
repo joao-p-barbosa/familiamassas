@@ -9,6 +9,7 @@ use App\Core\Requisicao;
 use App\Core\Resposta;
 use App\Core\Sessao;
 use App\Repositories\CardapioRepository;
+use App\Repositories\ImagemRepository;
 
 // Edição do cardápio (Etapa 5): cadastro de categorias, itens, tamanhos, massas, molhos e ingredientes.
 final class AdminCardapioController
@@ -105,6 +106,12 @@ final class AdminCardapioController
             throw ErroHttp::validacao(['imagem' => 'Use uma foto em JPG, PNG ou WebP.']);
         }
         $nome = bin2hex(random_bytes(12)) . '.' . $extensao;
+        if (Banco::driver() === 'pgsql') {
+            // Hospedagem com disco temporário: a foto fica no banco e é entregue por GET /uploads/{nome}.
+            (new ImagemRepository())->guardar($nome, $tipo, (string) file_get_contents($arquivo['tmp_name']));
+            Resposta::json(['caminho' => '/uploads/' . $nome], 201);
+            return;
+        }
         $pasta = RAIZ . '/public/uploads';
         if (!is_dir($pasta)) {
             mkdir($pasta, 0775, true);

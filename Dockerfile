@@ -4,6 +4,12 @@ FROM php:8.3-apache
 
 ENV APACHE_DOCUMENT_ROOT=/var/www/html/public
 
+# Postgres (Neon): a extensão pdo_pgsql não vem na imagem oficial.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends libpq-dev \
+ && docker-php-ext-install pdo_pgsql \
+ && rm -rf /var/lib/apt/lists/*
+
 # Apache: raiz do site em /public, .htaccess valendo (reescrita para o index.php e cabeçalhos) e o php.ini de produção.
 RUN a2enmod rewrite headers \
  && sed -ri -e 's!/var/www/html!${APACHE_DOCUMENT_ROOT}!g' /etc/apache2/sites-available/*.conf \

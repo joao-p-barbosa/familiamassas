@@ -8,8 +8,8 @@ return static function (PDO $pdo): void {
     $inserir = static function (string $tabela, array $linha) use ($pdo): int {
         $colunas = array_keys($linha);
         $sql = sprintf('INSERT INTO %s (%s) VALUES (%s)', $tabela, implode(', ', $colunas), implode(', ', array_fill(0, count($colunas), '?')));
-        $pdo->prepare($sql)->execute(array_values($linha));
-        return (int) $pdo->lastInsertId();
+        // configuracoes (chave) e item_ingredientes (chave composta) não têm coluna "id".
+        return \App\Core\Banco::inserir($pdo, $sql, array_values($linha), !in_array($tabela, ['configuracoes', 'item_ingredientes'], true));
     };
 
     // ---------- Configurações da loja (suposições da Etapa 0: confirmar com o dono) ----------

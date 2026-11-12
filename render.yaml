@@ -17,11 +17,13 @@ services:
         generateValue: true
       - key: TRUST_PROXY        # a Render fica na frente do site: vale o IP do X-Forwarded-For
         value: "1"
+      - key: DATABASE_URL       # connection string do Neon (Connect > Connection string). Com ela o sistema usa o Postgres e
+        sync: false             # os dados, as sessões e as fotos sobrevivem a reinícios. Sem ela, usa o SQLite (disco temporário).
       - key: SENHA_ADMIN_INICIAL        # você digita ao criar o serviço (8+ caracteres)
         sync: false
       - key: SENHA_ATENDENTE_INICIAL    # idem
         sync: false
-      # Para guardar os pedidos de verdade (exige plano pago): troque "plan: free" por "plan: starter",
+      # Só sem Neon (SQLite em disco persistente, plano pago): troque "plan: free" por "plan: starter",
       # descomente o disco abaixo e a variável DATA_DIR.
       # - key: DATA_DIR
       #   value: /var/data

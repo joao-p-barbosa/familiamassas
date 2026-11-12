@@ -22,6 +22,7 @@ return static function (Roteador $r): void {
     $r->get('/', $publico->paginaCardapio(...));
     $r->get('/pedido/{codigo}', $publico->paginaPedido(...));
     $r->get('/styleguide', $publico->paginaStyleguide(...));
+    $r->get('/uploads/{nome}', $publico->foto(...));
 
     // ---------- API pública ----------
     $r->get('/api/cardapio', $publico->apiCardapio(...));

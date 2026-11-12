@@ -42,9 +42,8 @@ final class PedidoRepository
             if ($clienteId) {
                 $pdo->prepare('UPDATE clientes SET nome = ?, atualizado_em = ? WHERE id = ?')->execute([$pedido['cliente_nome'], $agora, $clienteId]);
             } else {
-                $pdo->prepare('INSERT INTO clientes (nome, telefone, criado_em, atualizado_em) VALUES (?, ?, ?, ?)')
-                    ->execute([$pedido['cliente_nome'], $pedido['cliente_telefone'], $agora, $agora]);
-                $clienteId = $pdo->lastInsertId();
+                $clienteId = Banco::inserir($pdo, 'INSERT INTO clientes (nome, telefone, criado_em, atualizado_em) VALUES (?, ?, ?, ?)',
+                    [$pedido['cliente_nome'], $pedido['cliente_telefone'], $agora, $agora]);
             }
         }
 
@@ -58,9 +57,7 @@ final class PedidoRepository
             'criado_em' => $agora,
         ];
         $colunas = array_keys($pedido);
-        $pdo->prepare(sprintf('INSERT INTO pedidos (%s) VALUES (%s)', implode(', ', $colunas), implode(', ', array_fill(0, count($colunas), '?'))))
-            ->execute(array_values($pedido));
-        $id = (int) $pdo->lastInsertId();
+        $id = Banco::inserir($pdo, sprintf('INSERT INTO pedidos (%s) VALUES (%s)', implode(', ', $colunas), implode(', ', array_fill(0, count($colunas), '?'))), array_values($pedido));
 
         $insere = $pdo->prepare('INSERT INTO itens_pedido (pedido_id, item_id, tipo, nome, quantidade, preco_unit_centavos, montagem, observacoes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
         foreach ($itens as $item) {

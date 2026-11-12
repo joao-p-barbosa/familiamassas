@@ -13,14 +13,19 @@ final class Sessao
         if (self::$iniciada) {
             return;
         }
-        // Sessões ficam numa pasta nossa, fora de /public: em hospedagem compartilhada a pasta temporária
-        // é dividida com outros sites, que podem apagar sessões mais cedo. Validade de 12 h sem uso.
-        $pasta = RAIZ . '/data/sessoes';
-        if (!is_dir($pasta)) {
-            mkdir($pasta, 0700, true);
+        if (Banco::driver() === 'pgsql') {
+            // Na hospedagem o disco do contêiner é temporário: as sessões ficam no banco e sobrevivem a reinícios.
+            session_set_save_handler(new SessaoNoBanco(), true);
+        } else {
+            // Sessões ficam numa pasta nossa, fora de /public: em hospedagem compartilhada a pasta temporária
+            // é dividida com outros sites, que podem apagar sessões mais cedo.
+            $pasta = RAIZ . '/data/sessoes';
+            if (!is_dir($pasta)) {
+                mkdir($pasta, 0700, true);
+            }
+            session_save_path($pasta);
         }
-        session_save_path($pasta);
-        ini_set('session.gc_maxlifetime', '43200');
+        ini_set('session.gc_maxlifetime', '43200');   // validade de 12 h sem uso
         ini_set('session.use_strict_mode', '1');
         session_name('painel');
         session_set_cookie_params([

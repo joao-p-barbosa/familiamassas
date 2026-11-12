@@ -19,10 +19,31 @@ A Vercel não roda PHP de forma oficial (só por um runtime da comunidade, `verc
 | Dorme depois de 15 min sem acesso | O primeiro acesso depois disso demora cerca de 1 minuto para acordar. |
 | Disco temporário | O banco, as sessões e as fotos **somem** quando o serviço reinicia, dorme ou recebe uma versão nova. O banco volta com os dados de exemplo e as senhas das variáveis. |
 
-Serve para **demonstração e portfólio**. Para guardar pedidos de verdade é preciso um disco persistente, que a Render só oferece em plano pago:
+Sem o Neon (abaixo), o plano gratuito serve para **demonstração e portfólio**. A alternativa ao Neon é um disco persistente, que a Render só oferece em plano pago:
 
 1. No `render.yaml`, troque `plan: free` por `plan: starter`, descomente o bloco `disk` e a variável `DATA_DIR` (`/var/data`).
 2. Faça o push. Com `DATA_DIR`, o contêiner guarda o banco, as sessões, as fotos e as cópias de segurança no disco (o `docker/entrypoint.sh` faz a ligação).
+
+## Dados que não somem: banco no Neon (Postgres)
+
+O disco do plano gratuito da Render é temporário, então o que fica em arquivo some quando o serviço reinicia. Com o **Neon** (Postgres gratuito) tudo o que importa passa a ficar no banco e sobrevive a reinícios, a deploys e ao "dormir" do serviço:
+
+| O quê | Onde fica com o Neon |
+|---|---|
+| Cardápio, pedidos, atendimentos, usuários, configurações | tabelas do Postgres (`data/schema.pgsql.sql`) |
+| Sessões do painel (login) | tabela `sessoes`: ninguém é deslogado quando o serviço reinicia |
+| Fotos do cardápio enviadas pelo painel | tabela `imagens` (bytea), entregues por `GET /uploads/{nome}` |
+| Versão do esquema | tabela `esquema_versao` |
+
+**Como ligar:**
+1. Crie um projeto no [Neon](https://console.neon.tech) (plano gratuito; região **AWS US East 1 (N. Virginia)**, a mesma da Render).
+2. No projeto, clique em **Connect** e copie a *connection string* (`postgresql://usuario:senha@host/neondb?sslmode=require`). Ela tem a senha do banco: trate como segredo.
+3. Na Render, abra o serviço → **Environment** → adicione `DATABASE_URL` com essa string → salve. Com `DATABASE_URL` o sistema passa a usar o Postgres sozinho (sem ela, usa o SQLite).
+4. Na primeira requisição o sistema cria as tabelas e os dados de exemplo no Neon (uma vez só, mesmo com várias requisições juntas). As senhas iniciais vêm de `SENHA_ADMIN_INICIAL` e `SENHA_ATENDENTE_INICIAL`, como antes.
+
+Limites do plano gratuito do Neon: 0,5 GB, e o banco "dorme" depois de uns 5 minutos parado (o primeiro acesso depois disso leva um instante a mais). Para o tamanho de um restaurante isso sobra. O Neon guarda o histórico das últimas horas, que permite voltar o banco no tempo em caso de erro.
+
+**Testar o Postgres no seu computador** (opcional): ponha `TEST_DATABASE_URL=<a mesma string>` no `.env` e rode `php tests/regras.php`. A suíte inteira roda no Neon dentro de um *schema* temporário que ela cria e apaga no fim: os seus dados não são tocados. Para o sistema local usar o Neon (em vez do SQLite), ponha `DB_DRIVER=pgsql` e `DATABASE_URL=...` no `.env`.
 
 ## Variáveis de ambiente
 
@@ -33,7 +54,8 @@ Serve para **demonstração e portfólio**. Para guardar pedidos de verdade é p
 | `APP_TIMEZONE` | Fuso da loja (`America/Sao_Paulo`). |
 | `TRUST_PROXY=1` | A Render fica na frente do site: vale o IP de quem acessa (`X-Forwarded-For`) no bloqueio de tentativas de login. Sem isso todo mundo teria o IP do proxy e o bloqueio pegaria todos de uma vez. |
 | `SENHA_ADMIN_INICIAL`, `SENHA_ATENDENTE_INICIAL` | Senhas dos dois usuários quando o banco é criado. Sem elas (e fora do modo dev) o sistema sorteia uma e escreve no log do serviço; nunca nasce com a senha padrão. |
-| `DATA_DIR` | Só com disco persistente (veja acima). |
+| `DATABASE_URL` | Connection string do Neon (veja acima). Liga o Postgres. |
+| `DATA_DIR` | Só com SQLite em disco persistente (plano pago). Com o Neon não é preciso. |
 | `WHATSAPP_*` | Credenciais da Meta, na Etapa 4. Coloque em **Environment** no painel da Render, nunca no repositório (ele é público). |
 
 ## Cuidados

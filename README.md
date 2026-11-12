@@ -12,6 +12,10 @@ PHP 8.2+ puro, SQLite (Postgres/Neon depois), HTML + CSS + JavaScript sem framew
 
 O banco `data/restaurante.sqlite` é criado sozinho com dados de exemplo na primeira vez. Um banco que já existe é atualizado sozinho (migrações em `data/migracoes/`, com cópia de segurança em `data/backups/`). Os usuários (proprietário e atendente) e a senha inicial estão em `docs/PROGRESSO.md`. Troque a senha antes de usar de verdade.
 
+## Banco de dados
+
+SQLite no computador (nada a instalar além do PHP). Na hospedagem, **Postgres no Neon**: com a variável `DATABASE_URL` o sistema guarda dados, sessões e fotos no banco e nada some quando o serviço reinicia. Veja `docs/DEPLOY.md`.
+
 ## Publicar na Render
 
 [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/joao-p-barbosa/familiamassas)

@@ -3,10 +3,12 @@ declare(strict_types=1);
 
 namespace App\Controllers;
 
+use App\Core\Banco;
 use App\Core\ErroHttp;
 use App\Core\Requisicao;
 use App\Core\Resposta;
 use App\Repositories\CardapioRepository;
+use App\Repositories\ImagemRepository;
 use App\Repositories\PedidoRepository;
 use App\Services\AcompanhamentoDoCliente;
 use App\Services\LojaService;
@@ -73,6 +75,25 @@ final class PublicoController
     {
         (new AcompanhamentoDoCliente())->remover($req, $req->parametro('codigo'));
         Resposta::json(['ok' => true]);
+    }
+
+    /**
+     * GET /uploads/{nome}: foto do cardápio guardada no banco (Postgres). No SQLite as fotos são arquivos em public/uploads e o
+     * servidor web as entrega sem passar por aqui; só chega neste método quem pede uma foto que não existe (ou, no Postgres, todas).
+     */
+    public function foto(Requisicao $req): void
+    {
+        $nome = $req->parametro('nome');
+        $foto = preg_match('/^[a-f0-9]{24}\.(webp|jpg|png)$/', $nome) === 1 && Banco::driver() === 'pgsql' ? (new ImagemRepository())->porNome($nome) : null;
+        if ($foto === null) {
+            Resposta::pagina('nao-encontrado', [], 404);
+            return;
+        }
+        header('Content-Type: ' . $foto['tipo']);
+        header('X-Content-Type-Options: nosniff');
+        header('Cache-Control: public, max-age=31536000, immutable');   // o nome é sorteado: nunca muda de conteúdo
+        header('Content-Length: ' . strlen($foto['dados']));
+        echo $foto['dados'];
     }
 
     public function apiPedido(Requisicao $req): void
