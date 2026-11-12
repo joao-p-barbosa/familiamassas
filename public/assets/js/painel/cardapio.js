@@ -6,7 +6,9 @@ import { reais, centavosDeTexto, textoDeCentavos, plural } from '../shared/forma
 import { api } from '../shared/api.js';
 import { abrirFolha, fecharFolha } from '../shared/folha.js';
 import { avisar } from '../shared/avisos.js';
-import { conteudo, ehAdmin, mostrarErro, confirmar } from './casca.js';
+import { recipienteDaTela, ehAdmin, mostrarErro, confirmar } from './casca.js';
+
+const conteudo = recipienteDaTela();   // o contêiner desta tela (criado pelo roteador)
 
 const ABAS = [
   { id: 'itens', titulo: 'Itens', um: 'item', novo: 'Novo item' },
@@ -166,8 +168,8 @@ function camposDoRecurso(recurso, r) {
     case 'tamanhos':
       return `${nome}
         <div class="formulario__par">
-          ${campoTexto('sigla', 'Sigla', r?.sigla, { extra: 'maxlength="3"', ajuda: 'Aparece no cartão da cozinha: P, M, G.' })}
-          ${campoTexto('descricao', 'Peso ou porção', r?.descricao, { extra: 'maxlength="60" placeholder="400 g"', opcional: true })}
+          ${campoTexto('sigla', 'Sigla', r?.sigla, { extra: 'maxlength="3"', ajuda: 'Abreviação de até 3 letras.' })}
+          ${campoTexto('descricao', 'Descrição', r?.descricao, { extra: 'maxlength="60" placeholder="Meia porção · serve 1 pessoa · 300 g"', ajuda: 'Quanto serve e quanto pesa. É o que o cliente lê para escolher entre Meio e Inteiro.', opcional: true })}
         </div>
         <div class="formulario__par">
           ${campoPreco('preco_centavos', 'Preço base (R$)', r?.preco_centavos)}
@@ -456,4 +458,7 @@ lateral.addEventListener('submit', async (e) => {
   }
 });
 
-carregar();
+/** A tela abriu (a primeira vez ou de novo): busca o cadastro e desenha. */
+export async function montar() {
+  await carregar();
+}

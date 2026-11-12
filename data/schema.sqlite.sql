@@ -14,7 +14,7 @@ CREATE TABLE usuarios (
   nome       TEXT NOT NULL,
   login      TEXT NOT NULL UNIQUE,
   senha_hash TEXT NOT NULL,
-  perfil     TEXT NOT NULL CHECK (perfil IN ('admin', 'atendente', 'cozinha')),
+  perfil     TEXT NOT NULL CHECK (perfil IN ('admin', 'atendente')),   -- admin = proprietário
   ativo      INTEGER NOT NULL DEFAULT 1,
   criado_em  TEXT NOT NULL
 );
@@ -68,7 +68,7 @@ CREATE TABLE molhos (
 CREATE TABLE ingredientes (
   id                   INTEGER PRIMARY KEY AUTOINCREMENT,
   nome                 TEXT NOT NULL,
-  grupo                TEXT NOT NULL DEFAULT 'Outros',   -- Proteínas, Vegetais, Queijos...
+  grupo                TEXT NOT NULL DEFAULT 'Outros',   -- Acompanhamentos, Queijos...
   preco_extra_centavos INTEGER NOT NULL DEFAULT 0 CHECK (preco_extra_centavos >= 0),  -- cobrado só quando passa dos inclusos
   estado               TEXT NOT NULL DEFAULT 'disponivel' CHECK (estado IN ('disponivel', 'esgotado', 'oculto')),
   ordem                INTEGER NOT NULL DEFAULT 0
@@ -104,20 +104,42 @@ CREATE TABLE clientes (
   atualizado_em TEXT NOT NULL
 );
 
+-- Atendimento do salão = a conta de um cliente (Mesa ou Pra viagem). Reúne vários pedidos e só fecha com o pagamento.
+-- É independente de cada pedido: um atendimento pode ter pedidos concluídos e continuar aberto até a conta ser paga.
+CREATE TABLE atendimentos (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  cliente_nome   TEXT NOT NULL,
+  modalidade     TEXT NOT NULL CHECK (modalidade IN ('mesa', 'viagem')),
+  mesa           TEXT,                                   -- só quando a modalidade é "mesa"
+  status         TEXT NOT NULL DEFAULT 'aberto' CHECK (status IN ('aberto', 'encerrado')),
+  pagamento      TEXT CHECK (pagamento IN ('pix', 'cartao', 'dinheiro')),   -- preenchido ao fechar a conta (vazio se não havia o que cobrar)
+  total_centavos INTEGER,                                -- valor cobrado: preenchido ao fechar a conta
+  aberto_por     INTEGER REFERENCES usuarios (id) ON DELETE SET NULL,
+  encerrado_por  INTEGER REFERENCES usuarios (id) ON DELETE SET NULL,
+  aberto_em      TEXT NOT NULL,
+  encerrado_em   TEXT,
+  atualizado_em  TEXT NOT NULL
+);
+CREATE INDEX idx_atendimentos_status ON atendimentos (status);
+CREATE INDEX idx_atendimentos_encerrado ON atendimentos (encerrado_em);
+
 CREATE TABLE pedidos (
   id                   INTEGER PRIMARY KEY AUTOINCREMENT,   -- é o número do pedido (#123)
+  atendimento_id       INTEGER REFERENCES atendimentos (id),   -- só pedidos do salão: a conta a que pertencem
   codigo               TEXT NOT NULL UNIQUE,                -- código aleatório do link de acompanhamento
   cliente_id           INTEGER REFERENCES clientes (id) ON DELETE SET NULL,
   cliente_nome         TEXT NOT NULL,
   cliente_telefone     TEXT NOT NULL,
-  tipo                 TEXT NOT NULL CHECK (tipo IN ('entrega', 'retirada', 'local')),
+  tipo                 TEXT NOT NULL CHECK (tipo IN ('entrega', 'retirada', 'local', 'viagem')),   -- local = mesa e viagem = pra viagem (os dois só no salão)
   mesa                 TEXT,
   endereco_rua         TEXT,
   endereco_numero      TEXT,
   endereco_bairro      TEXT,
   endereco_complemento TEXT,
   endereco_referencia  TEXT,
-  pagamento            TEXT NOT NULL CHECK (pagamento IN ('pix', 'cartao', 'dinheiro')),
+  entrega_lat          REAL,                                -- local marcado no mapa (opcional)
+  entrega_lng          REAL,
+  pagamento            TEXT NOT NULL CHECK (pagamento IN ('pix', 'cartao', 'dinheiro', 'caixa')),   -- caixa = "na conta": pedido do salão, o pagamento real fica no atendimento
   troco_para_centavos  INTEGER,
   observacoes          TEXT NOT NULL DEFAULT '',
   subtotal_centavos    INTEGER NOT NULL,
@@ -125,7 +147,8 @@ CREATE TABLE pedidos (
   total_centavos       INTEGER NOT NULL,
   status               TEXT NOT NULL DEFAULT 'novo'
                        CHECK (status IN ('novo', 'em_preparo', 'pronto', 'saiu_entrega', 'aguardando_retirada', 'concluido', 'cancelado')),
-  origem               TEXT NOT NULL DEFAULT 'cardapio' CHECK (origem IN ('cardapio', 'whatsapp', 'balcao', 'ifood')),
+  origem               TEXT NOT NULL DEFAULT 'cardapio' CHECK (origem IN ('cardapio', 'whatsapp', 'balcao', 'ifood')),   -- balcao = registrado pela atendente no salão
+  criado_por           INTEGER REFERENCES usuarios (id) ON DELETE SET NULL,   -- quem registrou (só pedidos do salão)
   impresso_em          TEXT,
   impresso_por         TEXT,                                -- id da estação de impressão
   status_atualizado_em TEXT NOT NULL,
@@ -135,6 +158,7 @@ CREATE TABLE pedidos (
 CREATE INDEX idx_pedidos_atualizado ON pedidos (atualizado_em);
 CREATE INDEX idx_pedidos_status ON pedidos (status);
 CREATE INDEX idx_pedidos_telefone ON pedidos (cliente_telefone);
+CREATE INDEX idx_pedidos_atendimento ON pedidos (atendimento_id);
 
 CREATE TABLE itens_pedido (
   id                  INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Core\ErroHttp;
+use App\Repositories\AtendimentoRepository;
 use App\Repositories\CardapioRepository;
 use App\Repositories\ConfigRepository;
 use App\Repositories\PedidoRepository;
@@ -15,8 +16,13 @@ final class PedidoService
     public const FLUXOS = [
         'entrega'  => ['novo', 'em_preparo', 'pronto', 'saiu_entrega', 'concluido'],
         'retirada' => ['novo', 'em_preparo', 'pronto', 'aguardando_retirada', 'concluido'],
-        'local'    => ['novo', 'em_preparo', 'pronto', 'concluido'],
+        'local'    => ['novo', 'em_preparo', 'pronto', 'concluido'],   // mesa (salão)
+        'viagem'   => ['novo', 'em_preparo', 'pronto', 'concluido'],   // pra viagem (salão)
     ];
+
+    /** O cliente pede entrega ou retirada pelo cardápio. Mesa e pra viagem são feitos pela atendente, no salão. */
+    public const TIPOS_DO_CLIENTE = ['entrega', 'retirada'];
+    public const TIPOS_DO_SALAO = ['local', 'viagem'];
 
     public const ROTULOS = [
         'novo' => 'Recebido', 'em_preparo' => 'Em preparo', 'pronto' => 'Pronto', 'saiu_entrega' => 'Saiu para entrega',
@@ -30,10 +36,11 @@ final class PedidoService
         private readonly PrecoService $preco = new PrecoService(),
         private readonly LojaService $loja = new LojaService(),
         private readonly TokenWhatsApp $token = new TokenWhatsApp(),
+        private readonly AtendimentoRepository $atendimentos = new AtendimentoRepository(),
     ) {}
 
     /**
-     * Cria o pedido a partir do que o cardápio enviou. Nada de preço vindo do navegador é aceito:
+     * Pedido feito pelo cliente no cardápio. Nada de preço vindo do navegador é aceito:
      * tudo é recalculado com o cardápio atual.
      * @return array{id:int, codigo:string}
      */
@@ -44,50 +51,94 @@ final class PedidoService
         }
 
         $erros = [];
-        $texto = static fn (mixed $v, int $max): string => mb_substr(trim(is_string($v) ? $v : ''), 0, $max);
 
         // ---- Tipo ----
-        $tipo = $texto($dados['tipo'] ?? '', 20);
-        if (!isset(self::FLUXOS[$tipo]) || $this->config->get("aceita_{$tipo}", '1') !== '1') {
-            $erros['tipo'] = 'Escolha entrega, retirada ou comer no local.';
+        $tipo = self::texto($dados['tipo'] ?? '', 20);
+        if (!in_array($tipo, self::TIPOS_DO_CLIENTE, true) || $this->config->get("aceita_{$tipo}", '1') !== '1') {
+            $erros['tipo'] = 'Escolha entrega ou retirada.';
         }
 
         // ---- Cliente ----
         $cliente = is_array($dados['cliente'] ?? null) ? $dados['cliente'] : [];
-        $nome = $texto($cliente['nome'] ?? '', 80);
+        $nome = self::texto($cliente['nome'] ?? '', 80);
         if (mb_strlen($nome) < 2) {
             $erros['nome'] = 'Diga seu nome para chamarmos você.';
         }
         // Link do WhatsApp: se o token valer, o telefone vem dele (não do formulário) e a origem é "whatsapp".
-        $telefoneDoToken = $this->token->validar($texto($dados['t'] ?? '', 200));
-        $telefone = $telefoneDoToken ?? self::normalizarTelefone($texto($cliente['telefone'] ?? '', 30));
+        $telefoneDoToken = $this->token->validar(self::texto($dados['t'] ?? '', 200));
+        $telefone = $telefoneDoToken ?? self::normalizarTelefone(self::texto($cliente['telefone'] ?? '', 30));
         if ($telefone === null) {
             $erros['telefone'] = 'Informe um WhatsApp com DDD, por exemplo (11) 91234-5678.';
         }
 
-        // ---- Entrega / mesa ----
+        // ---- Endereço (só entrega) ----
         $endereco = is_array($dados['endereco'] ?? null) ? $dados['endereco'] : [];
-        $rua = $texto($endereco['rua'] ?? '', 120);
-        $numero = $texto($endereco['numero'] ?? '', 20);
-        $bairro = $texto($endereco['bairro'] ?? '', 80);
-        $mesa = $texto($dados['mesa'] ?? '', 10);
+        $rua = self::texto($endereco['rua'] ?? '', 120);
+        $numero = self::texto($endereco['numero'] ?? '', 20);
+        $bairro = self::texto($endereco['bairro'] ?? '', 80);
         if ($tipo === 'entrega') {
             if ($rua === '')    { $erros['rua'] = 'Informe a rua.'; }
             if ($numero === '') { $erros['numero'] = 'Informe o número (ou "s/n").'; }
             if ($bairro === '') { $erros['bairro'] = 'Informe o bairro.'; }
         }
-        if ($tipo === 'local' && $mesa === '') {
-            $erros['mesa'] = 'Informe o número da mesa.';
-        }
+        [$lat, $lng] = self::coordenadas($endereco);
 
         // ---- Pagamento ----
         $pagamento = is_array($dados['pagamento'] ?? null) ? $dados['pagamento'] : [];
-        $forma = $texto($pagamento['forma'] ?? '', 20);
+        $forma = self::texto($pagamento['forma'] ?? '', 20);
         if (!in_array($forma, ['pix', 'cartao', 'dinheiro'], true)) {
             $erros['pagamento'] = 'Escolha a forma de pagamento.';
         }
 
         // ---- Itens ----
+        ['itens' => $itens, 'subtotal' => $subtotal] = $this->validarItens($dados);
+
+        $taxa = $tipo === 'entrega' ? $this->config->inteiro('taxa_entrega_centavos') : 0;
+        $total = $subtotal + $taxa;
+
+        $trocoPara = null;
+        if ($forma === 'dinheiro' && isset($pagamento['troco_para_centavos']) && $pagamento['troco_para_centavos'] !== null) {
+            $trocoPara = (int) $pagamento['troco_para_centavos'];
+            if ($trocoPara < $total) {
+                $erros['troco'] = 'O valor para troco precisa ser maior que o total do pedido.';
+            }
+        }
+
+        if ($erros !== []) {
+            throw ErroHttp::validacao($erros);
+        }
+        $this->conferirTotal($dados, $total);
+
+        return $this->pedidos->criar([
+            'cliente_nome' => $nome,
+            'cliente_telefone' => $telefone,
+            'tipo' => $tipo,
+            'mesa' => null,
+            'endereco_rua' => $tipo === 'entrega' ? $rua : null,
+            'endereco_numero' => $tipo === 'entrega' ? $numero : null,
+            'endereco_bairro' => $tipo === 'entrega' ? $bairro : null,
+            'endereco_complemento' => $tipo === 'entrega' ? self::texto($endereco['complemento'] ?? '', 80) : null,
+            'endereco_referencia' => $tipo === 'entrega' ? self::texto($endereco['referencia'] ?? '', 120) : null,
+            'entrega_lat' => $tipo === 'entrega' ? $lat : null,
+            'entrega_lng' => $tipo === 'entrega' ? $lng : null,
+            'pagamento' => $forma,
+            'troco_para_centavos' => $trocoPara,
+            // Observação do pedido só existe na entrega (ponto de referência, interfone...). Na retirada não há campo.
+            'observacoes' => $tipo === 'entrega' ? self::texto($dados['observacoes'] ?? '', 300) : '',
+            'subtotal_centavos' => $subtotal,
+            'taxa_entrega_centavos' => $taxa,
+            'total_centavos' => $total,
+            'origem' => $telefoneDoToken !== null ? 'whatsapp' : 'cardapio',
+        ], $itens);
+    }
+
+    /**
+     * Valida os itens enviados e calcula cada preço com o cardápio atual. Serve ao pedido do cliente e aos pedidos do salão
+     * (AtendimentoService): uma só regra de preço.
+     * @return array{itens: list<array<string,mixed>>, subtotal: int}
+     */
+    public function validarItens(array $dados): array
+    {
         $itensEnviados = is_array($dados['itens'] ?? null) ? array_values($dados['itens']) : [];
         if ($itensEnviados === [] || count($itensEnviados) > 40) {
             throw new ErroHttp(422, 'carrinho_vazio', 'Seu carrinho está vazio.');
@@ -133,53 +184,24 @@ final class PedidoService
                 ];
             }
             $linha['quantidade'] = $quantidade;
-            $linha['observacoes'] = $texto($enviado['observacoes'] ?? '', 200);
+            $linha['observacoes'] = self::texto($enviado['observacoes'] ?? '', 200);
             $subtotal += $linha['preco_unit_centavos'] * $quantidade;
             $itens[] = $linha;
         }
+        return ['itens' => $itens, 'subtotal' => $subtotal];
+    }
 
-        $taxa = $tipo === 'entrega' ? $this->config->inteiro('taxa_entrega_centavos') : 0;
-        $total = $subtotal + $taxa;
-
-        $trocoPara = null;
-        if ($forma === 'dinheiro' && isset($pagamento['troco_para_centavos']) && $pagamento['troco_para_centavos'] !== null) {
-            $trocoPara = (int) $pagamento['troco_para_centavos'];
-            if ($trocoPara < $total) {
-                $erros['troco'] = 'O valor para troco precisa ser maior que o total do pedido.';
-            }
-        }
-
-        if ($erros !== []) {
-            throw ErroHttp::validacao($erros);
-        }
-
-        // O cliente confirmou um total na revisão. Se o cardápio mudou nesse meio-tempo, ele precisa ver o novo valor.
+    /** Quem confirmou um total na revisão precisa ver o novo valor se o cardápio mudou nesse meio-tempo. */
+    public function conferirTotal(array $dados, int $total): void
+    {
         if (isset($dados['total_esperado_centavos']) && (int) $dados['total_esperado_centavos'] !== $total) {
             throw new ErroHttp(409, 'total_mudou', 'Os preços foram atualizados enquanto você pedia. Confira o novo total antes de confirmar.');
         }
-
-        return $this->pedidos->criar([
-            'cliente_nome' => $nome,
-            'cliente_telefone' => $telefone,
-            'tipo' => $tipo,
-            'mesa' => $tipo === 'local' ? $mesa : null,
-            'endereco_rua' => $tipo === 'entrega' ? $rua : null,
-            'endereco_numero' => $tipo === 'entrega' ? $numero : null,
-            'endereco_bairro' => $tipo === 'entrega' ? $bairro : null,
-            'endereco_complemento' => $tipo === 'entrega' ? $texto($endereco['complemento'] ?? '', 80) : null,
-            'endereco_referencia' => $tipo === 'entrega' ? $texto($endereco['referencia'] ?? '', 120) : null,
-            'pagamento' => $forma,
-            'troco_para_centavos' => $trocoPara,
-            'observacoes' => $texto($dados['observacoes'] ?? '', 300),
-            'subtotal_centavos' => $subtotal,
-            'taxa_entrega_centavos' => $taxa,
-            'total_centavos' => $total,
-            'origem' => $telefoneDoToken !== null ? 'whatsapp' : 'cardapio',
-        ], $itens);
     }
 
     /**
-     * Muda o status de um pedido, respeitando o caminho do tipo dele e o perfil de quem pede.
+     * Muda o status de um pedido, respeitando o caminho do tipo dele.
+     * Proprietário e atendente podem mover e cancelar (cancelar exige motivo); o que muda entre eles é o que cada um vê no painel.
      * @param array{id:int, perfil:string} $usuario
      */
     public function mudarStatus(int $id, string $para, ?string $motivo, array $usuario): array
@@ -198,16 +220,14 @@ final class PedidoService
             if ($motivo === '') {
                 throw ErroHttp::validacao(['motivo' => 'Diga o motivo do cancelamento.']);
             }
-            if ($usuario['perfil'] === 'cozinha') {
-                throw new ErroHttp(403, 'sem_permissao', 'A cozinha não cancela pedidos. Chame o atendimento.');
+            // Pedido de uma conta já paga não some: o valor cobrado já foi fechado com ele dentro.
+            if ($pedido['atendimento_id'] !== null && ($this->atendimentos->porId($pedido['atendimento_id'])['status'] ?? '') === 'encerrado') {
+                throw new ErroHttp(409, 'conta_encerrada', 'A conta deste atendimento já foi fechada: não dá para cancelar o pedido.');
             }
         } elseif (!in_array($para, $fluxo, true) || $para === $atual) {
             throw new ErroHttp(422, 'status_invalido', 'Esta etapa não existe para este tipo de pedido.');
         } else {
             $motivo = null;
-            if ($usuario['perfil'] === 'cozinha' && !in_array($para, ['novo', 'em_preparo', 'pronto'], true)) {
-                throw new ErroHttp(403, 'sem_permissao', 'A cozinha só move pedidos até "Pronto".');
-            }
         }
         if (!$this->pedidos->mudarStatus($id, $atual, $para, $motivo, $usuario['id'])) {
             throw new ErroHttp(409, 'conflito', 'Outra pessoa acabou de mover este pedido. A tela já vai atualizar.');
@@ -271,5 +291,25 @@ final class PedidoService
             return null;
         }
         return '55' . $digitos;
+    }
+
+    /**
+     * Latitude e longitude do local marcado no mapa. Valor ausente ou fora do planeta é ignorado
+     * (o endereço digitado continua valendo; o mapa é um apoio, nunca uma exigência).
+     * @return array{0: ?float, 1: ?float}
+     */
+    public static function coordenadas(array $endereco): array
+    {
+        $lat = $endereco['lat'] ?? null;
+        $lng = $endereco['lng'] ?? null;
+        if (!is_numeric($lat) || !is_numeric($lng) || abs((float) $lat) > 90 || abs((float) $lng) > 180) {
+            return [null, null];
+        }
+        return [round((float) $lat, 6), round((float) $lng, 6)];
+    }
+
+    private static function texto(mixed $valor, int $max): string
+    {
+        return mb_substr(trim(is_string($valor) ? $valor : ''), 0, $max);
     }
 }

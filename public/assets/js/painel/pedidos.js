@@ -1,58 +1,94 @@
-// Kanban de pedidos. Caminho principal: o botão grande de cada cartão (decisão D4).
+// Quadro de pedidos (Kanban). Caminho principal: o botão grande de cada cartão (decisão D4).
 // Arrastar pela alça é um bônus (GSAP Draggable); a mesma alça, clicada ou pelo teclado, abre "Mover para…".
+//
+// Três colunas: Novos · Em preparo · Prontos. A coluna "Prontos" também guarda o que já saiu da cozinha
+// (saiu para entrega, aguardando retirada): cada cartão mostra a modalidade e o status, então não precisa de quadro à parte.
+// O que foi concluído ou cancelado sai do quadro e entra nos números do fechamento do dia.
 import { $, $$, esc, delegar, menosMovimento } from '../shared/dom.js';
 import { icone } from '../shared/icones.js';
 import { reais, minutosDesde, duracao, plural } from '../shared/formato.js';
 import { avisar } from '../shared/avisos.js';
-import { FLUXOS, STATUS, ACAO_PARA, TIPOS, ORIGENS, PAGAMENTOS, encerrado, proximaEtapa, resumoMontagem } from '../shared/pedido.js';
-import { conteudo, ajustes } from './casca.js';
-import { criarFonte } from './pedidos-vivos.js';
+import { FLUXOS, STATUS, ACAO_PARA, TIPOS, ORIGENS, PAGAMENTOS, encerrado, proximaEtapa, resumoMontagem, rotuloDoTipo } from '../shared/pedido.js';
+import { segundosDeProducao, minutosDe, faixaDeTempo, emProducao } from '../shared/tempo.js';
+import { ehAdmin, recipienteDaTela } from './casca.js';
+import { fonte, ouvir, recemChegados, imprimirPendentes } from './servicos.js';
 import { ferramentasHtml, ligarFerramentas, atualizarConexao } from './ferramentas.js';
-import { imprimirAutomatico, estacao } from './impressao.js';
-import { tocarAlerta } from './som.js';
-import { iniciarDetalhe, abrirDetalhe, atualizarDetalhe, pedirMovimento, SELO_STATUS } from './detalhe.js';
+import { abrirDetalhe, pedirMovimento, SELO_STATUS } from './detalhe.js';
+
+const conteudo = recipienteDaTela();   // o contêiner desta tela (criado pelo roteador)
 
 const COLUNAS = [
   { id: 'novo', titulo: 'Novos', status: ['novo'], vazio: 'Pedido novo aparece aqui sozinho.' },
   { id: 'em_preparo', titulo: 'Em preparo', status: ['em_preparo'], vazio: 'Nada em preparo.' },
-  { id: 'pronto', titulo: 'Prontos', status: ['pronto'], vazio: 'Nenhum pedido esperando.' },
-  { id: 'saida', titulo: 'Entrega e retirada', status: ['saiu_entrega', 'aguardando_retirada'], vazio: 'Ninguém a caminho.' },
-  { id: 'encerrados', titulo: 'Encerrados hoje', status: ['concluido', 'cancelado'], vazio: 'Nenhum pedido encerrado hoje.' },
+  { id: 'pronto', titulo: 'Prontos', status: ['pronto', 'saiu_entrega', 'aguardando_retirada'], vazio: 'Nenhum pedido esperando.' },
 ];
+const ROTULO_FAIXA = { atencao: 'Atenção', atrasado: 'Atrasado' };
 
 let estadoFlip = null;      // posição dos cartões antes de uma mudança (para animar)
 let arrastaveis = [];       // instâncias do Draggable
 let arrastando = false;
-const recemChegados = new Set();
-const imprimindo = new Set();
+let parar = [];             // o que montar() ligou e desmontar() desliga
+let relogio = 0;
 
-const fonte = criarFonte({
-  antesDeMudar: () => {
-    if (window.Flip && !menosMovimento()) estadoFlip = window.Flip.getState('#quadro [data-flip-id]');
-  },
-  aoMudar: (motivo) => {
-    atualizarConexao(fonte);
-    if (motivo === 'conexao') return;
-    if (!arrastando) desenharQuadro();
-    atualizarDetalhe();
-    imprimirPendentes();
-  },
-  aoChegar: (novos) => {
-    tocarAlerta();
-    novos.forEach((p) => recemChegados.add(p.id));
-    avisar(novos.length === 1 ? `Pedido novo: #${novos[0].id}, ${novos[0].cliente_nome}` : `${novos.length} pedidos novos`);
-    document.title = `(${novos.length}) Pedidos novos`;
-    setTimeout(() => (document.title = 'Pedidos'), 8000);
-  },
-});
+// GSAP (via CDN, como pede o briefing): Flip anima o cartão ao mudar de coluna; Draggable permite arrastar.
+// Só é carregado quando esta tela abre. Se o CDN falhar, o quadro funciona igual pelos botões.
+let gsapPronto = null;
+function carregarScript(endereco) {
+  return new Promise((resolver, rejeitar) => {
+    const script = document.createElement('script');
+    script.src = endereco;
+    script.onload = resolver;
+    script.onerror = rejeitar;
+    document.head.append(script);
+  });
+}
+function carregarGsap() {
+  if (window.gsap && window.Flip && window.Draggable) return Promise.resolve();
+  gsapPronto ??= (async () => {
+    for (const arquivo of ['gsap', 'Flip', 'Draggable']) await carregarScript(`https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/${arquivo}.min.js`);
+  })().catch(() => {});
+  return gsapPronto;
+}
+
+/** A tela abriu (a primeira vez ou de novo): desenha, liga a escuta do fluxo de pedidos e o cronômetro. */
+export async function montar() {
+  await carregarGsap();
+  montarTela();
+  desenharQuadro();
+  desenharFechamento();
+  atualizarConexao(fonte);
+  parar = [
+    ouvir('antes', () => {
+      if (window.Flip && !menosMovimento()) estadoFlip = window.Flip.getState('#quadro [data-flip-id]');
+    }),
+    ouvir('mudou', (motivo) => {
+      atualizarConexao(fonte);
+      if (motivo === 'conexao') return;
+      if (!arrastando) desenharQuadro();
+      desenharFechamento();
+    }),
+  ];
+  relogio = setInterval(atualizarTempos, 1000);
+}
+
+/** A tela fechou: para de escutar e de contar (o fluxo de pedidos, o som e a impressão continuam na casca). */
+export function desmontar() {
+  parar.forEach((f) => f());
+  parar = [];
+  clearInterval(relogio);
+  arrastaveis.forEach((d) => d.kill());
+  arrastaveis = [];
+}
 
 // ---------- Estrutura ----------
 function montarTela() {
   conteudo.innerHTML = `
     <div class="cabecalho-tela">
       <h1 class="cabecalho-tela__titulo">Pedidos</h1>
-      ${ferramentasHtml()}
+      <a class="botao" href="/painel/salao?novo=1">${icone('mais', 18)}Novo pedido</a>
     </div>
+    <div id="fechamento"></div>
+    <div class="cabecalho-tela">${ferramentasHtml()}</div>
     <div class="quadro" id="quadro">
       ${COLUNAS.map((c) => `
         <section class="coluna" data-coluna="${c.id}" aria-labelledby="coluna-${c.id}">
@@ -68,21 +104,40 @@ function montarTela() {
   ligarFerramentas(fonte, imprimirPendentes);
 }
 
-// ---------- Cartões ----------
-function nivelDeAtraso(p) {
-  if (!['novo', 'em_preparo'].includes(p.status)) return null;
-  const minutos = minutosDesde(p.criado_em);
-  if (minutos >= ajustes.atraso_minutos * 1.5) return '2';
-  if (minutos >= ajustes.atraso_minutos) return '1';
-  return null;
+// ---------- Fechamento do dia ----------
+function desenharFechamento() {
+  const f = fonte.fechamento;
+  const alvo = $('#fechamento');
+  if (!f || !alvo) return;
+  alvo.innerHTML = `
+    <section class="fechamento" aria-label="Fechamento de hoje">
+      <h2 class="fechamento__titulo">Hoje</h2>
+      <dl class="fechamento__lista">
+        <div><dt>Pedidos</dt><dd>${f.pedidos}</dd></div>
+        <div><dt>Em andamento</dt><dd>${f.em_andamento}</dd></div>
+        <div><dt>Concluídos</dt><dd>${f.concluidos}</dd></div>
+        <div><dt>Cancelados</dt><dd>${f.cancelados}</dd></div>
+        ${ehAdmin && f.faturamento_centavos !== undefined ? `<div><dt>Vendido</dt><dd>${reais(f.faturamento_centavos)}</dd></div>` : ''}
+      </dl>
+    </section>`;
 }
 
-/** Tempo que importa em cada etapa: desde o pedido (até ficar pronto) ou desde a última mudança. */
-const tempoDoPedido = (p) => duracao(minutosDesde(['novo', 'em_preparo'].includes(p.status) ? p.criado_em : p.status_atualizado_em));
+// ---------- Tempo e cor do cartão ----------
+/**
+ * Em Novo e Em preparo corre o tempo de produção (soma dos dois, nunca zera ao mudar de etapa) e o cartão muda de cor.
+ * Depois de pronto, o cartão volta ao neutro e mostra há quanto tempo está esperando.
+ */
+function tempoDoCartao(p, agora) {
+  if (emProducao(p)) {
+    const segundos = segundosDeProducao(p, agora);
+    return { texto: duracao(minutosDe(segundos)), faixa: faixaDeTempo(segundos), dica: 'Tempo em Novo + Em preparo' };
+  }
+  return { texto: `há ${duracao(minutosDesde(p.status_atualizado_em, agora))}`, faixa: 'neutro', dica: 'Tempo nesta etapa' };
+}
 
 function linhasDeItens(p) {
   const linhas = p.itens.slice(0, 4).map((item) => {
-    const resumo = item.montagem ? resumoMontagem({ tamanho: { nome: item.montagem.tamanho.sigla }, massa: item.montagem.massa, molho: item.montagem.molho }) : '';
+    const resumo = item.montagem ? resumoMontagem({ tamanho: item.montagem.tamanho, massa: item.montagem.massa, molho: item.montagem.molho }) : '';
     return `<span><b>${item.quantidade}×</b> ${esc(item.nome)}${resumo ? ` · ${esc(resumo)}` : ''}</span>`;
   });
   if (p.itens.length > 4) linhas.push(`<span>+ ${plural(p.itens.length - 4, 'item', 'itens')}</span>`);
@@ -91,42 +146,32 @@ function linhasDeItens(p) {
 
 function cartaoHtml(p) {
   const proxima = proximaEtapa(p);
-  const atraso = nivelDeAtraso(p);
+  const tempo = tempoDoCartao(p, fonte.agora());
+  const preparo = !emProducao(p) ? ` · Preparo ${duracao(minutosDe(p.producao_acumulado_s))}` : '';
   return `
-    <article class="cartao-pedido" data-id="${p.id}" data-flip-id="pedido-${p.id}" ${atraso ? `data-atraso="${atraso}"` : ''} ${recemChegados.has(p.id) ? 'data-chegou' : ''}>
+    <article class="cartao-pedido" data-id="${p.id}" data-flip-id="pedido-${p.id}" ${tempo.faixa !== 'neutro' ? `data-faixa="${tempo.faixa}"` : ''} ${recemChegados.has(p.id) ? 'data-chegou' : ''}>
       <div class="cartao-pedido__topo">
         <span class="cartao-pedido__numero">#${p.id}</span>
-        <span class="cartao-pedido__tempo" data-tempo="${p.id}" title="${atraso ? 'Atrasado' : 'Tempo de espera'}">${icone('relogio', 16)}<span>${tempoDoPedido(p)}</span></span>
+        <span class="cartao-pedido__tempo" data-tempo="${p.id}" title="${tempo.dica}">${icone('relogio', 16)}<span>${tempo.texto}</span></span>
+        <span class="cartao-pedido__faixa" data-faixa-texto="${p.id}" ${tempo.faixa === 'neutro' ? 'hidden' : ''}>${ROTULO_FAIXA[tempo.faixa] ?? ''}</span>
         <button type="button" class="cartao-pedido__pega" data-mover aria-label="Mover o pedido ${p.id} para outra etapa">${icone('arrastar', 20)}</button>
       </div>
       <button type="button" class="cartao-pedido__abrir" data-abrir aria-label="Ver o pedido ${p.id}, de ${esc(p.cliente_nome)}">
         <span class="cartao-pedido__cliente">${esc(p.cliente_nome)}</span>
         <span class="cartao-pedido__selos">
-          <span class="selo">${icone(TIPOS[p.tipo].icone, 14)}${p.tipo === 'local' ? `Mesa ${esc(p.mesa)}` : TIPOS[p.tipo].rotulo}</span>
+          <span class="selo ${SELO_STATUS[p.status]}">${STATUS[p.status].rotulo}</span>
+          <span class="selo cartao-pedido__modalidade">${icone(TIPOS[p.tipo].icone, 14)}${esc(rotuloDoTipo(p))}</span>
           <span class="selo">${esc(ORIGENS[p.origem] ?? p.origem)}</span>
-          ${p.status === 'aguardando_retirada' ? '<span class="selo selo--acento">No balcão</span>' : ''}
           ${p.observacoes || p.itens.some((i) => i.observacoes) ? '<span class="selo selo--alerta">Tem observação</span>' : ''}
         </span>
         <span class="cartao-pedido__itens">${linhasDeItens(p)}</span>
       </button>
       <div class="cartao-pedido__rodape">
-        <span>${PAGAMENTOS[p.pagamento]}</span>
+        <span>${PAGAMENTOS[p.pagamento]}${preparo}</span>
         <span class="cartao-pedido__total">${reais(p.total_centavos)}</span>
       </div>
       ${proxima ? `<button type="button" class="botao botao--bloco cartao-pedido__avancar" data-avancar="${proxima}">${ACAO_PARA[proxima]}${icone('seta-dir', 18)}</button>` : ''}
     </article>`;
-}
-
-function encerradoHtml(p) {
-  return `
-    <li data-flip-id="pedido-${p.id}">
-      <button type="button" class="linha-encerrado" data-abrir data-id="${p.id}" aria-label="Ver o pedido ${p.id}, de ${esc(p.cliente_nome)}">
-        <span class="linha-encerrado__numero numero">#${p.id}</span>
-        <span class="linha-encerrado__nome">${esc(p.cliente_nome)}</span>
-        <span class="selo ${SELO_STATUS[p.status]}">${STATUS[p.status].rotulo}</span>
-        <span class="numero">${reais(p.total_centavos)}</span>
-      </button>
-    </li>`;
 }
 
 function desenharQuadro() {
@@ -141,10 +186,6 @@ function desenharQuadro() {
     $(`[data-conta="${coluna.id}"]`).textContent = pedidos.length;
     if (pedidos.length === 0) {
       lista.innerHTML = `<p class="coluna__vazio">${coluna.vazio}</p>`;
-    } else if (coluna.id === 'encerrados') {
-      // Encerrados: os mais recentes primeiro, em linhas compactas.
-      pedidos.sort((a, b) => b.status_atualizado_em.localeCompare(a.status_atualizado_em));
-      lista.innerHTML = `<ul class="encerrados">${pedidos.map(encerradoHtml).join('')}</ul>`;
     } else {
       // Fila: o mais antigo em cima (é o próximo a sair).
       pedidos.sort((a, b) => a.id - b.id);
@@ -170,11 +211,10 @@ function animarMudanca() {
 }
 
 // ---------- Arrastar (bônus) ----------
-function statusDaColuna(colunaId, pedido) {
-  if (colunaId === 'saida') return { entrega: 'saiu_entrega', retirada: 'aguardando_retirada' }[pedido.tipo] ?? null;
-  if (colunaId === 'encerrados') return 'concluido';
-  return colunaId;
-}
+const colunaDoPedido = (pedido) => COLUNAS.find((c) => c.status.includes(pedido.status))?.id ?? null;
+
+/** Etapa em que o pedido fica ao soltá-lo numa coluna (a coluna "Prontos" leva para "Pronto"). */
+const statusDaColuna = (colunaId) => (colunaId === 'pronto' ? 'pronto' : colunaId);
 
 /** Coluna válida que está embaixo do ponteiro (vale onde o dedo/mouse está, não o centro do cartão). */
 function colunaSobOPonteiro(arrastavel) {
@@ -201,8 +241,9 @@ function prepararArrasto() {
         arrastando = true;
         cartao.dataset.arrastando = '';
         for (const coluna of $$('.coluna')) {
-          const destino = statusDaColuna(coluna.dataset.coluna, pedido);
-          if (destino && destino !== pedido.status && FLUXOS[pedido.tipo].includes(destino)) coluna.dataset.alvo = 'valido';
+          const destino = statusDaColuna(coluna.dataset.coluna);
+          // A coluna onde o cartão já está não é destino (soltar ali não muda nada).
+          if (coluna.dataset.coluna !== colunaDoPedido(pedido) && FLUXOS[pedido.tipo].includes(destino)) coluna.dataset.alvo = 'valido';
         }
       },
       onDrag() {
@@ -211,7 +252,7 @@ function prepararArrasto() {
       },
       async onDragEnd() {
         const alvo = colunaSobOPonteiro(this);
-        const destino = alvo ? statusDaColuna(alvo.dataset.coluna, pedido) : null;
+        const destino = alvo ? statusDaColuna(alvo.dataset.coluna) : null;
         $$('.coluna[data-alvo]').forEach((coluna) => delete coluna.dataset.alvo);
         delete cartao.dataset.arrastando;
         arrastando = false;
@@ -227,29 +268,24 @@ function prepararArrasto() {
   }
 }
 
-// ---------- Impressão automática ----------
-async function imprimirPendentes() {
-  if (!estacao.ativa) return;
-  for (const p of fonte.lista()) {
-    if (p.impresso_em || !['novo', 'em_preparo'].includes(p.status) || imprimindo.has(p.id)) continue;
-    imprimindo.add(p.id);
-    const atualizado = await imprimirAutomatico(p);
-    imprimindo.delete(p.id);
-    if (atualizado) fonte.guardar(atualizado);
-  }
-  atualizarDetalhe();
-}
-
-// ---------- Tempo dos cartões (sem redesenhar tudo) ----------
+// ---------- Cronômetro dos cartões (sem redesenhar tudo) ----------
+// Roda a cada segundo, mas só mexe no que mudou: o texto (a cada minuto) e a cor (nos 20 e 30 minutos).
 function atualizarTempos() {
+  const agora = fonte.agora();
   for (const p of fonte.lista()) {
     const tempo = $(`[data-tempo="${p.id}"]`);
     if (!tempo) continue;
-    tempo.lastElementChild.textContent = tempoDoPedido(p);
+    const { texto, faixa } = tempoDoCartao(p, agora);
+    const rotulo = tempo.lastElementChild;
+    if (rotulo.textContent !== texto) rotulo.textContent = texto;
     const cartao = tempo.closest('.cartao-pedido');
-    const atraso = nivelDeAtraso(p);
-    if (atraso) cartao.dataset.atraso = atraso;
-    else delete cartao.dataset.atraso;
+    const atual = cartao.dataset.faixa ?? 'neutro';
+    if (atual === faixa) continue;
+    if (faixa === 'neutro') delete cartao.dataset.faixa;
+    else cartao.dataset.faixa = faixa;
+    const aviso = $(`[data-faixa-texto="${p.id}"]`);
+    aviso.hidden = faixa === 'neutro';
+    aviso.textContent = ROTULO_FAIXA[faixa] ?? '';
   }
 }
 
@@ -264,7 +300,3 @@ delegar(conteudo, 'click', '[data-avancar]', async (e, botao) => {
 delegar(conteudo, 'click', '[data-abrir]', (e, botao) => abrirDetalhe(Number(botao.closest('[data-id]').dataset.id)));
 delegar(conteudo, 'click', '[data-mover]', (e, botao) => pedirMovimento(Number(botao.closest('[data-id]').dataset.id)));
 
-montarTela();
-iniciarDetalhe(fonte);
-fonte.iniciar();
-setInterval(atualizarTempos, 20_000);

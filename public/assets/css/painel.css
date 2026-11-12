@@ -1,4 +1,4 @@
-/* Painel da loja: login, casca, Kanban, modo cozinha, detalhe do pedido, cadastro do cardápio e configurações. */
+/* Painel da loja: login, menu lateral, Kanban, pedido no salão, detalhe do pedido, cadastro do cardápio e configurações. */
 
 /* ---------- Login ---------- */
 .login {
@@ -33,93 +33,336 @@
     --margem: var(--e-6);
   }
 }
-.painel-topo {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  grid-template-areas: "marca usuario" "nav nav";
-  align-items: center;
-  gap: var(--e-1) var(--e-4);
-  padding: var(--e-2) var(--margem) 0;
-  border-bottom: 1px solid var(--cor-borda);
-  background: var(--cor-superficie);
+/* Menu lateral retrátil (mesmo conceito do Cantinho de Sabores): cartão à esquerda que recolhe para só ícones
+   no desktop (a escolha fica num cookie e a página já nasce assim) e vira gaveta no celular. */
+.painel {
+  --lateral-largura: 15rem;
+  --lateral-recolhida: 4.75rem;
 }
-.painel-topo .marca {
-  grid-area: marca;
-  font-size: var(--texto-5);
+.area {
+  min-height: 100vh;
+  min-height: 100dvh;
 }
-.painel-nav {
-  grid-area: nav;
+.lateral {
+  position: fixed;
+  z-index: 50;
+  inset: 0 auto 0 0;
   display: flex;
-  gap: var(--e-1);
-  margin-inline: calc(var(--margem) * -1);
-  padding-inline: var(--margem);
-  overflow-x: auto;
-  scrollbar-width: none;
+  flex-direction: column;
+  width: min(18rem, 86vw);
+  padding-top: env(safe-area-inset-top);
+  border-radius: 0 var(--raio-3) var(--raio-3) 0;
+  background: var(--cor-superficie);
+  box-shadow: var(--sombra-3);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  /* Gaveta fechada: fora da tela e fora da ordem do teclado. */
+  visibility: hidden;
+  transform: translateX(-100%);
+  transition: transform var(--dur-3) var(--ease-gaveta), visibility 0s linear var(--dur-3);
 }
-.painel-nav::-webkit-scrollbar {
-  display: none;
+.lateral[data-aberta="true"] {
+  visibility: visible;
+  transform: none;
+  transition-delay: 0s;
 }
-.painel-nav__item {
-  flex: none;
-  display: inline-flex;
+.menu-fundo {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  border: 0;
+  background: var(--cor-veu);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-3) ease;
+}
+.menu-fundo[data-visivel="true"] {
+  opacity: 1;
+  pointer-events: auto;
+}
+.lateral__topo {
+  display: flex;
   align-items: center;
   gap: var(--e-2);
+  padding: var(--e-3) var(--e-3) var(--e-1) var(--e-5);
+}
+.lateral__marca {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  font-size: var(--texto-5);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-decoration: none;
+}
+.lateral__marca-inicial {
+  display: none;
+}
+.lateral__botao {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: var(--toque);
+  height: var(--toque);
+  padding: 0;
+  border: 0;
+  border-radius: var(--raio-1);
+  background: transparent;
+  color: var(--cor-texto-2);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color var(--dur-1) ease, color var(--dur-1) ease, transform var(--dur-1) var(--ease-saida);
+}
+.lateral__botao:active {
+  transform: scale(0.94);
+}
+.lateral__recolher {
+  display: none;
+}
+.lateral__recolher svg {
+  transition: transform var(--dur-2) var(--ease-saida);
+}
+.lateral__nav {
+  flex: 1;
+  padding: var(--e-1) var(--e-3) var(--e-3);
+}
+.lateral__grupo {
+  padding: var(--e-4) var(--e-3) var(--e-1);
+  font-size: var(--texto-2);
+  font-weight: 650;
+  color: var(--cor-texto-2);
+}
+.lateral__lista {
+  display: grid;
+  gap: 2px;
+}
+.lateral__item {
+  display: flex;
+  align-items: center;
+  gap: var(--e-3);
   min-height: var(--toque);
   padding: 0 var(--e-3);
-  border-bottom: 2px solid transparent;
+  border-radius: var(--raio-1);
   color: var(--cor-texto-2);
   font-size: var(--texto-3);
   font-weight: 650;
   text-decoration: none;
-  transition: color var(--dur-1) ease, border-color var(--dur-1) ease;
+  transition: background-color var(--dur-1) ease, color var(--dur-1) ease;
 }
-.painel-nav__item[aria-current="page"] {
-  border-bottom-color: var(--cor-acento-tinta);
-  color: var(--cor-texto);
+.lateral__item svg {
+  flex: none;
 }
-.painel-nav__item:focus-visible {
+/* Tela atual: pílula verde clara, com cor, fundo e peso (não só cor). */
+.lateral__item[aria-current="page"] {
+  background: var(--cor-acento-suave);
+  color: var(--cor-acento-tinta);
+  font-weight: 800;
+}
+.lateral__item:focus-visible,
+.lateral__botao:focus-visible {
   outline-offset: -2px;
 }
 @media (hover: hover) and (pointer: fine) {
-  .painel-nav__item:hover {
+  .lateral__item:hover,
+  .lateral__botao:hover {
+    background: var(--cor-superficie-2);
     color: var(--cor-texto);
   }
+  .lateral__item[aria-current="page"]:hover {
+    background: var(--cor-acento-suave);
+    color: var(--cor-acento-tinta);
+  }
 }
-.painel-usuario {
-  grid-area: usuario;
+.lateral__rodape {
+  display: grid;
+  gap: var(--e-3);
+  margin: var(--e-3);
+  padding: var(--e-3);
+  border-radius: var(--raio-2);
+  background: var(--cor-superficie-2);
+}
+.lateral__usuario {
+  display: flex;
+  align-items: center;
+  gap: var(--e-3);
+  min-width: 0;
+}
+.lateral__avatar {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 50%;
+  background: var(--cor-acento-suave);
+  color: var(--cor-acento-tinta);
+  font-size: var(--texto-3);
+  font-weight: 800;
+}
+.lateral__usuario-texto {
+  display: grid;
+  min-width: 0;
+  line-height: 1.25;
+}
+.lateral__usuario-nome {
+  overflow: hidden;
+  font-size: var(--texto-3);
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lateral__usuario-perfil {
+  font-size: var(--texto-2);
+  color: var(--cor-texto-2);
+}
+.lateral__sair {
+  width: 100%;
+}
+
+/* Barra de cima: só no celular, para abrir o menu. */
+.barra-topo {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-barra);
   display: flex;
   align-items: center;
   gap: var(--e-2);
+  min-height: 3.5rem;
+  padding: env(safe-area-inset-top) var(--e-2) 0;
+  border-bottom: 1px solid var(--cor-borda);
+  background: var(--cor-superficie);
 }
-.painel-usuario__nome {
-  display: none;
-  font-size: var(--texto-3);
-  font-weight: 650;
-  line-height: 1.2;
-  text-align: right;
+.barra-topo__marca {
+  margin: 0;
+  padding: 0;
+  font-size: var(--texto-5);
 }
-.painel-usuario__nome small {
-  display: block;
-  font-size: var(--texto-1);
-  font-weight: 500;
-  color: var(--cor-texto-2);
-}
-@media (min-width: 62rem) {
-  .painel-topo {
-    grid-template-columns: auto 1fr auto;
-    grid-template-areas: "marca nav usuario";
-    gap: var(--e-6);
-    padding-block: 0;
+
+@keyframes lateral-surge {
+  from {
+    opacity: 0;
+    transform: translateX(-6px);
   }
-  .painel-nav {
-    margin: 0;
+}
+
+@media (min-width: 64rem) {
+  /* Desktop: o menu é um cartão fixo à esquerda e o conteúdo ocupa o resto. */
+  .painel--recolhido {
+    --lateral-largura: var(--lateral-recolhida);
+  }
+  .lateral {
+    inset: var(--e-3) auto var(--e-3) var(--e-3);
+    width: var(--lateral-largura);
+    padding-top: 0;
+    border: 1px solid var(--cor-borda);
+    border-radius: var(--raio-3);
+    box-shadow: var(--sombra-2);
+    visibility: visible;
+    transform: none;
+    transition: none;
+  }
+  .area {
+    margin-left: calc(var(--lateral-largura) + var(--e-3) * 2);
+  }
+  .barra-topo,
+  .menu-fundo,
+  .lateral__fechar {
+    display: none;
+  }
+  .lateral__recolher {
+    display: grid;
+  }
+  .lateral__topo {
+    padding-top: var(--e-4);
+  }
+  /* A largura muda de uma vez (animar largura refaz a página inteira a cada quadro);
+     o que se move são os rótulos, que surgem quando o menu abre. */
+  .painel--animando .lateral__rotulo,
+  .painel--animando .lateral__marca-texto,
+  .painel--animando .lateral__usuario-texto,
+  .painel--animando .lateral__grupo {
+    animation: lateral-surge var(--dur-2) var(--ease-saida) backwards;
+  }
+  .painel--recolhido .lateral__topo {
+    flex-direction: column;
+    gap: 0;
+    padding: var(--e-3) 0 var(--e-1);
+  }
+  .painel--recolhido .lateral__marca {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: var(--toque);
+    height: var(--toque);
+    border-radius: 50%;
+    background: var(--cor-acento-suave);
+    color: var(--cor-acento-tinta);
+    overflow: visible;
+  }
+  .painel--recolhido .lateral__marca::after {
+    content: none;
+  }
+  .painel--recolhido .lateral__marca-inicial {
+    display: block;
+    font-size: var(--texto-5);
+    line-height: 1;
+  }
+  .painel--recolhido .lateral__recolher svg {
+    transform: scaleX(-1);
+  }
+  /* Rótulos saem da vista, mas continuam sendo o nome do link para leitor de tela. */
+  .painel--recolhido .lateral__marca-texto,
+  .painel--recolhido .lateral__rotulo,
+  .painel--recolhido .lateral__usuario-texto {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .painel--recolhido .lateral__nav {
+    padding: var(--e-1) var(--e-3);
+  }
+  /* O título do grupo vira um traço que separa os blocos de ícones. */
+  .painel--recolhido .lateral__grupo {
+    height: 1px;
+    margin: var(--e-3) var(--e-2);
+    padding: 0;
+    overflow: hidden;
+    background: var(--cor-borda);
+    font-size: 0;
+  }
+  .painel--recolhido .lateral__item {
+    justify-content: center;
     padding: 0;
   }
-  .painel-nav__item {
-    min-height: 3.5rem;
+  .painel--recolhido .lateral__rodape {
+    justify-items: center;
+    margin: var(--e-2);
+    padding: var(--e-2) 0;
+    background: transparent;
   }
-  .painel-usuario__nome {
-    display: block;
+  .painel--recolhido .lateral__sair {
+    width: var(--toque);
+    padding: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lateral,
+  .menu-fundo,
+  .lateral__recolher svg {
+    transition: none;
+  }
+  .painel--animando .lateral__rotulo,
+  .painel--animando .lateral__marca-texto,
+  .painel--animando .lateral__usuario-texto,
+  .painel--animando .lateral__grupo {
+    animation: none;
   }
 }
 .painel-conteudo {
@@ -180,8 +423,7 @@
 /* ---------- Kanban ---------- */
 .quadro {
   display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: minmax(15.5rem, 1fr);
+  grid-template-columns: repeat(3, minmax(16.5rem, 1fr));
   align-items: start;
   gap: var(--e-4);
   margin-inline: calc(var(--margem) * -1);
@@ -190,8 +432,8 @@
   scroll-snap-type: x proximity;
   scroll-padding-inline: var(--margem);
 }
-@media (min-width: 86rem) {
-  /* Tela larga: as cinco colunas cabem, sem rolagem lateral (e o arrasto não é cortado). */
+@media (min-width: 75rem) {
+  /* Tela larga: as três colunas cabem, sem rolagem lateral (e o arrasto não é cortado). */
   .quadro {
     overflow: visible;
   }
@@ -283,8 +525,7 @@
   cursor: grabbing;
 }
 /* Pedido que acabou de chegar: contorno que some sozinho. */
-.cartao-pedido[data-chegou],
-.cartao-cozinha[data-chegou] {
+.cartao-pedido[data-chegou] {
   animation: chegou 2.4s ease-out;
 }
 @keyframes chegou {
@@ -296,45 +537,6 @@
     box-shadow: 0 0 0 3px transparent;
   }
 }
-.encerrados {
-  display: grid;
-  gap: var(--e-1);
-}
-.linha-encerrado {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  align-items: center;
-  gap: var(--e-1) var(--e-2);
-  width: 100%;
-  min-height: var(--toque);
-  padding: var(--e-2) var(--e-3);
-  border: 1px solid var(--cor-borda);
-  border-radius: var(--raio-1);
-  background: var(--cor-superficie);
-  color: var(--cor-texto-2);
-  font-size: var(--texto-3);
-  text-align: left;
-  cursor: pointer;
-}
-.linha-encerrado__numero {
-  font-weight: 800;
-  color: var(--cor-texto);
-}
-.linha-encerrado__nome {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.linha-encerrado .selo {
-  grid-column: 2;
-  justify-self: start;
-}
-.linha-encerrado > :last-child {
-  grid-column: 3;
-  grid-row: 1 / span 2;
-  font-weight: 700;
-}
-
 /* ---------- Detalhe do pedido ---------- */
 .detalhe {
   display: grid;
@@ -409,151 +611,6 @@
 .mover__agora {
   margin-bottom: var(--e-2);
   color: var(--cor-texto-2);
-}
-
-/* ---------- Modo cozinha ---------- */
-.cozinha {
-  display: grid;
-  gap: var(--e-5);
-}
-@media (min-width: 56rem) {
-  .cozinha {
-    grid-template-columns: 1fr 1fr;
-    align-items: start;
-  }
-}
-.fila {
-  display: grid;
-  gap: var(--e-3);
-  padding: var(--e-4);
-  border-radius: var(--raio-3);
-  background: var(--cor-superficie-2);
-}
-.fila__titulo {
-  font-size: var(--texto-6);
-  font-weight: 800;
-}
-.fila__lista {
-  display: grid;
-  gap: var(--e-4);
-}
-.fila .coluna__vazio {
-  padding: var(--e-10) var(--e-5);
-  font-size: var(--texto-4);
-}
-.cartao-cozinha {
-  display: grid;
-  gap: var(--e-4);
-  padding: var(--e-5);
-  border: 2px solid var(--cor-borda);
-  border-radius: var(--raio-2);
-  background: var(--cor-superficie);
-  font-size: var(--texto-5);
-}
-.cartao-cozinha__topo {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--e-2) var(--e-4);
-}
-.cartao-cozinha__numero {
-  font-size: var(--texto-9);
-  font-weight: 800;
-  line-height: 1;
-}
-.cartao-cozinha__tipo,
-.cartao-cozinha__tempo {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--e-2);
-  font-weight: 700;
-}
-.cartao-cozinha__tipo {
-  padding: var(--e-1) var(--e-3);
-  border-radius: var(--raio-1);
-  background: var(--cor-superficie-2);
-}
-.cartao-cozinha__tempo {
-  margin-left: auto;
-  color: var(--cor-texto-2);
-}
-.cartao-cozinha__cliente {
-  font-size: var(--texto-4);
-  color: var(--cor-texto-2);
-  overflow-wrap: anywhere;
-}
-.cartao-cozinha__itens {
-  display: grid;
-  gap: var(--e-4);
-}
-.comida {
-  display: grid;
-  gap: var(--e-1);
-  padding-top: var(--e-4);
-  border-top: 1px solid var(--cor-borda);
-}
-.comida__nome {
-  font-size: var(--texto-6);
-  font-weight: 800;
-  overflow-wrap: anywhere;
-}
-.comida__montagem {
-  display: grid;
-  gap: 0.125rem;
-  overflow-wrap: anywhere;
-}
-.comida__obs {
-  display: flex;
-  gap: var(--e-2);
-  margin-top: var(--e-1);
-  padding: var(--e-3) var(--e-4);
-  border-radius: var(--raio-1);
-  background: var(--cor-alerta-suave);
-  color: var(--cor-alerta);
-  font-weight: 700;
-  overflow-wrap: anywhere;
-}
-.comida__obs svg {
-  flex: none;
-  margin-top: 0.2rem;
-}
-.cartao-cozinha__acoes {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: var(--e-3);
-}
-.cartao-cozinha__acoes .botao {
-  min-height: 4rem;
-}
-.cartao-cozinha__acoes .botao--icone {
-  width: 4rem;
-}
-.cartao-cozinha__avancar {
-  font-size: var(--texto-6);
-}
-.cartao-cozinha[data-atraso="1"] {
-  border-color: var(--cor-alerta);
-}
-.cartao-cozinha[data-atraso="1"] .cartao-cozinha__tempo {
-  color: var(--cor-alerta);
-}
-.cartao-cozinha[data-atraso="2"] {
-  border-color: var(--cor-perigo);
-}
-.cartao-cozinha[data-atraso="2"] .cartao-cozinha__tempo {
-  padding: var(--e-1) var(--e-3);
-  border-radius: var(--raio-1);
-  background: var(--cor-perigo-suave);
-  color: var(--cor-perigo);
-}
-/* Alerta visual de pedido novo: o topo da tela pisca. */
-body[data-alerta] .painel-topo {
-  animation: piscar 0.8s ease-in-out 3;
-}
-@keyframes piscar {
-  50% {
-    background: var(--cor-info-suave);
-  }
 }
 
 /* ---------- Cadastro do cardápio ---------- */
@@ -884,14 +941,9 @@ body[data-alerta] .painel-topo {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .cartao-pedido[data-chegou],
-  .cartao-cozinha[data-chegou] {
+  .cartao-pedido[data-chegou] {
     animation: none;
     box-shadow: 0 0 0 3px var(--cor-info);
-  }
-  body[data-alerta] .painel-topo {
-    animation: none;
-    background: var(--cor-info-suave);
   }
 }
 .detalhe {
@@ -901,11 +953,483 @@ body[data-alerta] .painel-topo {
 .detalhe__bloco > * {
   min-width: 0;
 }
-.cozinha > *,
-.fila > *,
-.cartao-cozinha > * {
+
+/* ---------- Fechamento do dia (no alto do quadro de pedidos) ---------- */
+.fechamento {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--e-2) var(--e-6);
+  margin-bottom: var(--e-4);
+  padding: var(--e-3) var(--e-5);
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio-2);
+  background: var(--cor-superficie);
+}
+.fechamento__titulo {
+  font-size: var(--texto-4);
+  font-weight: 800;
+}
+.fechamento__lista {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e-2) var(--e-6);
+}
+.fechamento__lista > div {
+  display: flex;
+  align-items: baseline;
+  gap: var(--e-2);
+}
+.fechamento__lista dt {
+  font-size: var(--texto-3);
+  color: var(--cor-texto-2);
+}
+.fechamento__lista dd {
+  font-size: var(--texto-5);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Pedido no salão (a atendente monta o pedido de quem está no restaurante) ---------- */
+.salao {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--e-4);
+}
+.salao__principal {
   min-width: 0;
 }
-.cartao-cozinha {
+.cabecalho-tela__apoio {
+  margin-top: var(--e-1);
+  color: var(--cor-texto-2);
+}
+.salao__grade {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--e-4);
+}
+.salao__nav {
+  position: sticky;
+  top: 3.5rem;
+  z-index: var(--z-fixo);
+  margin-inline: calc(var(--margem) * -1);
+  background: var(--cor-fundo);
+  border-bottom: 1px solid var(--cor-borda);
+}
+.salao__nav:empty {
+  display: none;
+}
+/* As categorias são sempre uma faixa na horizontal aqui (a regra do cardápio que as põe em coluna é da página do cliente). */
+.salao__nav .categorias__lista {
+  flex-direction: row;
+  gap: var(--e-2);
+  padding: var(--e-3) var(--margem);
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+.salao__itens {
+  container-type: inline-size;
+  min-width: 0;
+}
+.salao__carrinho {
+  display: none;
+}
+.tem-barra-carrinho .salao__grade {
+  padding-bottom: 5rem;
+}
+@media (min-width: 56rem) {
+  .salao__grade {
+    grid-template-columns: minmax(0, 1fr) 20rem;
+    align-items: start;
+    column-gap: var(--e-6);
+  }
+  .salao__carrinho {
+    display: block;
+    position: sticky;
+    top: 4.5rem;
+  }
+  .tem-barra-carrinho .salao__grade {
+    padding-bottom: 0;
+  }
+}
+@media (min-width: 64rem) {
+  .salao__nav {
+    top: var(--e-3);
+    margin-inline: 0;
+    border-radius: var(--raio-2);
+    border: 1px solid var(--cor-borda);
+  }
+  .salao__carrinho {
+    top: 4.5rem;
+  }
+  .salao__nav .categorias__lista {
+    padding: var(--e-3);
+  }
+}
+
+/* ---------- Telas da SPA ---------- */
+.tela[hidden] {
+  display: none;
+}
+.tela-carregando {
+  max-width: 40rem;
+}
+
+/* ---------- Salão: o quadro dos atendimentos (a conta de cada cliente) ---------- */
+.quadro--quatro {
+  grid-template-columns: repeat(4, minmax(16.5rem, 1fr));
+}
+.cartao-atendimento {
+  position: relative;
+  display: grid;
+  gap: var(--e-3);
+  padding: var(--e-4);
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio-2);
+  background: var(--cor-superficie);
+  box-shadow: var(--sombra-1);
+}
+.cartao-atendimento__topo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--e-2);
+}
+.cartao-atendimento__tempo {
+  font-size: var(--texto-3);
+  color: var(--cor-texto-2);
+}
+.cartao-atendimento__abrir {
+  display: grid;
+  gap: var(--e-1);
+  min-height: var(--toque);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.cartao-atendimento__abrir:focus-visible {
+  outline: 2px solid var(--cor-foco);
+  outline-offset: 4px;
+  border-radius: var(--raio-1);
+}
+.cartao-atendimento__cliente {
+  font-size: var(--texto-5);
+  font-weight: 800;
   overflow-wrap: anywhere;
+}
+.cartao-atendimento__conta {
+  font-size: var(--texto-3);
+  color: var(--cor-texto-2);
+}
+.cartao-atendimento__conta strong {
+  color: var(--cor-texto);
+  font-size: var(--texto-4);
+}
+.cartao-atendimento__aberto-as {
+  font-size: var(--texto-2);
+  color: var(--cor-texto-2);
+}
+.cartao-atendimento__pedidos {
+  display: grid;
+  gap: var(--e-2);
+  padding-top: var(--e-3);
+  border-top: 1px solid var(--cor-borda);
+}
+.cartao-atendimento__pedidos li {
+  display: grid;
+  justify-items: start;
+  gap: var(--e-1);
+}
+.cartao-atendimento__pedidos li[data-status="cancelado"] .cartao-atendimento__itens {
+  text-decoration: line-through;
+  color: var(--cor-texto-2);
+}
+.cartao-atendimento__itens {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  font-size: var(--texto-3);
+  overflow-wrap: anywhere;
+}
+.cartao-atendimento__mais {
+  font-size: var(--texto-2);
+  color: var(--cor-texto-2);
+}
+.cartao-atendimento__acoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e-2);
+}
+.cartao-atendimento__acoes .botao {
+  flex: 1 1 auto;
+}
+.cartao-atendimento__pago {
+  display: flex;
+  align-items: center;
+  gap: var(--e-2);
+  font-size: var(--texto-3);
+  font-weight: 700;
+  color: var(--cor-sucesso);
+}
+/* Pronto para servir é o que pede ação agora: ganha um filete de destaque. */
+.cartao-atendimento[data-fase="pronto"] {
+  border-color: var(--cor-sucesso);
+  box-shadow: inset 4px 0 0 var(--cor-sucesso), var(--sombra-1);
+}
+.cartao-atendimento[data-fase="encerrado"] {
+  background: var(--cor-superficie-2);
+  box-shadow: none;
+}
+.cartao-atendimento[data-chegou] {
+  animation: chegou 2.4s ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .cartao-atendimento[data-chegou] {
+    animation: none;
+    box-shadow: 0 0 0 3px var(--cor-info);
+  }
+}
+/* O Salão não tem arrasto: se as quatro colunas não couberem, o quadro rola por dentro (e a página não estoura). */
+@media (min-width: 75rem) {
+  .quadro--quatro {
+    overflow-x: auto;
+  }
+}
+
+/* ---------- Novo atendimento (assistente) e envio ---------- */
+.trilha--etapas {
+  margin-bottom: var(--e-2);
+}
+.trilha--etapas .trilha__passo[data-atual] {
+  background: var(--cor-acento);
+}
+.novo {
+  display: grid;
+  align-content: start;
+  gap: var(--e-4);
+}
+.novo__etapa {
+  font-size: var(--texto-3);
+  color: var(--cor-texto-2);
+}
+.novo__etapa strong {
+  color: var(--cor-texto);
+}
+.enviar {
+  display: grid;
+  align-content: start;
+  gap: var(--e-4);
+}
+.enviar__quem span {
+  font-size: var(--texto-3);
+  color: var(--cor-texto-2);
+}
+
+/* ---------- Produtos do atendimento ---------- */
+.atendimento__voltar {
+  margin: 0 0 var(--e-3) calc(var(--e-3) * -1);
+}
+.atendimento__etapas {
+  display: grid;
+  gap: var(--e-1);
+  max-width: 28rem;
+  margin-bottom: var(--e-4);
+}
+.cabecalho-tela__apoio .selo {
+  margin-right: var(--e-2);
+}
+
+/* ---------- A conta: detalhe e fechamento ---------- */
+.conta-quando {
+  font-size: var(--texto-3);
+  color: var(--cor-texto-2);
+}
+.conta-pedidos {
+  display: grid;
+  gap: var(--e-3);
+}
+.conta-pedido {
+  display: grid;
+  gap: var(--e-3);
+  padding: var(--e-3) var(--e-4);
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio-2);
+  background: var(--cor-superficie-2);
+}
+.conta-pedido[data-cancelado] {
+  opacity: 0.65;
+}
+.conta-pedido[data-cancelado] .revisao-itens {
+  text-decoration: line-through;
+}
+.conta-pedido__topo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--e-2);
+}
+.conta-pedido__hora {
+  margin-left: auto;
+  font-size: var(--texto-3);
+  color: var(--cor-texto-2);
+}
+.conta-pedido .revisao-itens__item + .revisao-itens__item {
+  margin-top: var(--e-3);
+  padding-top: var(--e-3);
+  border-top: 1px solid var(--cor-borda);
+}
+.revisao-itens__topo {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--e-3);
+  font-weight: 700;
+}
+.conta-linhas {
+  display: grid;
+}
+.conta-linha {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0 var(--e-4);
+  padding: var(--e-3) 0;
+  border-bottom: 1px solid var(--cor-borda);
+}
+.conta-linha__nome {
+  grid-column: 1;
+  overflow-wrap: anywhere;
+}
+.conta-linha__nome small {
+  display: block;
+  font-size: var(--texto-2);
+  color: var(--cor-texto-2);
+}
+.conta-linha__unit {
+  grid-column: 1;
+  font-size: var(--texto-2);
+  color: var(--cor-texto-2);
+}
+.conta-linha__total {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: center;
+}
+.conta-vazia,
+.conta-cancelados {
+  font-size: var(--texto-3);
+  color: var(--cor-texto-2);
+}
+.conta-pago {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--e-2);
+  font-weight: 700;
+  color: var(--cor-sucesso);
+}
+.conta-pago svg {
+  flex: none;
+  margin-top: 0.15rem;
+}
+.fechar-conta {
+  display: grid;
+  align-content: start;
+  gap: var(--e-4);
+}
+.totais__total {
+  font-size: var(--texto-5);
+  font-weight: 800;
+}
+
+/* ---------- Histórico ---------- */
+.historico-filtros {
+  display: grid;
+  gap: var(--e-2);
+  margin-bottom: var(--e-3);
+}
+.historico-filtros .abas {
+  margin-bottom: 0;
+}
+.historico-contas {
+  display: grid;
+  gap: var(--e-2);
+}
+.historico-conta {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--e-1) var(--e-4);
+  width: 100%;
+  min-height: var(--toque);
+  padding: var(--e-3) var(--e-4);
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio-2);
+  background: var(--cor-superficie);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.historico-conta:focus-visible {
+  outline: 2px solid var(--cor-foco);
+  outline-offset: 2px;
+}
+.historico-conta small {
+  display: block;
+  font-size: var(--texto-2);
+  color: var(--cor-texto-2);
+}
+.historico-conta small svg {
+  display: inline;
+  margin-inline: 0.25em;
+  vertical-align: -0.15em;
+}
+.historico-conta__cliente {
+  grid-column: 1;
+  overflow-wrap: anywhere;
+}
+.historico-conta__valor {
+  grid-column: 2;
+  grid-row: 1;
+  align-self: center;
+  font-size: var(--texto-5);
+}
+.historico-conta__quando,
+.historico-conta__itens,
+.historico-conta__pago {
+  font-size: var(--texto-3);
+  color: var(--cor-texto-2);
+}
+.historico-conta__pago {
+  grid-column: 2;
+  justify-self: end;
+}
+@media (hover: hover) and (pointer: fine) {
+  .historico-conta:hover {
+    border-color: var(--cor-borda-forte);
+    background: var(--cor-superficie-2);
+  }
+}
+@media (min-width: 48rem) {
+  .historico-conta {
+    grid-template-columns: minmax(10rem, 1.4fr) minmax(8rem, 1fr) minmax(6rem, 0.8fr) 7rem 6rem;
+    align-items: center;
+  }
+  .historico-conta__cliente,
+  .historico-conta__quando,
+  .historico-conta__itens,
+  .historico-conta__pago,
+  .historico-conta__valor {
+    grid-column: auto;
+    grid-row: auto;
+  }
+  .historico-conta__pago {
+    justify-self: start;
+  }
+  .historico-conta__valor {
+    text-align: right;
+  }
 }

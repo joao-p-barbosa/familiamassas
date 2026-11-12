@@ -1,11 +1,13 @@
-// Configurações da loja: dados, funcionamento e horários, tipos de pedido, tema, cozinha/impressão e senha.
+// Configurações da loja: dados, funcionamento e horários, tipos de pedido, tema, impressão e senha.
 import { $, $$, esc, delegar } from '../shared/dom.js';
 import { icone } from '../shared/icones.js';
 import { centavosDeTexto, textoDeCentavos, telefone as formatarTelefone } from '../shared/formato.js';
 import { api } from '../shared/api.js';
 import { avisar } from '../shared/avisos.js';
-import { conteudo, mostrarErro } from './casca.js';
+import { recipienteDaTela, mostrarErro } from './casca.js';
 import { imprimirTeste } from './impressao.js';
+
+const conteudo = recipienteDaTela();   // o contêiner desta tela (criado pelo roteador)
 
 const DIAS = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
 // Amostra de cada tema: fundo, acento e destaque (as mesmas cores dos arquivos em css/themes).
@@ -58,7 +60,7 @@ function desenhar() {
           ${campo('nome_loja', 'Nome da loja', c.nome_loja, { extra: 'maxlength="40"', ajuda: 'Aparece no topo do cardápio e na comanda.' })}
           ${campo('whatsapp_loja', 'WhatsApp da loja', c.whatsapp_loja ? formatarTelefone(c.whatsapp_loja) : '', { tipo: 'tel', extra: 'inputmode="numeric"', ajuda: 'O cliente fala com este número pela página do pedido.' })}
         </div>
-        ${campo('endereco_loja', 'Endereço para retirada', c.endereco_loja, { extra: 'maxlength="120"' })}
+        ${campo('endereco_loja', 'Endereço do restaurante', c.endereco_loja, { extra: 'maxlength="120"', ajuda: 'Aparece na retirada e é o destino do botão "Como chegar ao restaurante" (Google Maps). Escreva como numa busca: rua, número, bairro e cidade.' })}
       </section>
 
       <section class="bloco">
@@ -78,8 +80,8 @@ function desenhar() {
         <div style="display: grid;">
           ${liga('aceita_entrega', 'Entrega', c.aceita_entrega)}
           ${liga('aceita_retirada', 'Retirada na loja', c.aceita_retirada)}
-          ${liga('aceita_local', 'Consumo no local (mesa)', c.aceita_local)}
         </div>
+        <p class="campo__ajuda">Pedidos de mesa e pra viagem são registrados pela atendente, em "Pedido no salão".</p>
         <span class="campo__erro" id="erro-aceita" hidden></span>
         <div class="bloco__grade">
           ${campo('taxa_entrega', 'Taxa de entrega (R$)', textoDeCentavos(c.taxa_entrega_centavos), { extra: 'inputmode="decimal"', ajuda: 'Use 0,00 para entrega grátis.' })}
@@ -104,7 +106,7 @@ function desenhar() {
       </section>
 
       <section class="bloco">
-        <h2 class="bloco__titulo">Cozinha e impressão</h2>
+        <h2 class="bloco__titulo">Impressão e atualização</h2>
         <div class="bloco__grade">
           <label class="campo">
             <span class="campo__rotulo">Largura do papel</span>
@@ -113,7 +115,6 @@ function desenhar() {
               <option value="58" ${c.comanda_largura_mm === 58 ? 'selected' : ''}>58 mm</option>
             </select>
           </label>
-          ${campo('atraso_minutos', 'Pedido atrasa depois de (min)', c.atraso_minutos, { extra: 'inputmode="numeric"', ajuda: 'O cartão muda de cor no Kanban e na cozinha.' })}
           ${campo('polling_segundos', 'Atualizar o painel a cada (s)', c.polling_segundos, { extra: 'inputmode="numeric"', ajuda: 'De 3 a 60 segundos.' })}
         </div>
         ${liga('comanda_mostra_preco', 'Imprimir preços e pagamento na comanda', c.comanda_mostra_preco)}
@@ -231,12 +232,12 @@ conteudo.addEventListener('submit', async (e) => {
       corpo: {
         nome_loja: form.nome_loja.value, whatsapp_loja: form.whatsapp_loja.value, endereco_loja: form.endereco_loja.value,
         funcionamento: form.funcionamento.value, horarios,
-        aceita_entrega: form.aceita_entrega.checked, aceita_retirada: form.aceita_retirada.checked, aceita_local: form.aceita_local.checked,
+        aceita_entrega: form.aceita_entrega.checked, aceita_retirada: form.aceita_retirada.checked,
         taxa_entrega_centavos: taxa, area_entrega: form.area_entrega.value,
         tempo_entrega_min: form.tempo_entrega_min.value, tempo_retirada_min: form.tempo_retirada_min.value,
         tema: form.tema.value,
         comanda_largura_mm: Number(form.comanda_largura_mm.value), comanda_mostra_preco: form.comanda_mostra_preco.checked,
-        atraso_minutos: form.atraso_minutos.value, polling_segundos: form.polling_segundos.value,
+        polling_segundos: form.polling_segundos.value,
       },
     });
     horarios = Array.from({ length: 7 }, (_, d) => (config.horarios[d] ?? []).map((faixa) => [...faixa]));
@@ -244,7 +245,10 @@ conteudo.addEventListener('submit', async (e) => {
     const rolagem = window.scrollY;
     desenhar();
     window.scrollTo(0, rolagem);
-    document.querySelector('.painel-topo .marca').textContent = config.nome_loja;
+    // O nome da loja aparece no menu lateral (e na barra de cima do celular): atualiza sem recarregar.
+    $$('.lateral__marca-texto, .barra-topo__marca').forEach((el) => (el.textContent = config.nome_loja));
+    $$('.lateral__marca-inicial').forEach((el) => (el.textContent = config.nome_loja.charAt(0).toUpperCase()));
+    $('.lateral__marca')?.setAttribute('title', config.nome_loja);
     avisar('Configurações salvas');
   } catch (erro) {
     botao.removeAttribute('aria-busy');
@@ -253,4 +257,12 @@ conteudo.addEventListener('submit', async (e) => {
   }
 });
 
-carregar();
+/** A tela abriu (a primeira vez ou de novo): busca as configurações e desenha. */
+export async function montar() {
+  await carregar();
+}
+
+/** Saiu da tela sem salvar: a prévia do tema não pode ficar valendo para o resto do painel. */
+export function desmontar() {
+  document.documentElement.dataset.theme = temaSalvo;
+}

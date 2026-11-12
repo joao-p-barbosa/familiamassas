@@ -121,7 +121,7 @@ $cores = [
         <label class="segmentado__item"><input type="radio" name="g-tipo"><span>Comer aqui</span></label>
       </fieldset>
       <label class="interruptor"><input type="checkbox" checked><span class="interruptor__trilho"></span><span>Disponível</span></label>
-      <label class="interruptor"><input type="checkbox"><span class="interruptor__trilho"></span><span>Queijo ralado</span></label>
+      <label class="interruptor"><input type="checkbox"><span class="interruptor__trilho"></span><span>Imprimir comandas neste aparelho</span></label>
     </div>
   </section>
 
@@ -181,15 +181,16 @@ $cores = [
   <section class="guia__secao" aria-labelledby="g-kanban">
     <h2 id="g-kanban">Cartão de pedido (Kanban)</h2>
     <div class="guia__grade guia__grade--tres">
-      <?php foreach ([['12', '7 min', null], ['9', '24 min', '1'], ['7', '41 min', '2']] as [$n, $tempo, $atraso]): ?>
-      <article class="cartao-pedido" <?= $atraso ? 'data-atraso="' . $atraso . '"' : '' ?>>
+      <?php foreach ([['12', '7 min', null], ['9', '24 min', 'atencao'], ['7', '41 min', 'atrasado']] as [$n, $tempo, $faixa]): ?>
+      <article class="cartao-pedido" <?= $faixa ? 'data-faixa="' . $faixa . '"' : '' ?>>
         <div class="cartao-pedido__topo">
           <span class="cartao-pedido__numero">#<?= $n ?></span>
-          <span class="cartao-pedido__tempo"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg><?= $tempo ?></span>
+          <span class="cartao-pedido__tempo"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg><span><?= $tempo ?></span></span>
+          <?php if ($faixa): ?><span class="cartao-pedido__faixa"><?= $faixa === 'atencao' ? 'Atenção' : 'Atrasado' ?></span><?php endif; ?>
         </div>
         <span class="cartao-pedido__cliente">Maria Teste</span>
-        <span class="cartao-pedido__selos"><span class="selo">Entrega</span><span class="selo">WhatsApp</span></span>
-        <span class="cartao-pedido__itens"><span><b>1×</b> Monte seu prato · M · Penne · Bolonhesa</span><span><b>2×</b> Refrigerante lata</span></span>
+        <span class="cartao-pedido__selos"><span class="selo selo--alerta">Em preparo</span><span class="selo cartao-pedido__modalidade">Entrega</span><span class="selo">WhatsApp</span></span>
+        <span class="cartao-pedido__itens"><span><b>1×</b> Monte seu prato · Meio · Penne · Bolonhesa</span><span><b>2×</b> Refrigerante lata</span></span>
         <div class="cartao-pedido__rodape"><span>Pix</span><span class="cartao-pedido__total">R$ 59,90</span></div>
         <button type="button" class="botao botao--bloco">Iniciar preparo</button>
       </article>

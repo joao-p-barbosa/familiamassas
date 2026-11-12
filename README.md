@@ -1,8 +1,8 @@
 # Família Massas · cardápio e painel
 
-Sistema de pedidos para um restaurante de massas do tipo "monte seu prato": cardápio web para o cliente, painel com Kanban para a equipe, modo cozinha, impressão de comanda e (em breve) bot do WhatsApp.
+Sistema de pedidos para um restaurante de massas do tipo "monte seu prato": cardápio web para o cliente, painel com quadro de pedidos para a equipe, Salão (atendimentos com conta, mesa ou pra viagem e fechamento com pagamento) para a atendente, histórico para o proprietário, impressão de comanda e (em breve) bot do WhatsApp.
 
-PHP 8.2+ puro, SQLite (Postgres/Neon depois), HTML + CSS + JavaScript sem framework e sem build.
+PHP 8.2+ puro, SQLite (Postgres/Neon depois), HTML + CSS + JavaScript sem framework e sem build. O painel é uma SPA em JavaScript puro (módulos ES, History API).
 
 ## Rodar no Windows
 
@@ -10,13 +10,14 @@ PHP 8.2+ puro, SQLite (Postgres/Neon depois), HTML + CSS + JavaScript sem framew
 2. Dê dois cliques em `iniciar.bat`.
 3. Cardápio em <http://localhost:8090/> e painel em <http://localhost:8090/painel>.
 
-O banco `data/restaurante.sqlite` é criado sozinho com dados de exemplo na primeira vez. Os usuários e a senha inicial estão em `docs/PROGRESSO.md`. Troque a senha antes de usar de verdade.
+O banco `data/restaurante.sqlite` é criado sozinho com dados de exemplo na primeira vez. Um banco que já existe é atualizado sozinho (migrações em `data/migracoes/`, com cópia de segurança em `data/backups/`). Os usuários (proprietário e atendente) e a senha inicial estão em `docs/PROGRESSO.md`. Troque a senha antes de usar de verdade.
 
 ## Testes
 
 ```
 php -d extension=pdo_sqlite tests/regras.php
 node tests/preco.test.mjs
+node tests/tempo.test.mjs
 node tests/contraste.mjs
 ```
 

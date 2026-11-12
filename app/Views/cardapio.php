@@ -4,6 +4,7 @@
  * a partir dos dados embutidos no fim da página (os mesmos de GET /api/cardapio).
  * @var array $dados
  * @var array{t:string, telefone:string}|null $whatsapp
+ * @var list<array<string,mixed>> $acompanhamento  pedidos deste navegador (cookie), no formato público
  */
 $loja = $dados['loja'];
 $tema = $loja['tema'];
@@ -34,6 +35,10 @@ $estilos = ['cardapio'];
   <nav class="cardapio__nav" id="categorias" aria-label="Categorias"></nav>
 
   <main class="cardapio__itens" id="conteudo" tabindex="-1">
+    <!-- Pedidos deste navegador (ativos e recém-encerrados). Desenhado por acompanhamento.js a partir de #dados-acompanhamento. -->
+    <section class="meus-pedidos" id="acompanhamento" aria-label="Seus pedidos" hidden></section>
+    <p class="so-leitor" id="acompanhamento-anuncio" role="status"></p>
+
     <div id="lista-cardapio" aria-busy="true">
       <!-- Estado de carregamento: aparece até o JavaScript desenhar o cardápio. -->
       <div class="esqueleto esqueleto--cartao" style="height: 11rem;"></div>
@@ -56,8 +61,9 @@ $estilos = ['cardapio'];
 <div class="barra-carrinho" id="barra-carrinho" hidden></div>
 
 <!-- Folhas -->
-<dialog class="folha folha--cheia folha--central folha--alta" id="folha-montador" aria-labelledby="montador-titulo"></dialog>
+<dialog class="folha folha--cheia folha--central folha--alta folha--montador" id="folha-montador" aria-labelledby="montador-titulo"></dialog>
 <dialog class="folha folha--central" id="folha-item" aria-labelledby="item-titulo"></dialog>
+<dialog class="folha folha--cheia folha--central folha--alta folha--mapa" id="folha-mapa" aria-labelledby="mapa-titulo"></dialog>
 <dialog class="folha" id="folha-carrinho" aria-labelledby="carrinho-titulo">
   <header class="folha__topo">
     <h2 class="folha__titulo" id="carrinho-titulo">Seu pedido</h2>
@@ -74,6 +80,7 @@ $estilos = ['cardapio'];
 
 <script type="application/json" id="dados-cardapio"><?= json_embutido($dados) ?></script>
 <script type="application/json" id="dados-whatsapp"><?= json_embutido($whatsapp) ?></script>
+<script type="application/json" id="dados-acompanhamento"><?= json_embutido($acompanhamento) ?></script>
 <script type="module" src="<?= e(asset('js/cardapio/principal.js')) ?>"></script>
 </body>
 </html>

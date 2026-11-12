@@ -63,8 +63,9 @@ final class LojaService
     public function publica(): array
     {
         $c = $this->config;
+        // O cliente só pede entrega ou retirada. Mesa e pra viagem são registrados pela atendente, no salão.
         $tipos = [];
-        foreach (['entrega', 'retirada', 'local'] as $tipo) {
+        foreach (PedidoService::TIPOS_DO_CLIENTE as $tipo) {
             if ($c->get("aceita_{$tipo}", '1') === '1') {
                 $tipos[] = $tipo;
             }

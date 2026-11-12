@@ -8,6 +8,7 @@ use App\Core\Requisicao;
 use App\Core\Resposta;
 use App\Repositories\CardapioRepository;
 use App\Repositories\PedidoRepository;
+use App\Services\AcompanhamentoDoCliente;
 use App\Services\LojaService;
 use App\Services\PedidoService;
 use App\Services\TokenWhatsApp;
@@ -29,6 +30,8 @@ final class PublicoController
         Resposta::pagina('cardapio', [
             'dados' => self::dadosCardapio(),
             'whatsapp' => $telefone !== null ? ['t' => $t, 'telefone' => $telefone] : null,
+            // Pedidos deste navegador (cookie): a Home mostra o acompanhamento mesmo depois de atualizar a página.
+            'acompanhamento' => (new AcompanhamentoDoCliente())->paraHome($req),
         ]);
     }
 
@@ -38,6 +41,9 @@ final class PublicoController
         if ($pedido === null) {
             Resposta::pagina('nao-encontrado', [], 404);
             return;
+        }
+        if (!in_array($pedido['status'], PedidoRepository::ENCERRADOS, true)) {
+            (new AcompanhamentoDoCliente())->registrar($req, $pedido['codigo']);
         }
         Resposta::pagina('pedido', [
             'loja' => (new LojaService())->publica(),
@@ -58,7 +64,15 @@ final class PublicoController
     public function apiCriarPedido(Requisicao $req): void
     {
         $criado = (new PedidoService())->criar($req->json());
+        (new AcompanhamentoDoCliente())->registrar($req, $criado['codigo']);
         Resposta::json(['numero' => $criado['id'], 'codigo' => $criado['codigo']], 201);
+    }
+
+    /** POST /api/pedidos/{codigo}/dispensar: tira o pedido da Home deste navegador (botão "Dispensar" do pedido encerrado). */
+    public function apiDispensar(Requisicao $req): void
+    {
+        (new AcompanhamentoDoCliente())->remover($req, $req->parametro('codigo'));
+        Resposta::json(['ok' => true]);
     }
 
     public function apiPedido(Requisicao $req): void

@@ -1,9 +1,12 @@
-// Acompanhamento do pedido: mostra a etapa atual e consulta o servidor a cada 10 s até o pedido encerrar.
-import { $, esc, dadosDaPagina, guardado } from '../shared/dom.js';
+// Acompanhamento do pedido: mostra a etapa atual com a animação do status e consulta o servidor a cada 10 s
+// até o pedido encerrar. O endereço da página tem o código do pedido, então atualizar a página não perde nada.
+import { $, esc, dadosDaPagina } from '../shared/dom.js';
 import { icone } from '../shared/icones.js';
 import { reais, hora } from '../shared/formato.js';
 import { api } from '../shared/api.js';
-import { STATUS, PAGAMENTOS, encerrado, linhasMontagem } from '../shared/pedido.js';
+import { STATUS, TIPOS, PAGAMENTOS, encerrado, linhasMontagem, linkComoChegar } from '../shared/pedido.js';
+import { animacaoStatus } from './animacao-status.js';
+import { previsaoDoPedido, trilhaHtml, posicaoDoPedido } from './status-pedido.js';
 
 const INTERVALO = 10_000;
 const raiz = $('#acompanhar');
@@ -12,27 +15,34 @@ let pedido = inicial;
 let semConexao = false;
 let itensAbertos = false;
 
-function previsao() {
-  if (encerrado(pedido.status) || pedido.status === 'pronto' || pedido.status === 'aguardando_retirada') return '';
-  const ate = new Date(new Date(pedido.criado_em).getTime() + pedido.previsao_minutos * 60_000);
-  const oQue = { entrega: 'Chega', retirada: 'Fica pronto', local: 'Vai para a mesa' }[pedido.tipo];
-  return `${oQue} por volta das ${hora(ate.toISOString())}.`;
-}
-
 function desenhar() {
   const cancelado = pedido.status === 'cancelado';
   const atual = pedido.status;
+  const posicao = posicaoDoPedido(pedido);
+  const previsao = previsaoDoPedido(pedido);
   const zap = loja.whatsapp
     ? `https://wa.me/${encodeURIComponent(loja.whatsapp)}?text=${encodeURIComponent(`Olá! É sobre o pedido #${pedido.numero}.`)}`
     : null;
+  const comoChegar = pedido.tipo === 'retirada' && !encerrado(atual) && loja.endereco;
 
   raiz.innerHTML = `
-    <p class="acompanhar__numero">Pedido #${pedido.numero} · ${esc(pedido.primeiro_nome)}</p>
-    <h1 class="acompanhar__titulo">${esc(STATUS[atual].cliente)}</h1>
-    ${previsao() ? `<p class="acompanhar__previsao">${previsao()}</p>` : ''}
-    ${pedido.status === 'aguardando_retirada' && loja.endereco ? `<p class="acompanhar__previsao">${esc(loja.endereco)}</p>` : ''}
+    <section class="palco" aria-label="Situação do pedido">
+      <div class="palco__arte">${animacaoStatus(atual)}</div>
+      <div class="palco__texto">
+        <h1 class="acompanhar__titulo">${esc(STATUS[atual].cliente)}</h1>
+        <p class="acompanhar__numero">Pedido #${pedido.numero} · ${esc(pedido.primeiro_nome)} · ${esc(TIPOS[pedido.tipo]?.rotulo ?? pedido.tipo)}</p>
+        ${previsao ? `<p class="acompanhar__previsao">${previsao}</p>` : ''}
+        ${atual === 'aguardando_retirada' && loja.endereco ? `<p class="acompanhar__previsao">${esc(loja.endereco)}</p>` : ''}
+      </div>
+      ${cancelado
+        ? `<p class="acompanhar__cancelado">${pedido.motivo_cancelamento ? `Motivo: ${esc(pedido.motivo_cancelamento)}` : 'A loja cancelou este pedido.'}</p>`
+        : `<div class="palco__progresso">
+             ${trilhaHtml(pedido)}
+             ${posicao ? `<p class="palco__etapa"><strong>Etapa ${posicao.atual} de ${posicao.total}</strong>${posicao.faltam > 0 ? ` · faltam ${posicao.faltam}` : ' · tudo certo'}</p>` : ''}
+           </div>`}
+    </section>
 
-    ${cancelado ? `<p class="acompanhar__cancelado">${pedido.motivo_cancelamento ? `Motivo: ${esc(pedido.motivo_cancelamento)}` : 'A loja cancelou este pedido.'}</p>` : `
+    ${cancelado ? '' : `
     <section class="bloco" aria-label="Etapas do pedido">
       <ol class="etapas">
         ${pedido.etapas.map((etapa) => `
@@ -65,6 +75,7 @@ function desenhar() {
     </details>
 
     <div class="acompanhar__acoes">
+      ${comoChegar ? `<a class="botao botao--secundario botao--g" href="${esc(linkComoChegar(loja.endereco))}" target="_blank" rel="noopener">${icone('navegar', 20)}Como chegar ao restaurante</a>` : ''}
       ${zap ? `<a class="botao botao--secundario botao--g" href="${esc(zap)}" target="_blank" rel="noopener">${icone('conversa', 20)}Falar com a loja no WhatsApp</a>` : ''}
       <a class="botao ${encerrado(atual) ? '' : 'botao--fantasma'} botao--g" href="/">${encerrado(atual) ? 'Fazer outro pedido' : 'Voltar ao cardápio'}</a>
     </div>
@@ -85,7 +96,6 @@ async function consultar() {
     pedido = novo;
     semConexao = false;
     if (mudou) desenhar();
-    if (encerrado(pedido.status)) guardado.apagar('fm_ultimo_pedido');
   } catch {
     if (!semConexao) {
       semConexao = true;
@@ -94,7 +104,6 @@ async function consultar() {
   }
 }
 
-if (!encerrado(pedido.status)) guardado.gravar('fm_ultimo_pedido', { codigo: pedido.codigo, numero: pedido.numero });
 desenhar();
 setInterval(consultar, INTERVALO);
 document.addEventListener('visibilitychange', consultar);

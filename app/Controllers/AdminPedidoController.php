@@ -11,13 +11,16 @@ use App\Core\Sessao;
 use App\Repositories\PedidoRepository;
 use App\Services\PedidoService;
 
-// API do Kanban, do modo cozinha e da impressão.
+// API do quadro de pedidos (a produção) e da impressão. Proprietário (admin) e atendente usam as mesmas rotas.
 final class AdminPedidoController
 {
-    /** GET /api/admin/pedidos?desde=<ISO>  →  só o que mudou desde a última consulta (polling, decisão D5). */
+    /**
+     * GET /api/admin/pedidos?desde=<ISO>  →  só o que mudou desde a última consulta (polling, decisão D5).
+     * Vai junto o fechamento do dia; o faturamento é do proprietário e a atendente não recebe.
+     */
     public function listar(Requisicao $req): void
     {
-        Sessao::exigir($req);
+        $usuario = Sessao::exigir($req, ['admin', 'atendente']);
         $desde = $req->consulta('desde');
         $desdeBanco = $desde !== '' ? Relogio::doIso($desde) : null;
         if ($desde !== '' && $desdeBanco === null) {
@@ -25,7 +28,12 @@ final class AdminPedidoController
         }
         // A hora é lida ANTES da consulta: na próxima chamada, nada que mudou no meio do caminho se perde.
         $agora = Relogio::iso(Relogio::agora());
-        Resposta::json(['agora' => $agora, 'pedidos' => (new PedidoRepository())->paraPainel($desdeBanco)]);
+        $pedidos = new PedidoRepository();
+        $fechamento = $pedidos->fechamentoDoDia();
+        if ($usuario['perfil'] !== 'admin') {
+            unset($fechamento['faturamento_centavos']);
+        }
+        Resposta::json(['agora' => $agora, 'pedidos' => $pedidos->paraPainel($desdeBanco), 'fechamento' => $fechamento]);
     }
 
     public function detalhe(Requisicao $req): void

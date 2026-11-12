@@ -12,7 +12,13 @@ use App\Repositories\CardapioRepository;
 use App\Repositories\ConfigRepository;
 use App\Services\LojaService;
 use App\Services\PedidoService;
+use App\Controllers\PainelController;
+use App\Core\Requisicao;
+use App\Core\Sessao;
+use App\Services\AcompanhamentoDoCliente;
+use App\Services\AtendimentoService;
 use App\Services\PrecoService;
+use App\Services\TempoDePreparo;
 use App\Services\TokenWhatsApp;
 
 $banco = sys_get_temp_dir() . '/familiamassas-teste-' . bin2hex(random_bytes(4)) . '.sqlite';
@@ -65,14 +71,14 @@ $nomes = static fn (array $lista): array => array_column($lista, 'nome');
 
 // Os mesmos casos são conferidos em JavaScript (tests/preco.test.mjs) a partir deste arquivo.
 $casos = [
-    ['Pequeno sem ingredientes custa só a base', 'Pequeno', 'Penne', 'Sugo', [], 2490, []],
-    ['Pequeno com 3 ingredientes (o limite): nada extra', 'Pequeno', 'Penne', 'Sugo', ['Frango desfiado', 'Bacon', 'Brócolis'], 2490, []],
-    ['Pequeno com 4: o mais barato vira extra', 'Pequeno', 'Penne', 'Sugo', ['Frango desfiado', 'Bacon', 'Brócolis', 'Milho'], 2790, ['Milho']],
-    ['Médio, bolonhesa (+3,00), 6 ingredientes: 2 extras', 'Médio', 'Penne', 'Bolonhesa', ['Frango desfiado', 'Bacon', 'Brócolis', 'Milho', 'Muçarela', 'Camarão'], 4090, ['Brócolis', 'Milho']],
-    ['Mesma montagem em outra ordem de clique: mesmo preço', 'Médio', 'Penne', 'Bolonhesa', ['Milho', 'Camarão', 'Brócolis', 'Muçarela', 'Bacon', 'Frango desfiado'], 4090, ['Brócolis', 'Milho']],
-    ['Grande, nhoque (+4,00), quatro queijos (+5,00), 6 ingredientes: tudo incluso', 'Grande', 'Nhoque', 'Quatro queijos', ['Frango desfiado', 'Bacon', 'Brócolis', 'Milho', 'Muçarela', 'Camarão'], 4890, []],
-    ['Camarão (o mais caro) nunca é o extra quando há mais baratos', 'Pequeno', 'Espaguete', 'Sugo', ['Camarão', 'Milho', 'Ervilha', 'Brócolis'], 2790, ['Ervilha']],
-    ['Ingrediente repetido conta uma vez só', 'Pequeno', 'Penne', 'Sugo', ['Bacon', 'Bacon', 'Bacon', 'Bacon'], 2490, []],
+    ['Meio sem ingredientes custa só a base', 'Meio', 'Penne', 'Sugo', [], 2490, []],
+    ['Meio com 3 ingredientes (o limite): nada extra', 'Meio', 'Penne', 'Sugo', ['Picadinho de frango', 'Bacon', 'Brócolis'], 2490, []],
+    ['Meio com 4: o mais barato vira extra', 'Meio', 'Penne', 'Sugo', ['Picadinho de frango', 'Bacon', 'Brócolis', 'Milho'], 2790, ['Milho']],
+    ['Inteiro, bolonhesa (+3,00), 8 ingredientes: 2 extras', 'Inteiro', 'Penne', 'Bolonhesa', ['Picadinho de frango', 'Bacon', 'Camarão', 'Muçarela', 'Brócolis', 'Milho', 'Ervilha', 'Champignon'], 4890, ['Milho', 'Ervilha']],
+    ['Mesma montagem em outra ordem de clique: mesmo preço', 'Inteiro', 'Penne', 'Bolonhesa', ['Champignon', 'Ervilha', 'Milho', 'Brócolis', 'Muçarela', 'Camarão', 'Bacon', 'Picadinho de frango'], 4890, ['Milho', 'Ervilha']],
+    ['Inteiro, nhoque (+4,00), quatro queijos (+5,00), 6 ingredientes: tudo incluso', 'Inteiro', 'Nhoque', 'Quatro queijos', ['Picadinho de frango', 'Bacon', 'Brócolis', 'Milho', 'Muçarela', 'Camarão'], 4890, []],
+    ['Camarão (o mais caro) nunca é o extra quando há mais baratos', 'Meio', 'Espaguete', 'Sugo', ['Camarão', 'Milho', 'Ervilha', 'Brócolis'], 2790, ['Ervilha']],
+    ['Ingrediente repetido conta uma vez só', 'Meio', 'Penne', 'Sugo', ['Bacon', 'Bacon', 'Bacon', 'Bacon'], 2490, []],
 ];
 
 echo "\nPREÇO DO MONTE SEU PRATO\n";
@@ -85,8 +91,23 @@ foreach ($casos as [$descricao, $tamanho, $massa, $molho, $ingredientes, $espera
 }
 file_put_contents(__DIR__ . '/casos-preco.json', json_encode(['cardapio' => $cardapio, 'casos' => $paraJs], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT));
 
-conferir('Ingrediente esgotado (Palmito) é recusado', codigoDoErro(fn () => $montar('Pequeno', 'Penne', 'Sugo', $ing('Palmito'))), '409 esgotado');
+conferir('Ingrediente esgotado (Palmito) é recusado', codigoDoErro(fn () => $montar('Meio', 'Penne', 'Sugo', $ing('Palmito'))), '409 esgotado');
 conferir('Montagem sem tamanho é recusada', codigoDoErro(fn () => $preco->montar($cardapio, ['massa_id' => 1, 'molho_id' => 1])), '422 montagem_invalida');
+
+echo "\nCARDÁPIO\n";
+conferir('Dois tamanhos: Meio e Inteiro', array_column($cardapio['tamanhos'], 'nome'), ['Meio', 'Inteiro']);
+$grupos = [];
+foreach ($cardapio['ingredientes'] as $ingrediente) {
+    $grupos[$ingrediente['grupo']][] = $ingrediente['nome'];
+}
+conferir('Ingredientes em três grupos, nesta ordem: Proteínas, Acompanhamentos e Queijos', array_keys($grupos), ['Proteínas', 'Acompanhamentos', 'Queijos']);
+conferir('Proteínas: carne moída, picadinho de frango, carne seca e camarão (nessa ordem)', $grupos['Proteínas'], ['Carne moída', 'Picadinho de frango', 'Carne seca', 'Camarão']);
+conferir('As proteínas não foram para os acompanhamentos', array_values(array_intersect($grupos['Proteínas'], $grupos['Acompanhamentos'])), []);
+conferir('Bacon, calabresa e presunto estão em Acompanhamentos', array_values(array_intersect(['Bacon', 'Calabresa', 'Presunto'], $grupos['Acompanhamentos'])), ['Bacon', 'Calabresa', 'Presunto']);
+conferir('Os vegetais também (nenhum grupo "Vegetais" sobrou)', [in_array('Brócolis', $grupos['Acompanhamentos'], true), isset($grupos['Vegetais'])], [true, false]);
+conferir('Queijos continuam como estavam', in_array('Muçarela', $grupos['Queijos'], true), true);
+conferir('A montagem não guarda mais "queijo ralado"', array_key_exists('queijo_ralado', $montar('Meio', 'Penne', 'Sugo', [])['montagem']), false);
+conferir('O cliente só vê entrega e retirada', (new LojaService())->publica()['tipos_pedido'], ['entrega', 'retirada']);
 
 echo "\nPEDIDO\n";
 $pedidos = new PedidoService();
@@ -113,13 +134,156 @@ $token = (new TokenWhatsApp())->gerar('5511955554444');
 $salvo = (new App\Repositories\PedidoRepository())->porId($pedidos->criar($base + ['t' => $token])['id']);
 conferir('Com token válido: origem whatsapp e telefone do token (não o do formulário)', [$salvo['origem'], $salvo['cliente_telefone']], ['whatsapp', '5511955554444']);
 
-echo "\nSTATUS\n";
+$repo = new App\Repositories\PedidoRepository();
+// (No "+" do PHP vale o valor da esquerda: o endereço novo vem primeiro para trocar o do $entrega.)
+$comCoordenadas = $repo->porId($pedidos->criar(['endereco' => ['rua' => 'Rua A', 'numero' => '1', 'bairro' => 'Centro', 'lat' => -23.5614, 'lng' => -46.6558]] + $entrega)['id']);
+conferir('Entrega guarda o local marcado no mapa', [$comCoordenadas['entrega_lat'], $comCoordenadas['entrega_lng']], [-23.5614, -46.6558]);
+$foraDoPlaneta = $repo->porId($pedidos->criar(['endereco' => ['rua' => 'Rua A', 'numero' => '1', 'bairro' => 'Centro', 'lat' => 123, 'lng' => 'abc']] + $entrega)['id']);
+conferir('Coordenada inválida é ignorada e o pedido segue com o endereço digitado', [$foraDoPlaneta['entrega_lat'], $foraDoPlaneta['endereco_rua']], [null, 'Rua A']);
+$retiradaComObs = $repo->porId($pedidos->criar($base + ['observacoes' => 'não deveria ficar'])['id']);
+conferir('Retirada não tem observação do pedido (o servidor descarta)', $retiradaComObs['observacoes'], '');
+$entregaComObs = $repo->porId($pedidos->criar($entrega + ['observacoes' => 'interfone quebrado'])['id']);
+conferir('Entrega mantém a observação do pedido', $entregaComObs['observacoes'], 'interfone quebrado');
+conferir('Cliente não pede mesa (é do salão)', codigoDoErro(fn () => $pedidos->criar(['tipo' => 'local', 'mesa' => '3'] + $base)), '422 validacao');
+conferir('Cliente não pede "pra viagem" (é do salão)', codigoDoErro(fn () => $pedidos->criar(['tipo' => 'viagem'] + $base)), '422 validacao');
+conferir('Cliente não paga "no caixa" (é do salão)', codigoDoErro(fn () => $pedidos->criar(['pagamento' => ['forma' => 'caixa']] + $base)), '422 validacao');
+
+echo "\nATENDIMENTO NO SALÃO (a conta do cliente)\n";
+$atendente = ['id' => 2, 'perfil' => 'atendente'];
 $admin = ['id' => 1, 'perfil' => 'admin'];
-$cozinha = ['id' => 3, 'perfil' => 'cozinha'];
+$salao = new AtendimentoService();
+$contarAtendimentos = static fn (): int => (int) App\Core\Banco::conexao()->query('SELECT COUNT(*) FROM atendimentos')->fetchColumn();
+$tiramisu = [['tipo' => 'simples', 'item_id' => $id('itens', 'Tiramisù'), 'quantidade' => 1]];   // R$ 16,90
+$doisTiramisus = [['tipo' => 'simples', 'item_id' => $id('itens', 'Tiramisù'), 'quantidade' => 2]];   // R$ 33,80
+$esgotado = [['tipo' => 'simples', 'item_id' => $id('itens', 'Chá gelado de limão'), 'quantidade' => 1]];
+$abrir = static fn (array $mudar): array => $mudar + ['cliente' => ['nome' => 'Bia'], 'modalidade' => 'mesa', 'mesa' => '2', 'itens' => $tiramisu];
+
+$ana = $salao->abrir(['cliente' => ['nome' => 'Ana'], 'modalidade' => 'mesa', 'mesa' => '5', 'itens' => $tiramisu], $atendente);
+$contaAna = $salao->detalhe($ana['id']);
+$primeiro = $repo->porId($ana['pedido_id']);
+conferir('Abrir (Mesa): cliente, modalidade, mesa, status aberto e sem pagamento ainda', [$contaAna['cliente_nome'], $contaAna['modalidade'], $contaAna['mesa'], $contaAna['status'], $contaAna['pagamento']], ['Ana', 'mesa', '5', 'aberto', null]);
+conferir('A conta registra quem abriu; ainda não tem fechamento', [$contaAna['aberto_por_nome'] !== null, $contaAna['encerrado_em'], $contaAna['total_centavos']], [true, null, 1690]);
+conferir('O primeiro pedido nasce ligado ao atendimento, no salão e "na conta" (sem forma de pagamento)', [$primeiro['atendimento_id'], $primeiro['origem'], $primeiro['tipo'], $primeiro['mesa'], $primeiro['pagamento'], $primeiro['status'], $primeiro['criado_por']], [$ana['id'], 'balcao', 'local', '5', 'caixa', 'novo', 2]);
+conferir('O atendimento tem o seu próprio id, diferente do número do pedido', [$ana['id'], $ana['numero']], [1, $ana['pedido_id']]);
+
+$carlos = $salao->abrir(['cliente' => ['nome' => 'Carlos'], 'modalidade' => 'viagem', 'mesa' => '9', 'itens' => $tiramisu], $atendente);
+$contaCarlos = $salao->detalhe($carlos['id']);
+$pedidoCarlos = $repo->porId($carlos['pedido_id']);
+conferir('Pra viagem: não tem mesa (mesmo que venha uma) e o pedido é do tipo "viagem"', [$contaCarlos['modalidade'], $contaCarlos['mesa'], $pedidoCarlos['tipo'], $pedidoCarlos['mesa']], ['viagem', null, 'viagem', null]);
+
+$antes = $contarAtendimentos();
+conferir('Nome do cliente é obrigatório', codigoDoErro(fn () => $salao->abrir($abrir(['cliente' => ['nome' => '  ']]), $atendente)), '422 validacao');
+conferir('Nome de uma letra só é recusado', codigoDoErro(fn () => $salao->abrir($abrir(['cliente' => ['nome' => 'A']]), $atendente)), '422 validacao');
+conferir('A modalidade é obrigatória (vem antes dos produtos)', codigoDoErro(fn () => $salao->abrir($abrir(['modalidade' => '']), $atendente)), '422 validacao');
+conferir('Modalidade só aceita Mesa ou Pra viagem', codigoDoErro(fn () => $salao->abrir($abrir(['modalidade' => 'entrega']), $atendente)), '422 validacao');
+conferir('Mesa exige o número da mesa', codigoDoErro(fn () => $salao->abrir($abrir(['mesa' => '']), $atendente)), '422 validacao');
+conferir('Sem produtos não abre atendimento', codigoDoErro(fn () => $salao->abrir($abrir(['itens' => []]), $atendente)), '422 carrinho_vazio');
+conferir('O preço é do servidor: total divergente é recusado', codigoDoErro(fn () => $salao->abrir($abrir(['total_esperado_centavos' => 1]), $atendente)), '409 total_mudou');
+conferir('Item esgotado é recusado', codigoDoErro(fn () => $salao->abrir($abrir(['itens' => $esgotado]), $atendente)), '409 esgotado');
+conferir('Nenhum pedido recusado deixou atendimento para trás', $contarAtendimentos() - $antes, 0);
+
+(new ConfigRepository())->salvar(['funcionamento' => 'fechada']);
+$noite = $salao->abrir($abrir(['cliente' => ['nome' => 'Noite'], 'modalidade' => 'viagem', 'mesa' => '']), $atendente);
+(new ConfigRepository())->salvar(['funcionamento' => 'aberta']);
+conferir('Pra viagem não pede mesa, e o salão atende mesmo com o cardápio fechado para o cliente', $noite['id'] > 0, true);
+
+$segundo = $salao->adicionarPedido($ana['id'], ['itens' => $doisTiramisus], $atendente);
+$contaAna = $salao->detalhe($ana['id']);
+$segundoPedido = $repo->porId($segundo['id']);
+conferir('Mais produtos na mesma conta: 2 pedidos, cada um com o seu número', [count($contaAna['pedidos']), $segundo['id'] !== $ana['pedido_id']], [2, true]);
+conferir('O pedido novo herda cliente, mesa e atendimento', [$segundoPedido['atendimento_id'], $segundoPedido['cliente_nome'], $segundoPedido['mesa'], $segundoPedido['pagamento']], [$ana['id'], 'Ana', '5', 'caixa']);
+conferir('O valor da conta soma os pedidos uma vez cada (16,90 + 2 × 16,90) e conta os itens', [$contaAna['total_centavos'], $contaAna['quantidade_itens'], $contaAna['pedidos_ativos']], [5070, 3, 2]);
+conferir('Somar pedido também confere o total do servidor', codigoDoErro(fn () => $salao->adicionarPedido($ana['id'], ['itens' => $tiramisu, 'total_esperado_centavos' => 1], $atendente)), '409 total_mudou');
+conferir('Atendimento que não existe', codigoDoErro(fn () => $salao->adicionarPedido(99999, ['itens' => $tiramisu], $atendente)), '404 nao_encontrado');
+
+conferir('Pedidos novos: a conta está na fase "cozinha"', $contaAna['fase'], 'cozinha');
+$pedidos->mudarStatus($ana['pedido_id'], 'pronto', null, $atendente);
+$contaAna = $salao->detalhe($ana['id']);
+conferir('Cada pedido tem o seu status: um pronto, o outro ainda novo', array_column($contaAna['pedidos'], 'status'), ['pronto', 'novo']);
+conferir('Com pedido na cozinha a fase é "cozinha"; a conta segue aberta', [$contaAna['fase'], $contaAna['status']], ['cozinha', 'aberto']);
+$pedidos->mudarStatus($segundo['id'], 'pronto', null, $atendente);
+conferir('Tudo pronto: a conta vai para "pronto para servir"', $salao->detalhe($ana['id'])['fase'], 'pronto');
+$servidos = $salao->servirProntos($ana['id'], $atendente);
+conferir('Servir leva os pedidos prontos a Concluído, e a conta continua aberta esperando o pagamento', [array_column($servidos['pedidos'], 'status'), $servidos['fase'], $servidos['status']], [['concluido', 'concluido'], 'conta', 'aberto']);
+
+echo "\nFECHAR A CONTA\n";
+conferir('Sem forma de pagamento não fecha', codigoDoErro(fn () => $salao->fechar($ana['id'], ['total_esperado_centavos' => 5070], $atendente)), '422 validacao');
+conferir('Forma de pagamento inválida é recusada', codigoDoErro(fn () => $salao->fechar($ana['id'], ['pagamento' => 'fiado', 'total_esperado_centavos' => 5070], $atendente)), '422 validacao');
+conferir('Total conferido diferente do da conta é recusado', codigoDoErro(fn () => $salao->fechar($ana['id'], ['pagamento' => 'pix', 'total_esperado_centavos' => 100], $atendente)), '409 total_mudou');
+conferir('Nenhuma dessas tentativas fechou a conta', $salao->detalhe($ana['id'])['status'], 'aberto');
+$fechada = $salao->fechar($ana['id'], ['pagamento' => 'pix', 'total_esperado_centavos' => 5070], $atendente);
+conferir('Fechar: status encerrado, forma de pagamento e valor cobrado', [$fechada['status'], $fechada['fase'], $fechada['pagamento'], $fechada['total_centavos']], ['encerrado', 'encerrado', 'pix', 5070]);
+conferir('Fechar registra a data/hora e quem fechou', [$fechada['encerrado_em'] !== null, $fechada['encerrado_por_nome'] !== null], [true, true]);
+conferir('O pagamento fica na conta; os pedidos continuam "na conta"', $repo->porId($ana['pedido_id'])['pagamento'], 'caixa');
+conferir('Fechar de novo (duplo clique) é recusado', codigoDoErro(fn () => $salao->fechar($ana['id'], ['pagamento' => 'pix', 'total_esperado_centavos' => 5070], $atendente)), '409 ja_encerrado');
+conferir('Conta encerrada não aceita produtos novos', codigoDoErro(fn () => $salao->adicionarPedido($ana['id'], ['itens' => $tiramisu], $atendente)), '409 atendimento_encerrado');
+conferir('Nem pedidos novos nem o fechamento mexeram no valor cobrado', $salao->detalhe($ana['id'])['total_centavos'], 5070);
+
+$bia = $salao->abrir($abrir(['modalidade' => 'viagem', 'mesa' => '']), $atendente);
+$bia2 = $salao->adicionarPedido($bia['id'], ['itens' => $doisTiramisus], $atendente);
+$pedidos->mudarStatus($bia2['id'], 'cancelado', 'Errou o pedido', $atendente);
+$contaBia = $salao->detalhe($bia['id']);
+conferir('Pedido cancelado não entra na conta', [$contaBia['total_centavos'], $contaBia['quantidade_itens'], $contaBia['pedidos_ativos'], count($contaBia['pedidos'])], [1690, 1, 1, 2]);
+$fechadaBia = $salao->fechar($bia['id'], ['pagamento' => 'dinheiro', 'total_esperado_centavos' => 1690], $atendente);
+conferir('Dá para fechar com pedido ainda na cozinha: ele continua no quadro de Pedidos', [$fechadaBia['status'], $repo->porId($bia['pedido_id'])['status']], ['encerrado', 'novo']);
+conferir('Depois de fechada, não se cancela pedido da conta (o valor já foi cobrado)', codigoDoErro(fn () => $pedidos->mudarStatus($bia['pedido_id'], 'cancelado', 'Desistiu', $atendente)), '409 conta_encerrada');
+conferir('Mas a cozinha termina o pedido normalmente', $pedidos->mudarStatus($bia['pedido_id'], 'concluido', null, $atendente)['status'], 'concluido');
+
+$ze = $salao->abrir($abrir(['cliente' => ['nome' => 'Zé'], 'modalidade' => 'viagem', 'mesa' => '']), $atendente);
+$pedidos->mudarStatus($ze['pedido_id'], 'cancelado', 'Cliente desistiu', $atendente);
+$fechadaZe = $salao->fechar($ze['id'], ['total_esperado_centavos' => 0], $atendente);
+conferir('Conta sem nada a cobrar (tudo cancelado) fecha sem forma de pagamento', [$fechadaZe['status'], $fechadaZe['pagamento'], $fechadaZe['total_centavos']], ['encerrado', null, 0]);
+
+echo "\nQUADRO E HISTÓRICO DO SALÃO\n";
+$quadro = $salao->quadro();
+$noQuadro = array_column($quadro['atendimentos'], null, 'id');
+conferir('O quadro traz as contas abertas e as encerradas hoje, cada uma na sua fase', [$noQuadro[$ana['id']]['fase'], $noQuadro[$carlos['id']]['fase'], $noQuadro[$bia['id']]['fase']], ['encerrado', 'cozinha', 'encerrado']);
+conferir('Resumo: abertos, na cozinha, encerrados hoje, valor em aberto e contas pagas hoje', [$quadro['resumo']['abertos'], $quadro['resumo']['cozinha'], $quadro['resumo']['encerrados_hoje'], $quadro['resumo']['valor_em_aberto_centavos'], $quadro['resumo']['vendido_hoje_centavos']], [2, 2, 3, 3380, 6760]);
+$historico = $salao->historico('hoje', null);
+conferir('Histórico de hoje: contas, encerradas e abertas', [$historico['resumo']['quantidade'], $historico['resumo']['encerrados'], $historico['resumo']['abertos']], [5, 3, 2]);
+conferir('Histórico: total cobrado e total por forma de pagamento', [$historico['resumo']['total_cobrado_centavos'], $historico['resumo']['por_pagamento']], [6760, ['pix' => 5070, 'cartao' => 0, 'dinheiro' => 1690]]);
+conferir('Histórico filtra por situação', [count($salao->historico('hoje', 'encerrado')['atendimentos']), count($salao->historico('hoje', 'aberto')['atendimentos'])], [3, 2]);
+conferir('Período desconhecido vira "hoje"', $salao->historico('qualquer', null)['periodo'], 'hoje');
+conferir('Cada atendimento do histórico traz pedidos, itens e personalizações para consulta', isset($historico['atendimentos'][0]['pedidos'][0]['itens']), true);
+
+echo "\nTEMPO DE PREPARO (cor do cartão)\n";
+$t = static fn (int $segundos): string => gmdate('Y-m-d H:i:s', 1_800_000_000 + $segundos);
+$soNovo = TempoDePreparo::calcular([['status' => 'novo', 'criado_em' => $t(0)]]);
+conferir('Só "Novo" aberto: nada fechado e o período aberto começa na criação', [$soNovo['acumulado_s'], $soNovo['desde'] !== null], [0, true]);
+conferir('Novo (10 min) e depois Em preparo aberto: soma o período fechado e deixa o aberto', TempoDePreparo::calcular([['status' => 'novo', 'criado_em' => $t(0)], ['status' => 'em_preparo', 'criado_em' => $t(600)]])['acumulado_s'], 600);
+conferir('Mudar de Novo para Em preparo não zera o relógio: 10 min + 15 min = 25', 600 + 900, 1500);
+$historico = [['status' => 'novo', 'criado_em' => $t(0)], ['status' => 'em_preparo', 'criado_em' => $t(600)], ['status' => 'pronto', 'criado_em' => $t(1800)], ['status' => 'em_preparo', 'criado_em' => $t(2400)]];
+conferir('Voltou de Pronto: soma os dois períodos de preparo e não conta o tempo em Pronto (10 + 20 min)', TempoDePreparo::calcular($historico)['acumulado_s'], 1800);
+conferir('Pedido pronto não tem período aberto (o relógio para)', TempoDePreparo::calcular([['status' => 'novo', 'criado_em' => $t(0)], ['status' => 'pronto', 'criado_em' => $t(900)]])['desde'], null);
+foreach ([[0, 'neutro'], [19 * 60, 'neutro'], [19 * 60 + 59, 'neutro'], [20 * 60, 'atencao'], [29 * 60 + 59, 'atencao'], [30 * 60, 'atrasado'], [90 * 60, 'atrasado']] as [$segundos, $esperado]) {
+    conferir(sprintf('%d min %02d s → %s', intdiv($segundos, 60), $segundos % 60, $esperado), TempoDePreparo::faixa($segundos), $esperado);
+}
+$doBanco = $repo->porId($carlos['pedido_id']);
+conferir('O pedido vindo do banco traz o tempo de preparo (período aberto desde a criação)', [$doBanco['producao_acumulado_s'], $doBanco['producao_desde'] !== null], [0, true]);
+
+echo "\nFECHAMENTO DO DIA\n";
+$antes = $repo->fechamentoDoDia();
+$retirada = $pedidos->criar($base)['id'];
+$desistiu = $pedidos->criar($base)['id'];
+$pedidos->mudarStatus($retirada, 'concluido', null, $atendente);
+$pedidos->mudarStatus($desistiu, 'cancelado', 'Cliente desistiu', $atendente);
+$depois = $repo->fechamentoDoDia();
+conferir('Concluir um pedido do cardápio soma ao faturamento (2 × 16,90) e cancelar não soma', [$depois['concluidos'] - $antes['concluidos'], $depois['cancelados'] - $antes['cancelados'], $depois['faturamento_centavos'] - $antes['faturamento_centavos']], [1, 1, 3380]);
+conferir('Os pedidos do dia são a soma dos três grupos', $depois['pedidos'], $depois['concluidos'] + $depois['cancelados'] + $depois['em_andamento']);
+
+$caio = $salao->abrir(['cliente' => ['nome' => 'Caio'], 'modalidade' => 'viagem', 'itens' => $doisTiramisus], $atendente);
+$pedidos->mudarStatus($caio['pedido_id'], 'concluido', null, $atendente);
+$semFechar = $repo->fechamentoDoDia();
+conferir('Pedido servido de uma conta aberta ainda não é dinheiro recebido', $semFechar['faturamento_centavos'] - $depois['faturamento_centavos'], 0);
+$salao->fechar($caio['id'], ['pagamento' => 'cartao', 'total_esperado_centavos' => 3380], $atendente);
+$fechado = $repo->fechamentoDoDia();
+conferir('Ao fechar a conta, o valor cobrado entra uma vez só no faturamento', $fechado['faturamento_centavos'] - $semFechar['faturamento_centavos'], 3380);
+conferir('O quadro de Pedidos só recebe os pedidos abertos (encerrados saem)', count(array_filter($repo->paraPainel(null), static fn (array $p): bool => in_array($p['status'], ['concluido', 'cancelado'], true))), 0);
+
+echo "\nSTATUS\n";
 $idPedido = $criado['id'];
 conferir('Retirada não aceita "saiu para entrega"', codigoDoErro(fn () => $pedidos->mudarStatus($idPedido, 'saiu_entrega', null, $admin)), '422 status_invalido');
-conferir('Cozinha leva até "pronto"', $pedidos->mudarStatus($idPedido, 'pronto', null, $cozinha)['status'], 'pronto');
-conferir('Cozinha não conclui', codigoDoErro(fn () => $pedidos->mudarStatus($idPedido, 'concluido', null, $cozinha)), '403 sem_permissao');
+conferir('Atendente move o pedido até "pronto"', $pedidos->mudarStatus($idPedido, 'pronto', null, $atendente)['status'], 'pronto');
 conferir('Cancelar exige motivo', codigoDoErro(fn () => $pedidos->mudarStatus($idPedido, 'cancelado', '  ', $admin)), '422 validacao');
 conferir('Cancelar com motivo funciona', $pedidos->mudarStatus($idPedido, 'cancelado', 'Cliente desistiu', $admin)['status'], 'cancelado');
 conferir('Pedido encerrado não muda mais', codigoDoErro(fn () => $pedidos->mudarStatus($idPedido, 'novo', null, $admin)), '409 pedido_encerrado');
@@ -130,6 +294,38 @@ $outro = $pedidos->criar($base)['id'];
 conferir('Primeira estação fica com a impressão', $repo->reivindicarImpressao($outro, 'estacao-a'), true);
 conferir('Segunda estação não imprime o mesmo pedido', $repo->reivindicarImpressao($outro, 'estacao-b'), false);
 conferir('Fica registrado quem imprimiu', $repo->porId($outro)['impresso_por'], 'estacao-a');
+
+echo "\nPERFIS E TELAS\n";
+conferir('Só existem os perfis proprietário (admin) e atendente', Sessao::PERFIS, ['admin', 'atendente']);
+conferir('Atendente entra direto no quadro do Salão; o proprietário, no quadro de pedidos', [PainelController::telaInicial('atendente'), PainelController::telaInicial('admin')], ['/painel/salao', '/painel/pedidos']);
+conferir('Menu da atendente: salão, pedidos e cardápio (nessa ordem)', array_keys(PainelController::menuDo('atendente')), ['salao', 'pedidos', 'cardapio']);
+conferir('Menu do proprietário: tudo, com o histórico do salão', array_keys(PainelController::menuDo('admin')), ['pedidos', 'salao', 'historico', 'cardapio', 'configuracoes', 'whatsapp']);
+conferir('"Produtos do atendimento" é uma tela de apoio: fora do menu, mas a atendente a abre', [isset(PainelController::menuDo('atendente')['atendimento']), PainelController::TELAS['atendimento']['perfis']], [false, ['admin', 'atendente']]);
+conferir('O módulo Cozinha não existe mais', isset(PainelController::TELAS['cozinha']), false);
+conferir('Histórico, Configurações e WhatsApp são só do proprietário', [PainelController::TELAS['historico']['perfis'], PainelController::TELAS['configuracoes']['perfis'], PainelController::TELAS['whatsapp']['perfis']], [['admin'], ['admin'], ['admin']]);
+
+echo "\nACOMPANHAMENTO NA HOME (cookie)\n";
+$acompanhamento = new AcompanhamentoDoCliente();
+$req = new Requisicao();
+$_COOKIE[AcompanhamentoDoCliente::COOKIE] = '';
+$codigos = [];
+foreach ([$criado['id'], $outro, $comCoordenadas['id'], $foraDoPlaneta['id']] as $numero) {
+    $codigo = $repo->porId($numero)['codigo'];
+    $codigos[] = $codigo;
+    $acompanhamento->registrar($req, $codigo);
+}
+conferir('Guarda no máximo 3 pedidos (os mais novos)', $acompanhamento->codigos($req), [$codigos[3], $codigos[2], $codigos[1]]);
+$_COOKIE[AcompanhamentoDoCliente::COOKIE] = "lixo,../../etc,{$codigos[3]},{$codigos[3]},ZZZZZZZZZZZZZZZZ";
+conferir('Ignora texto que não é um código e repetições', $acompanhamento->codigos($req), [$codigos[3]]);
+$acompanhamento->remover($req, $codigos[3]);
+conferir('Dispensar tira o pedido do cookie', $acompanhamento->codigos($req), []);
+$_COOKIE[AcompanhamentoDoCliente::COOKIE] = $codigos[3] . ',0123456789abcdef';
+$paraHome = $acompanhamento->paraHome($req);
+conferir('Pedido que não existe mais sai da Home e do cookie', [count($paraHome), $acompanhamento->codigos($req)], [1, [$codigos[3]]]);
+conferir('A Home recebe o pedido no formato público, sem itens, telefone nem endereço', [isset($paraHome[0]['itens']), isset($paraHome[0]['cliente_telefone']), $paraHome[0]['status'], $paraHome[0]['primeiro_nome']], [false, false, 'novo', 'Teste']);
+$repo->mudarStatus($foraDoPlaneta['id'], 'novo', 'concluido', null, null);
+App\Core\Banco::conexao()->prepare('UPDATE pedidos SET status_atualizado_em = ? WHERE id = ?')->execute([gmdate('Y-m-d H:i:s', time() - 4 * 3600), $foraDoPlaneta['id']]);
+conferir('Pedido encerrado há mais de 3 h sai da Home', count($acompanhamento->paraHome($req)), 0);
 
 echo "\nTOKEN DO WHATSAPP\n";
 $tokens = new TokenWhatsApp();
@@ -158,6 +354,75 @@ conferir('Terça 12:00', $loja->estado($em('2026-11-10 12:00')), ['aberta' => fa
 (new ConfigRepository())->salvar(['funcionamento' => 'fechada']);
 conferir('Fechada à mão vence o horário', $loja->estado($em('2026-11-11 12:00'))['aberta'], false);
 conferir('Loja fechada recusa pedido', codigoDoErro(fn () => $pedidos->criar($base)), '409 loja_fechada');
+
+echo "\nATUALIZAÇÃO DO BANCO (migrações)\n";
+$ultima = max(array_map(static fn (string $caminho): int => (int) basename($caminho), glob(dirname(__DIR__) . '/data/migracoes/*.php') ?: [0]));
+conferir('A versão do esquema é a da última migração', App\Core\Banco::VERSAO_DO_ESQUEMA, $ultima);
+
+// Um banco "antigo": o esquema da versão 1 (congelado em tests/fixtures) com dados de antes dos atendimentos.
+$pastaMigracao = sys_get_temp_dir() . '/familiamassas-migracao-' . bin2hex(random_bytes(4));
+mkdir($pastaMigracao);
+$arquivoAntigo = $pastaMigracao . '/antigo.sqlite';
+$antigo = new PDO('sqlite:' . $arquivoAntigo, null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC]);
+$antigo->exec('PRAGMA foreign_keys = ON');
+$antigo->exec((string) file_get_contents(__DIR__ . '/fixtures/schema-v1.sqlite.sql'));
+$antigo->exec('PRAGMA user_version = 1');
+$agoraAntigo = gmdate('Y-m-d H:i:s');
+$antigo->exec("INSERT INTO usuarios (nome, login, senha_hash, perfil, ativo, criado_em) VALUES ('Atendimento', 'atendente', 'x', 'atendente', 1, '{$agoraAntigo}')");
+foreach ([['Carne moída', 'Acompanhamentos', 500, 1], ['Frango desfiado', 'Acompanhamentos', 500, 2], ['Camarão', 'Acompanhamentos', 900, 3], ['Bacon', 'Acompanhamentos', 500, 4],
+          ['Brócolis', 'Vegetais', 300, 5], ['Milho', 'Vegetais', 300, 6], ['Muçarela', 'Queijos', 400, 7]] as [$nomeIngrediente, $grupoIngrediente, $precoIngrediente, $ordemIngrediente]) {
+    $antigo->exec("INSERT INTO ingredientes (nome, grupo, preco_extra_centavos, estado, ordem) VALUES ('{$nomeIngrediente}', '{$grupoIngrediente}', {$precoIngrediente}, 'disponivel', {$ordemIngrediente})");
+}
+$idDoFrango = (int) $antigo->query("SELECT id FROM ingredientes WHERE nome = 'Frango desfiado'")->fetchColumn();
+$pedidoAntigo = $antigo->prepare("INSERT INTO pedidos (codigo, cliente_nome, cliente_telefone, tipo, mesa, pagamento, subtotal_centavos, total_centavos, status, origem, criado_por, status_atualizado_em, atualizado_em, criado_em)
+                                  VALUES (?, ?, '', ?, ?, ?, 1690, 1690, ?, ?, 1, ?, ?, ?)");
+foreach ([['A1', 'Mesa 5', 'local', '5', 'pix', 'concluido', 'balcao'], ['A2', 'Carlos', 'viagem', null, 'caixa', 'novo', 'balcao'],
+          ['A3', 'Mesa 2', 'local', '2', 'caixa', 'cancelado', 'balcao'], ['A4', 'Cliente', 'retirada', null, 'pix', 'concluido', 'cardapio']] as [$codigoAntigo, $clienteAntigo, $tipoAntigo, $mesaAntiga, $pagamentoAntigo, $statusAntigo, $origemAntiga]) {
+    $pedidoAntigo->execute([$codigoAntigo, $clienteAntigo, $tipoAntigo, $mesaAntiga, $pagamentoAntigo, $statusAntigo, $origemAntiga, $agoraAntigo, $agoraAntigo, $agoraAntigo]);
+}
+
+$aplicadas = App\Core\Banco::migrar($antigo, $arquivoAntigo);
+conferir('Banco da versão 1 recebe a migração 002', $aplicadas, [2]);
+conferir('A versão do banco passa a ser a atual', (int) $antigo->query('PRAGMA user_version')->fetchColumn(), App\Core\Banco::VERSAO_DO_ESQUEMA);
+conferir('Uma cópia do banco antigo foi guardada antes de mexer', count(glob($pastaMigracao . '/backups/antigo-antes-da-v2-*.sqlite') ?: []), 1);
+conferir('Rodar de novo não faz nada', App\Core\Banco::migrar($antigo, $arquivoAntigo), []);
+
+$grupoDe = static fn (string $nome): string => (string) $antigo->query("SELECT grupo FROM ingredientes WHERE nome = '{$nome}'")->fetchColumn();
+conferir('Proteínas: carne moída, picadinho de frango, carne seca e camarão', array_map($grupoDe, ['Carne moída', 'Picadinho de frango', 'Carne seca', 'Camarão']), ['Proteínas', 'Proteínas', 'Proteínas', 'Proteínas']);
+conferir('Frango desfiado virou Picadinho de frango: é o mesmo ingrediente (mesmo id)', (int) $antigo->query("SELECT id FROM ingredientes WHERE nome = 'Picadinho de frango'")->fetchColumn(), $idDoFrango);
+conferir('Carne seca entrou com preço de exemplo', (int) $antigo->query("SELECT preco_extra_centavos FROM ingredientes WHERE nome = 'Carne seca'")->fetchColumn(), 700);
+conferir('Bacon e os vegetais ficam em Acompanhamentos; queijo continua em Queijos', array_map($grupoDe, ['Bacon', 'Brócolis', 'Milho', 'Muçarela']), ['Acompanhamentos', 'Acompanhamentos', 'Acompanhamentos', 'Queijos']);
+conferir('A ordem da lista é Proteínas, Acompanhamentos, Queijos', array_values(array_unique($antigo->query('SELECT grupo FROM ingredientes ORDER BY ordem')->fetchAll(PDO::FETCH_COLUMN))), ['Proteínas', 'Acompanhamentos', 'Queijos']);
+
+$contas = $antigo->query('SELECT cliente_nome, modalidade, mesa, status, pagamento, total_centavos FROM atendimentos ORDER BY id')->fetchAll();
+conferir('Cada pedido antigo do salão virou um atendimento', array_column($contas, 'cliente_nome'), ['Mesa 5', 'Carlos', 'Mesa 2']);
+conferir('Concluído → encerrado com pagamento e valor; em andamento → aberto; cancelado → encerrado sem valor', array_map(static fn (array $c): array => [$c['status'], $c['pagamento'], $c['total_centavos']], $contas), [['encerrado', 'pix', 1690], ['aberto', null, null], ['encerrado', null, 0]]);
+conferir('Modalidade e mesa vieram do pedido', array_map(static fn (array $c): array => [$c['modalidade'], $c['mesa']], $contas), [['mesa', '5'], ['viagem', null], ['mesa', '2']]);
+conferir('Todo pedido do salão ficou ligado a um atendimento; o do cardápio não', [
+    (int) $antigo->query("SELECT COUNT(*) FROM pedidos WHERE origem = 'balcao' AND atendimento_id IS NULL")->fetchColumn(),
+    (int) $antigo->query("SELECT COUNT(*) FROM pedidos WHERE origem <> 'balcao' AND atendimento_id IS NOT NULL")->fetchColumn(),
+], [0, 0]);
+conferir('Nenhuma ligação ficou quebrada', $antigo->query('PRAGMA foreign_key_check')->fetchAll(), []);
+
+$muitoAntigo = new PDO('sqlite::memory:', null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+$muitoAntigo->exec('CREATE TABLE pedidos (id INTEGER PRIMARY KEY)');
+try {
+    App\Core\Banco::migrar($muitoAntigo);
+    $recusou = false;
+} catch (RuntimeException) {
+    $recusou = true;
+}
+conferir('Banco anterior à numeração de versões e sem o esquema da rodada é recusado com aviso claro', $recusou, true);
+
+$antigo = null;
+$muitoAntigo = null;
+foreach (array_merge(glob($pastaMigracao . '/backups/*') ?: [], glob($pastaMigracao . '/*') ?: []) as $restante) {
+    if (is_file($restante)) {
+        @unlink($restante);
+    }
+}
+@rmdir($pastaMigracao . '/backups');
+@rmdir($pastaMigracao);
 
 echo "\n" . ($falhas === 0 ? "Todos os {$total} testes passaram." : "{$falhas} de {$total} testes falharam.") . "\n";
 exit($falhas === 0 ? 0 : 1);

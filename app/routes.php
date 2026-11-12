@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Controllers\AdminCardapioController;
+use App\Controllers\AdminAtendimentoController;
 use App\Controllers\AdminConfigController;
 use App\Controllers\AdminPedidoController;
 use App\Controllers\PainelController;
@@ -13,6 +14,7 @@ return static function (Roteador $r): void {
     $publico = new PublicoController();
     $painel = new PainelController();
     $pedidos = new AdminPedidoController();
+    $atendimentos = new AdminAtendimentoController();
     $config = new AdminConfigController();
     $cardapio = static fn (): AdminCardapioController => new AdminCardapioController();
 
@@ -25,6 +27,7 @@ return static function (Roteador $r): void {
     $r->get('/api/cardapio', $publico->apiCardapio(...));
     $r->post('/api/pedidos', $publico->apiCriarPedido(...));
     $r->get('/api/pedidos/{codigo}', $publico->apiPedido(...));
+    $r->post('/api/pedidos/{codigo}/dispensar', $publico->apiDispensar(...));
 
     // ---------- Páginas do painel ----------
     $r->get('/painel', $painel->entrada(...));
@@ -40,6 +43,15 @@ return static function (Roteador $r): void {
     $r->get('/api/admin/pedidos/{id}', $pedidos->detalhe(...));
     $r->patch('/api/admin/pedidos/{id}/status', $pedidos->mudarStatus(...));
     $r->post('/api/admin/pedidos/{id}/impressao', $pedidos->impressao(...));
+
+    // Salão: atendimentos (a conta de cada cliente), os pedidos de cada um e o fechamento da conta
+    $r->get('/api/admin/atendimentos', $atendimentos->listar(...));
+    $r->post('/api/admin/atendimentos', $atendimentos->abrir(...));
+    $r->get('/api/admin/atendimentos/{id}', $atendimentos->detalhe(...));
+    $r->post('/api/admin/atendimentos/{id}/pedidos', $atendimentos->adicionarPedido(...));
+    $r->post('/api/admin/atendimentos/{id}/fechar', $atendimentos->fechar(...));
+    $r->post('/api/admin/atendimentos/{id}/servir', $atendimentos->servir(...));
+    $r->get('/api/admin/historico', $atendimentos->historico(...));
 
     $r->get('/api/admin/cardapio', static fn ($req) => $cardapio()->listar($req));
     $r->post('/api/admin/upload', static fn ($req) => $cardapio()->upload($req));

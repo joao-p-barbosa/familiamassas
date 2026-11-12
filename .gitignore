@@ -18,3 +18,6 @@ public/uploads/*
 Thumbs.db
 desktop.ini
 .DS_Store
+
+# Cópias de segurança que o sistema faz antes de atualizar o banco
+data/backups/

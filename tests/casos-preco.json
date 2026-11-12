@@ -23,9 +23,9 @@
         "tamanhos": [
             {
                 "id": 1,
-                "nome": "Pequeno",
-                "sigla": "P",
-                "descricao": "300 g",
+                "nome": "Meio",
+                "sigla": "MEI",
+                "descricao": "Meia porção · serve 1 pessoa · 300 g",
                 "preco_centavos": 2490,
                 "inclusos": 3,
                 "estado": "disponivel",
@@ -33,23 +33,13 @@
             },
             {
                 "id": 2,
-                "nome": "Médio",
-                "sigla": "M",
-                "descricao": "400 g",
-                "preco_centavos": 3190,
-                "inclusos": 4,
-                "estado": "disponivel",
-                "ordem": 1
-            },
-            {
-                "id": 3,
-                "nome": "Grande",
-                "sigla": "G",
-                "descricao": "550 g",
+                "nome": "Inteiro",
+                "sigla": "INT",
+                "descricao": "Porção inteira · serve 2 pessoas · 550 g",
                 "preco_centavos": 3990,
                 "inclusos": 6,
                 "estado": "disponivel",
-                "ordem": 2
+                "ordem": 1
             }
         ],
         "massas": [
@@ -161,7 +151,7 @@
         "ingredientes": [
             {
                 "id": 1,
-                "nome": "Frango desfiado",
+                "nome": "Carne moída",
                 "grupo": "Proteínas",
                 "preco_extra_centavos": 500,
                 "estado": "disponivel",
@@ -169,7 +159,7 @@
             },
             {
                 "id": 2,
-                "nome": "Bacon",
+                "nome": "Picadinho de frango",
                 "grupo": "Proteínas",
                 "preco_extra_centavos": 500,
                 "estado": "disponivel",
@@ -177,127 +167,127 @@
             },
             {
                 "id": 3,
-                "nome": "Calabresa",
+                "nome": "Carne seca",
                 "grupo": "Proteínas",
-                "preco_extra_centavos": 400,
+                "preco_extra_centavos": 700,
                 "estado": "disponivel",
                 "ordem": 2
             },
             {
                 "id": 4,
-                "nome": "Presunto",
+                "nome": "Camarão",
                 "grupo": "Proteínas",
-                "preco_extra_centavos": 400,
+                "preco_extra_centavos": 900,
                 "estado": "disponivel",
                 "ordem": 3
             },
             {
                 "id": 5,
-                "nome": "Carne moída",
-                "grupo": "Proteínas",
+                "nome": "Bacon",
+                "grupo": "Acompanhamentos",
                 "preco_extra_centavos": 500,
                 "estado": "disponivel",
                 "ordem": 4
             },
             {
                 "id": 6,
-                "nome": "Camarão",
-                "grupo": "Proteínas",
-                "preco_extra_centavos": 900,
+                "nome": "Calabresa",
+                "grupo": "Acompanhamentos",
+                "preco_extra_centavos": 400,
                 "estado": "disponivel",
                 "ordem": 5
             },
             {
                 "id": 7,
-                "nome": "Brócolis",
-                "grupo": "Vegetais",
-                "preco_extra_centavos": 300,
+                "nome": "Presunto",
+                "grupo": "Acompanhamentos",
+                "preco_extra_centavos": 400,
                 "estado": "disponivel",
                 "ordem": 6
             },
             {
                 "id": 8,
-                "nome": "Champignon",
-                "grupo": "Vegetais",
-                "preco_extra_centavos": 400,
+                "nome": "Brócolis",
+                "grupo": "Acompanhamentos",
+                "preco_extra_centavos": 300,
                 "estado": "disponivel",
                 "ordem": 7
             },
             {
                 "id": 9,
-                "nome": "Milho",
-                "grupo": "Vegetais",
-                "preco_extra_centavos": 300,
+                "nome": "Champignon",
+                "grupo": "Acompanhamentos",
+                "preco_extra_centavos": 400,
                 "estado": "disponivel",
                 "ordem": 8
             },
             {
                 "id": 10,
-                "nome": "Ervilha",
-                "grupo": "Vegetais",
+                "nome": "Milho",
+                "grupo": "Acompanhamentos",
                 "preco_extra_centavos": 300,
                 "estado": "disponivel",
                 "ordem": 9
             },
             {
                 "id": 11,
-                "nome": "Tomate-cereja",
-                "grupo": "Vegetais",
+                "nome": "Ervilha",
+                "grupo": "Acompanhamentos",
                 "preco_extra_centavos": 300,
                 "estado": "disponivel",
                 "ordem": 10
             },
             {
                 "id": 12,
-                "nome": "Azeitona preta",
-                "grupo": "Vegetais",
+                "nome": "Tomate-cereja",
+                "grupo": "Acompanhamentos",
                 "preco_extra_centavos": 300,
                 "estado": "disponivel",
                 "ordem": 11
             },
             {
                 "id": 13,
-                "nome": "Palmito",
-                "grupo": "Vegetais",
-                "preco_extra_centavos": 400,
-                "estado": "esgotado",
+                "nome": "Azeitona preta",
+                "grupo": "Acompanhamentos",
+                "preco_extra_centavos": 300,
+                "estado": "disponivel",
                 "ordem": 12
             },
             {
                 "id": 14,
-                "nome": "Cebola roxa",
-                "grupo": "Vegetais",
-                "preco_extra_centavos": 300,
-                "estado": "disponivel",
+                "nome": "Palmito",
+                "grupo": "Acompanhamentos",
+                "preco_extra_centavos": 400,
+                "estado": "esgotado",
                 "ordem": 13
             },
             {
                 "id": 15,
-                "nome": "Alho frito",
-                "grupo": "Vegetais",
+                "nome": "Cebola roxa",
+                "grupo": "Acompanhamentos",
                 "preco_extra_centavos": 300,
                 "estado": "disponivel",
                 "ordem": 14
             },
             {
                 "id": 16,
-                "nome": "Manjericão",
-                "grupo": "Vegetais",
+                "nome": "Alho frito",
+                "grupo": "Acompanhamentos",
                 "preco_extra_centavos": 300,
                 "estado": "disponivel",
                 "ordem": 15
             },
             {
                 "id": 17,
-                "nome": "Muçarela",
-                "grupo": "Queijos",
-                "preco_extra_centavos": 400,
+                "nome": "Manjericão",
+                "grupo": "Acompanhamentos",
+                "preco_extra_centavos": 300,
                 "estado": "disponivel",
                 "ordem": 16
             },
             {
                 "id": 18,
-                "nome": "Requeijão cremoso",
+                "nome": "Muçarela",
                 "grupo": "Queijos",
                 "preco_extra_centavos": 400,
                 "estado": "disponivel",
@@ -305,7 +295,7 @@
             },
             {
                 "id": 19,
-                "nome": "Parmesão",
+                "nome": "Requeijão cremoso",
                 "grupo": "Queijos",
                 "preco_extra_centavos": 400,
                 "estado": "disponivel",
@@ -313,11 +303,19 @@
             },
             {
                 "id": 20,
+                "nome": "Parmesão",
+                "grupo": "Queijos",
+                "preco_extra_centavos": 400,
+                "estado": "disponivel",
+                "ordem": 19
+            },
+            {
+                "id": 21,
                 "nome": "Gorgonzola",
                 "grupo": "Queijos",
                 "preco_extra_centavos": 500,
                 "estado": "disponivel",
-                "ordem": 19
+                "ordem": 20
             }
         ],
         "itens": [
@@ -334,8 +332,8 @@
                 "estado": "disponivel",
                 "ordem": 0,
                 "ingrediente_ids": [
-                    2,
-                    19
+                    5,
+                    20
                 ]
             },
             {
@@ -365,7 +363,7 @@
                 "estado": "disponivel",
                 "ordem": 1,
                 "ingrediente_ids": [
-                    17
+                    18
                 ]
             },
             {
@@ -395,8 +393,8 @@
                 "estado": "disponivel",
                 "ordem": 2,
                 "ingrediente_ids": [
-                    11,
-                    19
+                    12,
+                    20
                 ]
             },
             {
@@ -426,7 +424,7 @@
                 "estado": "disponivel",
                 "ordem": 3,
                 "ingrediente_ids": [
-                    15
+                    16
                 ]
             },
             {
@@ -448,7 +446,7 @@
                 "categoria_id": 1,
                 "tipo": "prato_casa",
                 "nome": "Fusilli rosé com frango",
-                "descricao": "Fusilli, rosé, frango desfiado, milho e requeijão",
+                "descricao": "Fusilli, rosé, picadinho de frango, milho e requeijão",
                 "preco_centavos": 0,
                 "imagem": null,
                 "massa_id": 3,
@@ -456,9 +454,9 @@
                 "estado": "disponivel",
                 "ordem": 4,
                 "ingrediente_ids": [
-                    1,
-                    9,
-                    18
+                    2,
+                    10,
+                    19
                 ]
             },
             {
@@ -521,7 +519,7 @@
     },
     "casos": [
         {
-            "descricao": "Pequeno sem ingredientes custa só a base",
+            "descricao": "Meio sem ingredientes custa só a base",
             "escolha": {
                 "tamanho_id": 1,
                 "massa_id": 1,
@@ -532,31 +530,31 @@
             "extras": []
         },
         {
-            "descricao": "Pequeno com 3 ingredientes (o limite): nada extra",
+            "descricao": "Meio com 3 ingredientes (o limite): nada extra",
             "escolha": {
                 "tamanho_id": 1,
                 "massa_id": 1,
                 "molho_id": 1,
                 "ingrediente_ids": [
-                    1,
                     2,
-                    7
+                    5,
+                    8
                 ]
             },
             "preco": 2490,
             "extras": []
         },
         {
-            "descricao": "Pequeno com 4: o mais barato vira extra",
+            "descricao": "Meio com 4: o mais barato vira extra",
             "escolha": {
                 "tamanho_id": 1,
                 "massa_id": 1,
                 "molho_id": 1,
                 "ingrediente_ids": [
-                    1,
                     2,
-                    7,
-                    9
+                    5,
+                    8,
+                    10
                 ]
             },
             "preco": 2790,
@@ -565,24 +563,26 @@
             ]
         },
         {
-            "descricao": "Médio, bolonhesa (+3,00), 6 ingredientes: 2 extras",
+            "descricao": "Inteiro, bolonhesa (+3,00), 8 ingredientes: 2 extras",
             "escolha": {
                 "tamanho_id": 2,
                 "massa_id": 1,
                 "molho_id": 2,
                 "ingrediente_ids": [
-                    1,
                     2,
-                    7,
-                    9,
-                    17,
-                    6
+                    5,
+                    4,
+                    18,
+                    8,
+                    10,
+                    11,
+                    9
                 ]
             },
-            "preco": 4090,
+            "preco": 4890,
             "extras": [
-                "Brócolis",
-                "Milho"
+                "Milho",
+                "Ervilha"
             ]
         },
         {
@@ -593,32 +593,34 @@
                 "molho_id": 2,
                 "ingrediente_ids": [
                     9,
-                    6,
-                    7,
-                    17,
-                    2,
-                    1
+                    11,
+                    10,
+                    8,
+                    18,
+                    4,
+                    5,
+                    2
                 ]
             },
-            "preco": 4090,
+            "preco": 4890,
             "extras": [
-                "Brócolis",
-                "Milho"
+                "Milho",
+                "Ervilha"
             ]
         },
         {
-            "descricao": "Grande, nhoque (+4,00), quatro queijos (+5,00), 6 ingredientes: tudo incluso",
+            "descricao": "Inteiro, nhoque (+4,00), quatro queijos (+5,00), 6 ingredientes: tudo incluso",
             "escolha": {
-                "tamanho_id": 3,
+                "tamanho_id": 2,
                 "massa_id": 5,
                 "molho_id": 6,
                 "ingrediente_ids": [
-                    1,
                     2,
-                    7,
-                    9,
-                    17,
-                    6
+                    5,
+                    8,
+                    10,
+                    18,
+                    4
                 ]
             },
             "preco": 4890,
@@ -631,10 +633,10 @@
                 "massa_id": 2,
                 "molho_id": 1,
                 "ingrediente_ids": [
-                    6,
-                    9,
+                    4,
                     10,
-                    7
+                    11,
+                    8
                 ]
             },
             "preco": 2790,
@@ -649,10 +651,10 @@
                 "massa_id": 1,
                 "molho_id": 1,
                 "ingrediente_ids": [
-                    2,
-                    2,
-                    2,
-                    2
+                    5,
+                    5,
+                    5,
+                    5
                 ]
             },
             "preco": 2490,

@@ -1,4 +1,4 @@
-// Barra de ferramentas do Kanban e do modo cozinha: situação da conexão, som e estação de impressão.
+// Barra de ferramentas do Kanban: situação da conexão, som e estação de impressão.
 import { $ } from '../shared/dom.js';
 import { icone } from '../shared/icones.js';
 import { hora } from '../shared/formato.js';

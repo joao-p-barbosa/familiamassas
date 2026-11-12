@@ -6,14 +6,19 @@ import { dadosDaPagina, guardado } from '../shared/dom.js';
 import { calcularMontagem } from '../shared/preco.js';
 import { resumoMontagem } from '../shared/pedido.js';
 
-const CHAVE_CARRINHO = 'fm_carrinho_v1';
-
 const inicial = dadosDaPagina('dados-cardapio') ?? {};
+// Modo "salao": a atendente monta os produtos de um atendimento (painel). Usa o mesmo preço e o mesmo montador, mas
+// cada atendimento tem o seu carrinho (o de um atendimento novo e o de cada conta aberta; também não se mistura com
+// o de um cliente no mesmo aparelho) e não depende do horário da loja.
+const chaveDoCarrinho = (modo, contexto) => (modo === 'salao' ? `fm_carrinho_salao_${contexto || 'novo'}_v1` : 'fm_carrinho_v1');
+let CHAVE_CARRINHO = chaveDoCarrinho(inicial.modo === 'salao' ? 'salao' : 'cliente', inicial.contexto);
+const lerCarrinho = () => (Array.isArray(guardado.ler(CHAVE_CARRINHO)) ? guardado.ler(CHAVE_CARRINHO) : []);
 
 export const estado = {
+  modo: inicial.modo === 'salao' ? 'salao' : 'cliente',
   loja: inicial.loja ?? null,
   cardapio: inicial.loja ? inicial : null,
-  carrinho: Array.isArray(guardado.ler(CHAVE_CARRINHO)) ? guardado.ler(CHAVE_CARRINHO) : [],
+  carrinho: lerCarrinho(),
   whatsapp: lerSessaoWhatsApp(),
 };
 
@@ -39,6 +44,17 @@ const assinantes = new Set();
 export const assinar = (fn) => assinantes.add(fn);
 /** oQue: 'cardapio' (preços, itens, loja) ou 'carrinho'. Quem assina decide o que redesenhar. */
 export const notificar = (oQue) => assinantes.forEach((fn) => fn(oQue));
+
+/**
+ * Troca o carrinho em uso (a tela de produtos do atendimento muda de conta sem recarregar a página).
+ * @param {'cliente'|'salao'} modo  @param {string} contexto  no salão: "novo" ou o número do atendimento
+ */
+export function usarCarrinho(modo, contexto = '') {
+  estado.modo = modo;
+  CHAVE_CARRINHO = chaveDoCarrinho(modo, contexto);
+  estado.carrinho = lerCarrinho();
+  notificar('carrinho');
+}
 
 // ---------- Cardápio ----------
 export async function recarregarCardapio() {

@@ -58,6 +58,12 @@ final class Requisicao
         return $this->parametros[$nome] ?? '';
     }
 
+    public function cookie(string $nome): string
+    {
+        $valor = $_COOKIE[$nome] ?? '';
+        return is_string($valor) ? $valor : '';
+    }
+
     public function ip(): string
     {
         return (string) ($_SERVER['REMOTE_ADDR'] ?? '0.0.0.0');

@@ -5,25 +5,29 @@ import { icone } from '../shared/icones.js';
 import { reais, telefone as formatarTelefone, centavosDeTexto, textoDeCentavos, plural } from '../shared/formato.js';
 import { api } from '../shared/api.js';
 import { avisar } from '../shared/avisos.js';
-import { TIPOS, PAGAMENTOS, linhasMontagem } from '../shared/pedido.js';
+import { TIPOS, PAGAMENTOS, PAGAMENTOS_DO_CLIENTE, linhasMontagem, linkComoChegar } from '../shared/pedido.js';
 import { estado, totaisDoCarrinho, esvaziarCarrinho, recarregarCardapio } from './estado.js';
+import { escolherNoMapa } from './mapa.js';
 
 const CHAVE_CLIENTE = 'fm_cliente_v1';
 const visaoCardapio = $('#visao-cardapio');
 const visaoCheckout = $('#visao-checkout');
 const barra = $('#barra-carrinho');
 
-// Dados do formulário. Ficam guardados no aparelho para o próximo pedido já vir preenchido.
+// Dados do formulário. Ficam guardados no aparelho para o próximo pedido já vir preenchido
+// (menos o que é só deste pedido: observação e o ponto marcado no mapa).
 let dados = {
-  tipo: null, nome: '', telefone: '', rua: '', numero: '', bairro: '', complemento: '', referencia: '', mesa: '',
-  pagamento: null, troco: '', observacoes: '',
+  tipo: null, nome: '', telefone: '', rua: '', numero: '', bairro: '', complemento: '', referencia: '',
+  pagamento: null, troco: '', observacoes: '', lat: null, lng: null,
   ...(guardado.ler(CHAVE_CLIENTE) ?? {}),
 };
 dados.observacoes = '';
-dados.mesa = '';
+dados.lat = null;
+dados.lng = null;
 let enviando = false;
 
-const ROTULO_TIPO = { entrega: 'Entrega', retirada: 'Retirar na loja', local: 'Comer aqui' };
+// O cliente pede entrega ou retirada. Mesa e pra viagem são feitos pela atendente, no salão.
+const ROTULO_TIPO = { entrega: 'Entrega', retirada: 'Retirar na loja' };
 
 export function abrirCheckout() {
   if (!estado.loja.tipos_pedido.includes(dados.tipo)) dados.tipo = estado.loja.tipos_pedido[0] ?? null;
@@ -32,7 +36,10 @@ export function abrirCheckout() {
   mostrar('checkout');
 }
 
+let visaoAtual = 'cardapio';
+
 function mostrar(visao) {
+  visaoAtual = visao;
   const noCardapio = visao === 'cardapio';
   visaoCardapio.hidden = !noCardapio;
   visaoCheckout.hidden = noCardapio;
@@ -47,7 +54,12 @@ function mostrar(visao) {
   $('h1', visaoCheckout)?.focus({ preventScroll: true });
 }
 
-window.addEventListener('popstate', () => mostrar(history.state?.visao ?? 'cardapio'));
+// Só redesenha quando a tela realmente muda. Fechar uma folha (o mapa, por exemplo) também volta no histórico,
+// mas a tela continua a mesma: redesenhar tiraria o foco e levaria a página para o topo.
+window.addEventListener('popstate', () => {
+  const destino = history.state?.visao ?? 'cardapio';
+  if (destino !== visaoAtual) mostrar(destino);
+});
 
 // ---------- Passo 1: formulário ----------
 const campo = (nome, rotulo, { tipo = 'text', opcional = false, ajuda = '', extra = '', largura = '' } = {}) => `
@@ -98,12 +110,12 @@ function formularioHtml() {
           <p class="bloco__nota">Você paga direto para a loja, ${dados.tipo === 'entrega' ? 'na entrega' : 'ao receber o pedido'}.</p>
           <fieldset class="grupo-opcoes grupo-opcoes--tres">
             <legend class="so-leitor">Forma de pagamento</legend>
-            ${Object.entries(PAGAMENTOS).map(([forma, rotulo]) => `
+            ${PAGAMENTOS_DO_CLIENTE.map((forma) => `
               <label class="opcao opcao--figura">
                 <input class="opcao__entrada" type="radio" name="pagamento" value="${forma}" ${dados.pagamento === forma ? 'checked' : ''}>
                 <span class="opcao__marca">${icone('check', 14)}</span>
                 <span class="opcao__figura">${icone(forma, 22)}</span>
-                <span class="opcao__corpo"><span class="opcao__titulo">${rotulo}</span></span>
+                <span class="opcao__corpo"><span class="opcao__titulo">${PAGAMENTOS[forma]}</span></span>
               </label>`).join('')}
           </fieldset>
           <span class="campo__erro" id="erro-pagamento" hidden></span>
@@ -112,7 +124,7 @@ function formularioHtml() {
           </div>
         </section>
 
-        <section class="bloco">
+        <section class="bloco" id="bloco-observacoes" ${dados.tipo === 'entrega' ? '' : 'hidden'}>
           <h2 class="bloco__titulo">Algo mais que devemos saber?</h2>
           <label class="campo">
             <span class="so-leitor">Observações do pedido</span>
@@ -128,8 +140,17 @@ function formularioHtml() {
 function camposDoTipo() {
   const loja = estado.loja;
   if (dados.tipo === 'entrega') {
+    const marcado = dados.lat !== null;
     return `
       <p class="bloco__nota">${icone('moto', 16)}<span>Entregamos em: ${esc(loja.area_entrega || 'consulte a loja')}. Taxa de ${reais(loja.taxa_entrega_centavos)}, cerca de ${loja.tempo_entrega_min} min.</span></p>
+      <div class="local-mapa" ${marcado ? 'data-marcado' : ''}>
+        <span class="local-mapa__icone">${icone(marcado ? 'check' : 'pin', 22)}</span>
+        <div class="local-mapa__texto">
+          <p class="local-mapa__titulo">${marcado ? 'Local marcado no mapa' : 'Marque o local no mapa'}</p>
+          <p class="local-mapa__apoio">${marcado ? 'Confira o endereço abaixo e complete o que faltar.' : 'Mais rápido: usamos a sua localização e preenchemos o endereço.'}</p>
+        </div>
+        <button type="button" class="botao botao--secundario botao--p" data-acao="marcar-mapa">${marcado ? 'Alterar no mapa' : 'Marcar no mapa'}</button>
+      </div>
       <div class="bloco__grade">
         ${campo('rua', 'Rua', { extra: 'autocomplete="address-line1" maxlength="120"', largura: 'campo--larga' })}
         ${campo('numero', 'Número', { extra: 'maxlength="20" inputmode="numeric"' })}
@@ -138,13 +159,19 @@ function camposDoTipo() {
         ${campo('referencia', 'Ponto de referência', { opcional: true, extra: 'maxlength="120"', largura: 'campo--larga' })}
       </div>`;
   }
-  if (dados.tipo === 'local') {
-    return `<div class="bloco__grade">${campo('mesa', 'Número da mesa', { extra: 'maxlength="10" inputmode="numeric"', ajuda: 'Está no suporte em cima da mesa.' })}</div>`;
-  }
   if (dados.tipo === 'retirada') {
-    return `<p class="bloco__nota">${icone('loja', 16)}<span>Retire em: ${esc(loja.endereco || 'endereço da loja')}. Fica pronto em cerca de ${loja.tempo_retirada_min} min.</span></p>`;
+    return `
+      <p class="bloco__nota">${icone('loja', 16)}<span>Retire em: ${esc(loja.endereco || 'endereço da loja')}. Fica pronto em cerca de ${loja.tempo_retirada_min} min.</span></p>
+      ${comoChegarHtml()}`;
   }
   return '';
+}
+
+/** Abre o Google Maps (ou o app de mapas do aparelho) com o restaurante como destino. */
+function comoChegarHtml() {
+  const endereco = estado.loja.endereco;
+  if (!endereco) return '';
+  return `<a class="botao botao--secundario como-chegar" href="${esc(linkComoChegar(endereco))}" target="_blank" rel="noopener">${icone('navegar', 18)}Como chegar ao restaurante<span class="so-leitor"> (abre o mapa em outra aba)</span></a>`;
 }
 
 function lerFormulario() {
@@ -158,7 +185,7 @@ function lerFormulario() {
       dados[el.name] = el.value.trim();
     }
   }
-  const { observacoes, mesa, ...paraGuardar } = dados;
+  const { observacoes, lat, lng, ...paraGuardar } = dados;
   guardado.gravar(CHAVE_CLIENTE, paraGuardar);
 }
 
@@ -173,7 +200,6 @@ function validar() {
     if (!dados.numero) erros.numero = 'Informe o número (ou "s/n").';
     if (!dados.bairro) erros.bairro = 'Informe o bairro.';
   }
-  if (dados.tipo === 'local' && !dados.mesa) erros.mesa = 'Informe o número da mesa.';
   if (!dados.pagamento) erros.pagamento = 'Escolha a forma de pagamento.';
   if (dados.pagamento === 'dinheiro' && dados.troco) {
     const troco = centavosDeTexto(dados.troco);
@@ -206,9 +232,8 @@ function revisaoHtml() {
   const loja = estado.loja;
   const troco = dados.pagamento === 'dinheiro' && dados.troco ? centavosDeTexto(dados.troco) : null;
   const onde = {
-    entrega: `${esc(dados.rua)}, ${esc(dados.numero)}${dados.complemento ? ` · ${esc(dados.complemento)}` : ''}<br>${esc(dados.bairro)}${dados.referencia ? `<br>Ref.: ${esc(dados.referencia)}` : ''}`,
+    entrega: `${esc(dados.rua)}, ${esc(dados.numero)}${dados.complemento ? ` · ${esc(dados.complemento)}` : ''}<br>${esc(dados.bairro)}${dados.referencia ? `<br>Ref.: ${esc(dados.referencia)}` : ''}${dados.lat !== null ? '<br><span class="resumo-dados__leve">Local marcado no mapa</span>' : ''}`,
     retirada: esc(loja.endereco || 'Na loja'),
-    local: `Mesa ${esc(dados.mesa)}`,
   }[dados.tipo];
   const minutos = dados.tipo === 'entrega' ? loja.tempo_entrega_min : loja.tempo_retirada_min;
 
@@ -228,7 +253,7 @@ function revisaoHtml() {
               </div>
               ${l.montagem ? `<ul class="montagem">${linhasMontagem({
                 tamanho: l.montagem.tamanho, massa: l.montagem.massa, molho: l.montagem.molho,
-                inclusos: l.montagem.inclusos, extras: l.montagem.extras, queijo_ralado: l.queijo_ralado,
+                inclusos: l.montagem.inclusos, extras: l.montagem.extras,
               })}</ul>` : ''}
               ${l.observacoes ? `<p class="revisao-itens__obs">Obs.: ${esc(l.observacoes)}</p>` : ''}
             </li>`).join('')}
@@ -240,7 +265,7 @@ function revisaoHtml() {
           <div><dt>${ROTULO_TIPO[dados.tipo]}</dt><dd>${onde}<br><span class="resumo-dados__leve">Cerca de ${minutos} min</span></dd></div>
           <div><dt>Quem pede</dt><dd>${esc(dados.nome)}<br>${esc(formatarTelefone(dados.telefone))}</dd></div>
           <div><dt>Pagamento</dt><dd>${PAGAMENTOS[dados.pagamento]}${troco ? `, troco para ${reais(troco)}` : ''}</dd></div>
-          ${dados.observacoes ? `<div><dt>Observações</dt><dd>${esc(dados.observacoes)}</dd></div>` : ''}
+          ${dados.tipo === 'entrega' && dados.observacoes ? `<div><dt>Observações</dt><dd>${esc(dados.observacoes)}</dd></div>` : ''}
         </dl>
       </section>
 
@@ -269,16 +294,15 @@ async function confirmar(botao) {
       corpo: {
         tipo: dados.tipo,
         cliente: { nome: dados.nome, telefone: dados.telefone },
-        endereco: { rua: dados.rua, numero: dados.numero, bairro: dados.bairro, complemento: dados.complemento, referencia: dados.referencia },
-        mesa: dados.mesa,
+        endereco: { rua: dados.rua, numero: dados.numero, bairro: dados.bairro, complemento: dados.complemento, referencia: dados.referencia, lat: dados.lat, lng: dados.lng },
         pagamento: { forma: dados.pagamento, troco_para_centavos: troco },
-        observacoes: dados.observacoes,
+        observacoes: dados.tipo === 'entrega' ? dados.observacoes : '',
         itens: estado.carrinho.map(({ uid, ...linha }) => linha),
         total_esperado_centavos: t.total,
         t: estado.whatsapp?.t ?? '',
       },
     });
-    guardado.gravar('fm_ultimo_pedido', { codigo: criado.codigo, numero: criado.numero });
+    // O servidor guarda o pedido neste navegador (cookie): a Home mostra o acompanhamento depois.
     esvaziarCarrinho();
     location.assign(`/pedido/${criado.codigo}`);
   } catch (erro) {
@@ -331,7 +355,27 @@ visaoCheckout.addEventListener('submit', (e) => {
 delegar(visaoCheckout, 'change', 'input[name="tipo"]', () => {
   lerFormulario();
   $('#campos-tipo').innerHTML = camposDoTipo();
+  $('#bloco-observacoes').hidden = dados.tipo !== 'entrega';   // a observação do pedido só existe na entrega
   $('#checkout-total').textContent = reais(totaisDoCarrinho(dados.tipo).total);
+});
+
+// Mapa: a pessoa marca o local de entrega e o endereço vem preenchido. Tudo continua editável.
+delegar(visaoCheckout, 'click', '[data-acao="marcar-mapa"]', async () => {
+  lerFormulario();
+  const local = await escolherNoMapa({ inicial: dados.lat !== null ? { lat: dados.lat, lng: dados.lng } : null, enderecoDaLoja: estado.loja.endereco });
+  if (!local) return; // preferiu digitar: nada muda
+  dados.lat = local.lat;
+  dados.lng = local.lng;
+  // Se o mapa não achou rua nem bairro, o que a pessoa já tinha digitado continua valendo.
+  if (local.rua || local.bairro) {
+    dados.rua = local.rua;
+    dados.numero = local.numero;
+    dados.bairro = local.bairro;
+  }
+  $('#campos-tipo').innerHTML = camposDoTipo();
+  // Leva a pessoa ao primeiro campo que ainda falta (quase sempre o número).
+  const faltando = ['rua', 'numero', 'bairro'].find((nome) => !dados[nome]);
+  $(`[name="${faltando ?? 'complemento'}"]`, visaoCheckout)?.focus();
 });
 delegar(visaoCheckout, 'change', 'input[name="pagamento"]', (e, entrada) => {
   $('#campo-troco').hidden = entrada.value !== 'dinheiro';

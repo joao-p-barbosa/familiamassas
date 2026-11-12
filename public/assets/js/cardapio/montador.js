@@ -1,7 +1,7 @@
 // "Monte seu prato": tamanho → massa → molho → ingredientes → finalização → revisão.
 // As escolhas ficam em `m.escolha` e nunca se perdem ao ir e voltar entre os passos.
 import { $, $$, esc, delegar } from '../shared/dom.js';
-import { icone, iconeMassa } from '../shared/icones.js';
+import { icone, iconeMassa, iconePorcao } from '../shared/icones.js';
 import { reais, acrescimo, plural } from '../shared/formato.js';
 import { calcularMontagem } from '../shared/preco.js';
 import { abrirFolha, fecharFolha } from '../shared/folha.js';
@@ -19,10 +19,15 @@ const PASSOS = [
 const REVISAO = PASSOS.length - 1;
 
 const dialogo = $('#folha-montador');
-const escolhaVazia = () => ({ tamanho_id: null, massa_id: null, molho_id: null, ingrediente_ids: [], queijo_ralado: true, observacoes: '', quantidade: 1 });
+const escolhaVazia = () => ({ tamanho_id: null, massa_id: null, molho_id: null, ingrediente_ids: [], observacoes: '', quantidade: 1 });
 
 let m = null;          // montagem em andamento
 let rascunho = null;   // última montagem livre fechada sem adicionar: volta ao reabrir
+
+/** Esquece a montagem que ficou pela metade (ao trocar de atendimento, ela não é da conta nova). */
+export function limparRascunho() {
+  rascunho = null;
+}
 
 const disponivel = (o) => o && o.estado === 'disponivel';
 const calculo = () => calcularMontagem(estado.cardapio, m.escolha);
@@ -89,10 +94,20 @@ function desenharCasca() {
       <button type="button" class="botao botao--fantasma botao--icone" data-fechar aria-label="Fechar sem adicionar">${icone('fechar')}</button>
     </header>
     <nav class="passos" aria-label="Passos da montagem">
+      <div class="passos__resumo">
+        <p class="passos__contagem"><strong id="montador-contagem"></strong><span class="passos__nome" id="montador-nome"></span><span id="montador-faltam"></span></p>
+        <div class="passos__progresso" role="progressbar" aria-label="Progresso do prato" aria-valuemin="1" aria-valuemax="${PASSOS.length}"><span id="montador-barra"></span></div>
+      </div>
       <ol class="passos__lista">
-        ${PASSOS.map((p, i) => `<li><button type="button" class="passos__item" data-passo="${i}"><span class="passos__barra"></span><span class="passos__rotulo">${p.rotulo}</span></button></li>`).join('')}
+        ${PASSOS.map((p, i) => `
+          <li class="passos__ponto">
+            <button type="button" class="passos__item" data-passo="${i}">
+              <span class="passos__marca" aria-hidden="true"></span>
+              <span class="passos__texto"><span class="passos__rotulo">${p.rotulo}</span><span class="passos__valor"></span></span>
+              <span class="so-leitor passos__estado"></span>
+            </button>
+          </li>`).join('')}
       </ol>
-      <p class="passos__atual" id="montador-atual"></p>
     </nav>
     <form class="folha__corpo montador__corpo" id="montador-corpo" novalidate></form>
     <footer class="folha__rodape montador__rodape">
@@ -106,14 +121,6 @@ function desenharPasso(direcao) {
   const passo = PASSOS[m.passo];
   m.alcancado = Math.max(m.alcancado, m.passo);
   $('#montador-titulo').textContent = m.passo === 0 && m.itemCasa ? `${m.itemCasa.nome}: qual o tamanho?` : passo.titulo;
-  $('#montador-atual').textContent = `Passo ${m.passo + 1} de ${PASSOS.length}: ${passo.rotulo}`;
-
-  $$('.passos__item', dialogo).forEach((botao, i) => {
-    botao.toggleAttribute('data-feito', i < m.passo || (i <= m.alcancado && i !== m.passo));
-    if (i === m.passo) botao.setAttribute('aria-current', 'step');
-    else botao.removeAttribute('aria-current');
-    botao.disabled = i > m.alcancado;
-  });
 
   const corpo = $('#montador-corpo');
   corpo.innerHTML = `<div class="montador__conteudo" style="--dir: ${direcao}">${CONTEUDO[passo.id]()}</div>`;
@@ -132,25 +139,31 @@ function desenharPasso(direcao) {
 const marca = `<span class="opcao__marca">${icone('check', 14)}</span>`;
 const esgotado = '<span class="selo">Esgotado</span>';
 
-function opcaoUnica(nome, o, { descricao, lado, figura = '' }) {
+function opcaoUnica(nome, o, { descricao, detalhe = '', lado, figura = '' }) {
   const fora = !disponivel(o);
   return `
     <label class="opcao${figura ? ' opcao--figura' : ''}">
       <input class="opcao__entrada" type="radio" name="${nome}" value="${o.id}" ${m.escolha[nome] === o.id ? 'checked' : ''} ${fora ? 'disabled' : ''}>
       ${marca}${figura}
-      <span class="opcao__corpo"><span class="opcao__titulo">${esc(o.nome)}</span>${descricao ? `<span class="opcao__descricao">${esc(descricao)}</span>` : ''}</span>
+      <span class="opcao__corpo">
+        <span class="opcao__titulo">${esc(o.nome)}</span>
+        ${descricao ? `<span class="opcao__descricao">${esc(descricao)}</span>` : ''}
+        ${detalhe ? `<span class="opcao__detalhe">${esc(detalhe)}</span>` : ''}
+      </span>
       <span class="opcao__lado">${fora ? esgotado : lado}</span>
     </label>`;
 }
 
 const CONTEUDO = {
+  // Meio e Inteiro: o desenho do prato (metade ou cheio), a descrição de quanto serve e o que já está incluso no preço.
   tamanho: () => `
     <fieldset class="grupo-opcoes">
       <legend class="so-leitor">Tamanho</legend>
       ${estado.cardapio.tamanhos.map((t) => opcaoUnica('tamanho_id', t, {
-        descricao: [t.descricao, `${plural(t.inclusos, 'ingrediente incluso', 'ingredientes inclusos')}`].filter(Boolean).join(' · '),
-        lado: reais(t.preco_centavos),
-        figura: `<span class="opcao__figura sigla" aria-hidden="true">${esc(t.sigla)}</span>`,
+        descricao: t.descricao,
+        detalhe: plural(t.inclusos, 'ingrediente incluso', 'ingredientes inclusos'),
+        lado: `<span class="preco-opcao">${reais(t.preco_centavos)}</span>`,
+        figura: `<span class="opcao__figura porcao" aria-hidden="true">${iconePorcao(t.nome, 32)}</span>`,
       })).join('')}
     </fieldset>`,
 
@@ -195,11 +208,6 @@ const CONTEUDO = {
 
   final: () => `
     <div class="montador__final">
-      <label class="interruptor">
-        <input type="checkbox" name="queijo_ralado" ${m.escolha.queijo_ralado ? 'checked' : ''}>
-        <span class="interruptor__trilho"></span>
-        <span>Queijo ralado por cima</span>
-      </label>
       <label class="campo">
         <span class="campo__rotulo">Observações <span class="campo__opcional">(opcional)</span></span>
         <textarea class="entrada" name="observacoes" maxlength="200" rows="3" placeholder="Ex.: molho à parte, sem pimenta">${esc(m.escolha.observacoes)}</textarea>
@@ -227,7 +235,6 @@ const CONTEUDO = {
         ${linha('Molho', esc(r.molho.nome), 2, acrescimo(r.molho.acrescimo_centavos))}
         ${linha('Ingredientes', r.inclusos.length ? nomes(r.inclusos) : 'Nenhum', 3, r.inclusos.length ? 'inclusos' : '')}
         ${r.extras.length ? linha('Extras', nomes(r.extras), 3, `+ ${reais(r.valorExtras)}`) : ''}
-        ${linha('Queijo ralado', m.escolha.queijo_ralado ? 'Sim' : 'Não', 4)}
         ${linha('Observações', m.escolha.observacoes ? esc(m.escolha.observacoes) : 'Nenhuma', 4)}
       </dl>
       ${r.inclusos.length < r.limite ? `<p class="revisao__dica">${icone('info', 18)}<span>Seu tamanho inclui ${plural(r.limite, 'ingrediente', 'ingredientes')} e você escolheu ${r.inclusos.length}. <button type="button" class="revisao__alterar" data-ir="3">Escolher mais</button></span></p>` : ''}
@@ -247,8 +254,50 @@ function quantidadeHtml() {
     </div>`;
 }
 
+// ---------- Indicador de progresso (as etapas ao lado/em cima do prato) ----------
+const ESTADO_NO_LEITOR = { feito: 'concluída', atual: 'etapa atual', futuro: 'ainda não iniciada' };
+
+/** O que já foi escolhido em cada etapa, para aparecer embaixo do nome dela. */
+function valorDoPasso(id) {
+  const c = estado.cardapio;
+  const nome = (lista, chave) => lista.find((o) => o.id === m.escolha[chave])?.nome ?? '';
+  switch (id) {
+    case 'tamanho': return nome(c.tamanhos, 'tamanho_id');
+    case 'massa': return nome(c.massas, 'massa_id');
+    case 'molho': return nome(c.molhos, 'molho_id');
+    case 'ingredientes': return m.escolha.ingrediente_ids.length ? plural(m.escolha.ingrediente_ids.length, 'ingrediente', 'ingredientes') : 'Nenhum';
+    case 'final': return plural(m.escolha.quantidade, 'prato', 'pratos');
+    default: return '';
+  }
+}
+
+/** Cada etapa fica em um de três estados: concluída (já passou), atual ou ainda não iniciada. */
+function atualizarPassos() {
+  const total = PASSOS.length;
+  const faltam = total - m.passo - 1;
+  $('#montador-contagem').textContent = `Etapa ${m.passo + 1} de ${total}`;
+  $('#montador-nome').textContent = ` · ${PASSOS[m.passo].rotulo}`;
+  $('#montador-faltam').textContent = faltam === 0 ? ' · última etapa' : faltam === 1 ? ' · falta 1' : ` · faltam ${faltam}`;
+  const progresso = $('.passos__progresso', dialogo);
+  progresso.setAttribute('aria-valuenow', String(m.passo + 1));
+  progresso.setAttribute('aria-valuetext', `Etapa ${m.passo + 1} de ${total}`);
+  $('#montador-barra').style.setProperty('--p', String((m.passo + 1) / total));
+
+  $$('.passos__item', dialogo).forEach((botao, i) => {
+    const situacao = i === m.passo ? 'atual' : i <= m.alcancado ? 'feito' : 'futuro';
+    botao.dataset.estado = situacao;
+    if (i === m.passo) botao.setAttribute('aria-current', 'step');
+    else botao.removeAttribute('aria-current');
+    botao.disabled = i > m.alcancado;
+    $('.passos__marca', botao).innerHTML = situacao === 'feito' ? icone('check', 14) : String(i + 1);
+    $('.passos__valor', botao).textContent = situacao === 'futuro' ? '' : valorDoPasso(PASSOS[i].id);
+    $('.passos__estado', botao).textContent = ` (${ESTADO_NO_LEITOR[situacao]})`;
+  });
+}
+
 // ---------- Atualizações sem redesenhar o passo (preço, contador, botões) ----------
 function atualizar() {
+  atualizarPassos();
   const r = calculo();
   const passo = PASSOS[m.passo].id;
   const avancar = $('#montador-avancar');
@@ -335,8 +384,6 @@ delegar(dialogo, 'change', 'input, textarea', (e, campo) => {
   if (campo.name === 'ingrediente') {
     const id = Number(campo.value);
     m.escolha.ingrediente_ids = campo.checked ? [...m.escolha.ingrediente_ids, id] : m.escolha.ingrediente_ids.filter((x) => x !== id);
-  } else if (campo.name === 'queijo_ralado') {
-    m.escolha.queijo_ralado = campo.checked;
   } else if (campo.name === 'observacoes') {
     m.escolha.observacoes = campo.value.trim();
   } else if (campo.type === 'radio') {

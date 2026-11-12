@@ -56,7 +56,7 @@ final class AdminCardapioController
         Resposta::json($this->repo->buscar($recurso, $id));
     }
 
-    /** PATCH .../estado   corpo: {"estado": "disponivel" | "esgotado" | "oculto"}. Cozinha e atendimento só marcam esgotado/disponível. */
+    /** PATCH .../estado   corpo: {"estado": "disponivel" | "esgotado" | "oculto"}. A atendente só marca esgotado/disponível. */
     public function estado(Requisicao $req): void
     {
         $usuario = Sessao::exigir($req, [], true);

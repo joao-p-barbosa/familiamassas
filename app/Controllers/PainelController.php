@@ -13,18 +13,39 @@ use App\Repositories\UsuarioRepository;
 // Páginas do painel e login. O conteúdo de cada tela vem da API (AdminPedido, AdminCardapio, AdminConfig).
 final class PainelController
 {
-    /** Quem pode abrir cada tela. A ordem aqui é a ordem do menu. */
+    /**
+     * Quem pode abrir cada tela e em que grupo do menu lateral ela fica.
+     * admin = proprietário (tudo); atendente = Salão (as contas dos clientes), pedidos e cardápio (só marca esgotado).
+     * 'oculta' = a tela existe mas não tem item no menu; 'menu_ativo' = qual item do menu fica marcado quando ela está aberta.
+     * O painel é uma SPA (public/assets/js/painel/app.js): esta lista também diz ao roteador do navegador o que cada perfil abre.
+     */
     public const TELAS = [
-        'pedidos'       => ['titulo' => 'Pedidos',       'perfis' => ['admin', 'atendente']],
-        'cozinha'       => ['titulo' => 'Cozinha',       'perfis' => ['admin', 'atendente', 'cozinha']],
-        'cardapio'      => ['titulo' => 'Cardápio',      'perfis' => ['admin', 'atendente', 'cozinha']],
-        'configuracoes' => ['titulo' => 'Configurações', 'perfis' => ['admin']],
-        'whatsapp'      => ['titulo' => 'WhatsApp',      'perfis' => ['admin']],
+        'pedidos'       => ['titulo' => 'Pedidos',                 'grupo' => 'Operação', 'perfis' => ['admin', 'atendente']],
+        'salao'         => ['titulo' => 'Salão',                   'grupo' => 'Operação', 'perfis' => ['admin', 'atendente']],
+        'atendimento'   => ['titulo' => 'Produtos do atendimento', 'grupo' => 'Operação', 'perfis' => ['admin', 'atendente'], 'oculta' => true, 'menu_ativo' => 'salao'],
+        'historico'     => ['titulo' => 'Histórico do salão',      'grupo' => 'Operação', 'perfis' => ['admin']],
+        'cardapio'      => ['titulo' => 'Cardápio',                'grupo' => 'Loja',     'perfis' => ['admin', 'atendente']],
+        'configuracoes' => ['titulo' => 'Configurações',           'grupo' => 'Loja',     'perfis' => ['admin']],
+        'whatsapp'      => ['titulo' => 'WhatsApp',                'grupo' => 'Loja',     'perfis' => ['admin']],
     ];
 
+    /** A atendente entra direto no quadro do Salão; o proprietário, no quadro de pedidos. */
     public static function telaInicial(string $perfil): string
     {
-        return $perfil === 'cozinha' ? '/painel/cozinha' : '/painel/pedidos';
+        return $perfil === 'atendente' ? '/painel/salao' : '/painel/pedidos';
+    }
+
+    /**
+     * Telas que o perfil enxerga no menu, na ordem do menu. Para a atendente o Salão vem primeiro (é o que ela mais usa).
+     * @return array<string, array{titulo:string, grupo:string, perfis:list<string>}>
+     */
+    public static function menuDo(string $perfil): array
+    {
+        $menu = array_filter(self::TELAS, static fn (array $t): bool => in_array($perfil, $t['perfis'], true) && empty($t['oculta']));
+        if ($perfil === 'atendente') {
+            $menu = ['salao' => $menu['salao']] + $menu;
+        }
+        return $menu;
     }
 
     public function entrada(Requisicao $req): void
@@ -58,6 +79,11 @@ final class PainelController
             return;
         }
         $tela = $req->parametro('tela');
+        if ($tela === 'cozinha') {
+            // O módulo Cozinha foi retirado: quem tinha o endereço nos favoritos cai no quadro de pedidos.
+            Resposta::redirecionar(self::telaInicial($usuario['perfil']));
+            return;
+        }
         if (!isset(self::TELAS[$tela])) {
             Resposta::pagina('nao-encontrado', [], 404);
             return;
@@ -69,15 +95,21 @@ final class PainelController
         $config = new ConfigRepository();
         Resposta::pagina('painel/tela', [
             'tela' => $tela,
+            'telaDoMenu' => self::TELAS[$tela]['menu_ativo'] ?? $tela,
             'titulo' => self::TELAS[$tela]['titulo'],
-            'menu' => array_filter(self::TELAS, static fn (array $t): bool => in_array($usuario['perfil'], $t['perfis'], true)),
+            'menu' => self::menuDo($usuario['perfil']),
+            // Para o roteador do navegador: o que este perfil pode abrir (a tela pedida no endereço já foi conferida aqui)
+            // e para onde ir quando abrir algo que não pode.
+            'telas' => array_map(static fn (array $t): array => ['titulo' => $t['titulo'], 'menu_ativo' => $t['menu_ativo'] ?? null],
+                array_filter(self::TELAS, static fn (array $t): bool => in_array($usuario['perfil'], $t['perfis'], true))),
+            'inicio' => self::telaInicial($usuario['perfil']),
+            'menuRecolhido' => $req->cookie('painel_menu') === 'recolhido',
             'usuario' => $usuario,
             'nomeLoja' => $config->get('nome_loja', 'Nome do Restaurante'),
             'tema' => $config->get('tema', 'italia'),
             'csrf' => Sessao::csrf(),
             'ajustes' => [
                 'polling_segundos' => max(3, $config->inteiro('polling_segundos', 5)),
-                'atraso_minutos' => $config->inteiro('atraso_minutos', 20),
                 'comanda_largura_mm' => $config->inteiro('comanda_largura_mm', 80),
                 'comanda_mostra_preco' => $config->get('comanda_mostra_preco', '0') === '1',
                 'nome_loja' => $config->get('nome_loja', 'Nome do Restaurante'),

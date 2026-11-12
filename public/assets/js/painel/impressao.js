@@ -6,7 +6,7 @@
 import { esc, guardado } from '../shared/dom.js';
 import { reais, hora, dataHora, telefone } from '../shared/formato.js';
 import { api } from '../shared/api.js';
-import { ORIGENS, PAGAMENTOS } from '../shared/pedido.js';
+import { ORIGENS, PAGAMENTOS, rotuloDoTipo } from '../shared/pedido.js';
 import { ajustes, mostrarErro } from './casca.js';
 
 const CHAVE = 'fm_estacao_v1';
@@ -14,7 +14,7 @@ const CHAVE = 'fm_estacao_v1';
 function lerEstacao() {
   const salva = guardado.ler(CHAVE);
   if (salva?.id) return salva;
-  const nova = { id: crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`, nome: 'Estação da cozinha', ativa: false };
+  const nova = { id: crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`, nome: 'Estação de impressão', ativa: false };
   guardado.gravar(CHAVE, nova);
   return nova;
 }
@@ -29,7 +29,7 @@ export function definirEstacaoAtiva(ativa) {
 // ---------- Comanda ----------
 /** HTML da comanda (só o conteúdo, dentro de <div class="comanda">). */
 export function comandaHtml(pedido, { largura = ajustes.comanda_largura_mm, comPreco = ajustes.comanda_mostra_preco, reimpressao = false } = {}) {
-  const tipo = { entrega: 'Entrega', retirada: 'Retirada', local: `Mesa ${pedido.mesa ?? ''}` }[pedido.tipo];
+  const tipo = rotuloDoTipo(pedido);
   const endereco = pedido.tipo === 'entrega'
     ? `<p>${esc(pedido.endereco_rua)}, ${esc(pedido.endereco_numero)}${pedido.endereco_complemento ? ` · ${esc(pedido.endereco_complemento)}` : ''}</p>
        <p>${esc(pedido.endereco_bairro)}</p>${pedido.endereco_referencia ? `<p>Ref.: ${esc(pedido.endereco_referencia)}</p>` : ''}`
@@ -49,7 +49,6 @@ export function comandaHtml(pedido, { largura = ajustes.comanda_largura_mm, comP
           ${m.inclusos.length ? `<li>Ingredientes: ${nomes(m.inclusos)}</li>` : ''}
           ${m.extras.length ? `<li><b>EXTRAS: ${nomes(m.extras)}</b></li>` : ''}
           ${!m.inclusos.length && !m.extras.length ? '<li>Sem ingredientes</li>' : ''}
-          <li>Queijo ralado: <b>${m.queijo_ralado ? 'SIM' : 'NÃO'}</b></li>
         </ul>` : ''}
         ${item.observacoes ? `<p class="comanda__obs">OBS: ${esc(item.observacoes)}</p>` : ''}
       </div>`;
@@ -64,7 +63,7 @@ export function comandaHtml(pedido, { largura = ajustes.comanda_largura_mm, comP
       <p class="comanda__meta"><span>${dataHora(pedido.criado_em)}</span><span>${esc(ORIGENS[pedido.origem] ?? pedido.origem)}</span></p>
       <div class="comanda__bloco">
         <p class="comanda__cliente">${esc(pedido.cliente_nome)}</p>
-        <p>${esc(telefone(pedido.cliente_telefone))}</p>
+        ${pedido.cliente_telefone ? `<p>${esc(telefone(pedido.cliente_telefone))}</p>` : ''}
         ${endereco}
       </div>
       <div class="comanda__bloco">${itens}</div>
@@ -158,8 +157,8 @@ export function imprimirTeste(largura, comPreco) {
     observacoes: 'Tocar o interfone', pagamento: 'dinheiro', troco_para_centavos: 10000, taxa_entrega_centavos: 600, total_centavos: 5990,
     itens: [
       { nome: 'Monte seu prato', quantidade: 1, preco_unit_centavos: 4090, observacoes: 'Molho à parte',
-        montagem: { tamanho: { nome: 'Médio', descricao: '400 g' }, massa: { nome: 'Penne' }, molho: { nome: 'Bolonhesa' },
-                    inclusos: [{ nome: 'Frango desfiado' }, { nome: 'Bacon' }, { nome: 'Muçarela' }, { nome: 'Camarão' }], extras: [{ nome: 'Brócolis' }, { nome: 'Milho' }], queijo_ralado: true } },
+        montagem: { tamanho: { nome: 'Inteiro', descricao: 'Porção inteira · serve 2 pessoas · 550 g' }, massa: { nome: 'Penne' }, molho: { nome: 'Bolonhesa' },
+                    inclusos: [{ nome: 'Frango desfiado' }, { nome: 'Bacon' }, { nome: 'Muçarela' }, { nome: 'Camarão' }], extras: [{ nome: 'Brócolis' }, { nome: 'Milho' }] } },
       { nome: 'Refrigerante lata', quantidade: 2, preco_unit_centavos: 650, observacoes: '', montagem: null },
     ],
   };

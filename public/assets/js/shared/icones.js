@@ -42,6 +42,14 @@ const TRACOS = {
   recarregar: '<path d="M19.5 12a7.5 7.5 0 1 1-2.3-5.4M19.5 4.5v4.5H15"/>',
   desfazer: '<path d="M8 6 4 10l4 4"/><path d="M4 10h10a5 5 0 0 1 0 10h-3"/>',
   ligacao: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3A4 4 0 0 0 11 18.7l1-1"/>',
+  alvo: '<circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="7.5"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3"/>',
+  mapa: '<path d="M9 5 3.5 7v12L9 17l6 2 5.5-2V5L15 7 9 5Z"/><path d="M9 5v12M15 7v12"/>',
+  menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
+  recolher: '<path d="M11 6 5 12l6 6M19 6l-6 6 6 6"/>',
+  prato: '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/>',
+  navegar: '<path d="M4 11.5 20 4l-7.5 16-2.5-6.5L4 11.5Z"/>',
+  externo: '<path d="M14 5h5v5M19 5l-8 8M18 14v4a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h4"/>',
+  fecharmenu: '<path d="m6 6 12 12M18 6 6 18"/>',
 };
 
 // Formas de massa (pictogramas próprios, usados no passo "Massa" do montador).
@@ -54,6 +62,12 @@ const MASSAS = {
   generica: '<path d="M12 21V8"/><path d="M12 8c0-2.5 1.5-4 3.5-4.5C15.5 6 14 8 12 8Zm0 0C12 5.5 10.5 4 8.5 3.5 8.5 6 10 8 12 8Zm0 5.5c0-2.5 1.5-4 3.5-4.5 0 2.5-1.5 4.5-3.5 4.5Zm0 0c0-2.5-1.5-4-3.5-4.5 0 2.5 1.5 4.5 3.5 4.5Zm0 5c0-2.5 1.5-4 3.5-4.5 0 2.5-1.5 4.5-3.5 4.5Zm0 0c0-2.5-1.5-4-3.5-4.5 0 2.5 1.5 4.5 3.5 4.5Z"/>',
 };
 
+// Porções do "Monte seu prato": o prato pela metade (meio) ou cheio (inteiro). Escolhido pelo nome do tamanho.
+const PORCOES = {
+  meio: '<circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17"/><path d="M3.5 12a8.5 8.5 0 0 0 17 0Z" fill="currentColor" fill-opacity="0.3"/>',
+  inteiro: '<circle cx="12" cy="12" r="8.5" fill="currentColor" fill-opacity="0.3"/><circle cx="12" cy="12" r="5"/>',
+};
+
 const svg = (tracos, tamanho) =>
   `<svg width="${tamanho}" height="${tamanho}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${tracos}</svg>`;
 
@@ -64,4 +78,10 @@ export function iconeMassa(nome, tamanho = 32) {
   const chave = String(nome ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
   const forma = Object.keys(MASSAS).find((m) => chave.includes(m)) ?? 'generica';
   return svg(MASSAS[forma], tamanho);
+}
+
+/** Prato pela metade ("Meio", "Meia") ou cheio (qualquer outro nome, como "Inteiro"). */
+export function iconePorcao(nome, tamanho = 28) {
+  const chave = String(nome ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  return svg(/(^|\s)mei[oa](\s|$)/.test(chave) ? PORCOES.meio : PORCOES.inteiro, tamanho);
 }

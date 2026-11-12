@@ -34,10 +34,14 @@ final class Sessao
         self::$iniciada = true;
     }
 
+    /** Perfis que existem. admin = proprietário. Sessão de um perfil que deixou de existir (ex.: cozinha) não vale mais. */
+    public const PERFIS = ['admin', 'atendente'];
+
     /** @return array{id:int, nome:string, login:string, perfil:string}|null */
     public static function usuario(): ?array
     {
-        return $_SESSION['usuario'] ?? null;
+        $usuario = $_SESSION['usuario'] ?? null;
+        return is_array($usuario) && in_array($usuario['perfil'] ?? '', self::PERFIS, true) ? $usuario : null;
     }
 
     /** @param array{id:int, nome:string, login:string, perfil:string} $usuario */

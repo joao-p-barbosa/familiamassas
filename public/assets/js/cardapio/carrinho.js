@@ -48,21 +48,22 @@ function carrinhoHtml() {
         <p>Monte um prato ou escolha um item do cardápio.</p>
       </div>`;
   }
-  const fechada = !estado.loja.aberta;
+  const salao = estado.modo === 'salao';
+  const fechada = !salao && !estado.loja.aberta;   // quem está no salão atende mesmo com a loja "fechada" para o cardápio
   const motivo = fechada ? `${estado.loja.mensagem}. Seu carrinho fica guardado.` : t.temProblema ? 'Resolva os itens marcados para continuar.' : '';
   return `
     <ul class="linhas-carrinho">${t.linhas.map(linhaHtml).join('')}</ul>
     <div class="carrinho__fim">
       <p class="carrinho__subtotal"><span>Subtotal</span><strong class="numero">${reais(t.subtotal)}</strong></p>
       ${motivo ? `<p class="carrinho__motivo">${icone('info', 16)}<span>${esc(motivo)}</span></p>` : ''}
-      <button type="button" class="botao botao--g botao--bloco" data-acao="fechar-pedido" ${fechada || t.temProblema ? 'disabled' : ''}>Fechar pedido</button>
+      <button type="button" class="botao botao--g botao--bloco" data-acao="fechar-pedido" ${fechada || t.temProblema ? 'disabled' : ''}>${salao ? 'Registrar pedido' : 'Fechar pedido'}</button>
     </div>`;
 }
 
 export function desenharCarrinho() {
   if (!estado.cardapio) return;
   const html = carrinhoHtml();
-  lateral.innerHTML = `<h2 class="painel-carrinho__titulo">Seu pedido</h2>${html}`;
+  lateral.innerHTML = `<h2 class="painel-carrinho__titulo">${estado.modo === 'salao' ? 'Pedido do salão' : 'Seu pedido'}</h2>${html}`;
   corpoFolha.innerHTML = html;
 
   const t = totaisDoCarrinho();

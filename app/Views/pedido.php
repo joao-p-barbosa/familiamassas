@@ -23,8 +23,8 @@ $estilos = ['cardapio'];
 </header>
 
 <main class="acompanhar" id="acompanhar">
-  <p class="acompanhar__numero">Pedido #<?= e($pedido['numero']) ?></p>
   <h1 class="acompanhar__titulo"><?= e($pedido['rotulo']) ?></h1>
+  <p class="acompanhar__numero">Pedido #<?= e($pedido['numero']) ?></p>
 </main>
 
 <script type="application/json" id="dados-pedido"><?= json_embutido(['pedido' => $pedido, 'loja' => ['nome' => $loja['nome'], 'whatsapp' => $loja['whatsapp'], 'endereco' => $loja['endereco']]]) ?></script>

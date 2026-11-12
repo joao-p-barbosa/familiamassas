@@ -35,7 +35,13 @@
   font-size: var(--texto-2);
 }
 .topo .marca {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
+}
+.topo .selo {
+  flex: none;
 }
 @media (max-width: 29.99rem) {
   .topo .selo__resto {
@@ -147,10 +153,10 @@
     font-size: var(--texto-4);
   }
   .cardapio__nav .chip[aria-current="true"] {
-    background: var(--cor-superficie);
-    border-color: var(--cor-borda);
-    color: var(--cor-texto);
-    box-shadow: inset 3px 0 0 var(--cor-acento);
+    background: var(--cor-acento-suave);
+    border-color: transparent;
+    color: var(--cor-acento-tinta);
+    font-weight: 800;
   }
   .cardapio__itens {
     padding-top: var(--e-6);
@@ -498,68 +504,207 @@
 }
 
 /* ---------- Montador ---------- */
+/* Indicador de progresso das etapas. Cada etapa está em um de três estados (data-estado):
+   feito (já passou, com check), atual (preenchida de verde claro) e futuro (só o número, sem clique).
+   Celular: trilha horizontal em cima, com "Etapa 3 de 6 · Molho · faltam 3" e uma barra de progresso.
+   Telas largas: vira um menu lateral dentro da janela, com o que já foi escolhido embaixo do nome de cada etapa. */
 .passos {
   flex: none;
-  padding: var(--e-3) var(--e-5) var(--e-2);
+  display: grid;
+  gap: var(--e-2);
+  padding: var(--e-3) var(--e-4) var(--e-2);
   background: var(--cor-superficie);
   border-bottom: 1px solid var(--cor-borda);
 }
-.passos__lista {
+.passos__resumo {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  gap: var(--e-1);
+  gap: var(--e-2);
+}
+.passos__contagem {
+  font-size: var(--texto-3);
+  color: var(--cor-texto-2);
+}
+.passos__contagem strong {
+  font-weight: 800;
+  color: var(--cor-texto);
+}
+.passos__progresso {
+  height: 0.375rem;
+  border-radius: 999px;
+  background: var(--cor-borda);
+  overflow: hidden;
+}
+.passos__progresso > span {
+  display: block;
+  height: 100%;
+  background: var(--cor-acento);
+  transform-origin: left;
+  transform: scaleX(var(--p, 0));
+  transition: transform var(--dur-3) var(--ease-saida);
+}
+.passos__lista {
+  display: flex;
+}
+.passos__ponto {
+  position: relative;
+  flex: 1;
+  display: flex;
+  justify-content: center;
+}
+/* Linha que liga uma etapa à próxima (fica verde quando a etapa de antes já foi concluída). */
+.passos__ponto:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  top: calc(var(--toque) / 2 - 1px);
+  left: calc(50% + 1.125rem);
+  right: calc(-50% + 1.125rem);
+  height: 2px;
+  border-radius: 1px;
+  background: var(--cor-borda);
+  transition: background-color var(--dur-3) ease;
+}
+.passos__ponto:has([data-estado="feito"])::after {
+  background: var(--cor-acento);
 }
 .passos__item {
   display: grid;
-  gap: var(--e-1);
+  justify-items: center;
+  align-content: center;
   width: 100%;
-  padding: var(--e-2) 0 var(--e-1);
+  min-height: var(--toque);
+  padding: 0;
   border: 0;
   background: none;
-  color: var(--cor-texto-2);
-  font-size: var(--texto-1);
-  font-weight: 650;
+  color: var(--cor-texto);
   text-align: left;
   cursor: pointer;
-}
-.passos__barra {
-  height: 0.25rem;
-  border-radius: 999px;
-  background: var(--cor-borda);
-  transition: background-color var(--dur-2) ease;
-}
-.passos__item[data-feito] .passos__barra {
-  background: var(--cor-acento-tinta);
-  opacity: 0.45;
-}
-.passos__item[aria-current="step"] .passos__barra {
-  background: var(--cor-acento-tinta);
-  opacity: 1;
-}
-.passos__item[aria-current="step"] {
-  color: var(--cor-texto);
 }
 .passos__item:disabled {
   cursor: default;
 }
-.passos__rotulo {
+.passos__marca {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border: 2px solid var(--cor-borda-forte);
+  border-radius: 50%;
+  background: var(--cor-superficie);
+  color: var(--cor-texto-2);
+  font-size: var(--texto-2);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  transition: background-color var(--dur-2) ease, border-color var(--dur-2) ease, color var(--dur-2) ease, transform var(--dur-2) var(--ease-saida);
+}
+.passos__item[data-estado="feito"] .passos__marca {
+  border-color: var(--cor-acento);
+  background: var(--cor-acento);
+  color: var(--cor-acento-texto);
+}
+.passos__item[data-estado="atual"] .passos__marca {
+  border-color: var(--cor-acento);
+  background: var(--cor-acento-suave);
+  color: var(--cor-acento-tinta);
+  transform: scale(1.12);
+}
+.passos__item[data-estado="futuro"] .passos__marca {
+  border-color: var(--cor-borda);
+}
+.passos__texto {
   display: none;
 }
-.passos__atual {
-  font-size: var(--texto-2);
-  font-weight: 650;
-  color: var(--cor-texto-2);
+.passos__rotulo {
+  font-size: var(--texto-3);
+  font-weight: 700;
 }
-@media (min-width: 40rem) {
-  .passos__rotulo {
+.passos__valor {
+  overflow: hidden;
+  font-size: var(--texto-2);
+  color: var(--cor-texto-2);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.passos__item[data-estado="futuro"] .passos__rotulo {
+  color: var(--cor-texto-2);
+  font-weight: 600;
+}
+@media (hover: hover) and (pointer: fine) {
+  .passos__item:not(:disabled):not([data-estado="atual"]):hover .passos__marca {
+    border-color: var(--cor-acento);
+  }
+}
+
+@media (min-width: 48rem) {
+  /* A janela do montador ganha o menu lateral: etapas à esquerda, passo atual à direita. */
+  dialog.folha.folha--montador {
+    width: min(58rem, 100vw - 4rem);
+  }
+  dialog.folha.folha--montador[open] {
+    display: grid;
+    grid-template-columns: 15.5rem minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr) auto;
+  }
+  .folha--montador .folha__topo { grid-column: 2; grid-row: 1; }
+  .folha--montador .folha__corpo { grid-column: 2; grid-row: 2; }
+  .folha--montador .folha__rodape { grid-column: 2; grid-row: 3; }
+  .folha--montador .passos {
+    grid-column: 1;
+    grid-row: 1 / -1;
+    align-content: start;
+    gap: var(--e-5);
+    padding: var(--e-5) var(--e-3);
+    border-right: 1px solid var(--cor-borda);
+    border-bottom: 0;
+    overflow-y: auto;
+  }
+  .folha--montador .passos__resumo {
+    padding-inline: var(--e-2);
+  }
+  .folha--montador .passos__nome {
+    display: none;
+  }
+  .folha--montador .passos__lista {
+    flex-direction: column;
+  }
+  .folha--montador .passos__ponto {
     display: block;
   }
-  .passos__atual {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip-path: inset(50%);
+  /* A linha vertical sai de baixo da marca e chega até a marca da etapa seguinte. */
+  .folha--montador .passos__ponto:not(:last-child)::after {
+    top: calc(var(--e-2) + 1.75rem + 2px);
+    bottom: calc(var(--e-2) * -1 + 2px);
+    left: calc(var(--e-2) + 0.875rem - 1px);
+    right: auto;
+    width: 2px;
+    height: auto;
+  }
+  .folha--montador .passos__item {
+    grid-template-columns: 1.75rem minmax(0, 1fr);
+    justify-items: stretch;
+    align-content: start;
+    align-items: start;
+    gap: var(--e-3);
+    min-height: 3.25rem;
+    padding: var(--e-2);
+    border-radius: var(--raio-1);
+    transition: background-color var(--dur-1) ease;
+  }
+  .folha--montador .passos__item[data-estado="atual"] {
+    background: var(--cor-acento-suave);
+  }
+  .folha--montador .passos__texto {
+    display: grid;
+    gap: 0.125rem;
+    min-width: 0;
+    padding-top: 0.125rem;
+  }
+  .folha--montador .passos__item[data-estado="atual"] .passos__valor {
+    color: var(--cor-acento-tinta);
+  }
+  .folha--montador .passos__item:focus-visible {
+    outline-offset: -2px;
   }
 }
 .montador__corpo {
@@ -581,20 +726,34 @@
     transform: none !important;
   }
 }
-.sigla {
+/* Tamanho: o desenho mostra a diferença (prato pela metade ou cheio) antes mesmo de ler. */
+.porcao {
   display: grid;
   place-items: center;
-  width: 2.5rem;
-  height: 2.5rem;
+  width: 3rem;
+  height: 3rem;
   border-radius: 50%;
   background: var(--cor-superficie-2);
   color: var(--cor-texto);
-  font-family: var(--fonte-titulo);
-  font-size: var(--texto-5);
+  transition: background-color var(--dur-1) ease, color var(--dur-1) ease;
 }
-.opcao:has(:checked) .sigla {
+.opcao:has(:checked) .porcao {
   background: var(--cor-acento);
   color: var(--cor-acento-texto);
+}
+.opcao__detalhe {
+  margin-top: var(--e-1);
+  font-size: var(--texto-2);
+  font-weight: 700;
+  color: var(--cor-acento-tinta);
+}
+.preco-opcao {
+  font-size: var(--texto-5);
+  font-weight: 800;
+  color: var(--cor-texto);
+}
+.opcao:has(:checked) .preco-opcao {
+  color: var(--cor-acento-tinta);
 }
 .bolinha {
   width: 1.75rem;
@@ -931,4 +1090,303 @@ details.bloco > summary svg {
 }
 details.bloco[open] > summary svg {
   transform: rotate(90deg);
+}
+
+/* ---------- Seus pedidos na Home (acompanhamento.js) ---------- */
+.meus-pedidos {
+  display: grid;
+  gap: var(--e-3);
+  margin-bottom: var(--e-5);
+}
+.meus-pedidos[hidden] {
+  display: none;
+}
+.pedido-vivo {
+  position: relative;
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio-3);
+  background: var(--cor-superficie);
+  box-shadow: var(--sombra-1);
+}
+.pedido-vivo__link {
+  display: grid;
+  grid-template-columns: 5.5rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--e-4);
+  min-height: 6.75rem;
+  padding: var(--e-3) var(--e-4);
+  border-radius: inherit;
+  color: inherit;
+  text-decoration: none;
+}
+.pedido-vivo__link:focus-visible {
+  outline: 2px solid var(--cor-foco);
+  outline-offset: 2px;
+}
+.pedido-vivo__texto {
+  display: grid;
+  gap: var(--e-1);
+  min-width: 0;
+}
+.pedido-vivo__titulo {
+  font-family: var(--fonte-titulo);
+  font-size: var(--texto-5);
+  line-height: 1.2;
+}
+.pedido-vivo__detalhe {
+  font-size: var(--texto-3);
+  color: var(--cor-texto-2);
+}
+.pedido-vivo .trilha {
+  margin-top: var(--e-1);
+}
+.pedido-vivo__ir {
+  color: var(--cor-texto-2);
+}
+.pedido-vivo__dispensar {
+  position: absolute;
+  top: var(--e-1);
+  right: var(--e-1);
+}
+/* Pedido encerrado: o botão de dispensar ocupa o canto, então a seta de "acompanhar" sai. */
+.pedido-vivo:has(.pedido-vivo__dispensar) .pedido-vivo__ir {
+  visibility: hidden;
+}
+@media (hover: hover) and (pointer: fine) {
+  .pedido-vivo__link:hover {
+    background: var(--cor-superficie-2);
+  }
+}
+@media (max-width: 29.99rem) {
+  .pedido-vivo__link {
+    grid-template-columns: 4.5rem minmax(0, 1fr);
+  }
+  .pedido-vivo__ir {
+    display: none;
+  }
+}
+
+/* ---------- Palco do acompanhamento: a animação, o status em destaque e a trilha de etapas ---------- */
+.palco {
+  display: grid;
+  gap: var(--e-4);
+  padding: var(--e-5) var(--e-5) var(--e-6);
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio-3);
+  background: var(--cor-superficie);
+  box-shadow: var(--sombra-1);
+}
+.palco__arte {
+  width: min(100%, 14rem);
+  margin-inline: auto;
+}
+.palco__texto {
+  display: grid;
+  gap: var(--e-1);
+  text-align: center;
+}
+.palco .acompanhar__titulo {
+  margin-top: 0;
+  text-wrap: balance;
+}
+.palco__progresso {
+  display: grid;
+  gap: var(--e-2);
+}
+.palco__etapa {
+  font-size: var(--texto-3);
+  color: var(--cor-texto-2);
+  text-align: center;
+}
+.palco__etapa strong {
+  color: var(--cor-texto);
+}
+.palco .acompanhar__cancelado {
+  margin-top: 0;
+}
+
+/* ---------- Marcar a entrega no mapa ---------- */
+.local-mapa {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--e-3);
+  padding: var(--e-3) var(--e-4);
+  border: 1px dashed var(--cor-borda-forte);
+  border-radius: var(--raio-2);
+  background: var(--cor-superficie);
+}
+.local-mapa[data-marcado] {
+  border-style: solid;
+  border-color: var(--cor-acento);
+  background: var(--cor-acento-suave);
+}
+.local-mapa__icone {
+  display: grid;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 50%;
+  background: var(--cor-superficie-2);
+  color: var(--cor-texto);
+}
+.local-mapa[data-marcado] .local-mapa__icone {
+  background: var(--cor-acento);
+  color: var(--cor-acento-texto);
+}
+.local-mapa__titulo {
+  font-weight: 700;
+}
+.local-mapa__apoio {
+  font-size: var(--texto-3);
+  color: var(--cor-texto-2);
+}
+.local-mapa[data-marcado] .local-mapa__apoio {
+  color: var(--cor-texto);
+}
+@media (max-width: 29.99rem) {
+  .local-mapa {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .local-mapa .botao {
+    grid-column: 1 / -1;
+  }
+}
+.como-chegar {
+  justify-self: start;
+}
+
+/* ---------- Mapa (janela de marcar o local da entrega, mapa.js) ---------- */
+.mapa {
+  position: relative;
+  flex: 1;
+  min-height: 16rem;
+  background: var(--cor-superficie-2);
+  overflow: hidden;
+}
+.mapa__tela {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+.mapa .leaflet-container {
+  font-family: var(--fonte-texto);
+  background: var(--cor-superficie-2);
+}
+/* Botões de zoom do tamanho de um toque. */
+.mapa .leaflet-bar a {
+  width: var(--toque);
+  height: var(--toque);
+  line-height: var(--toque);
+  color: var(--cor-texto);
+}
+/* O pino fica sempre no centro; a ponta dele marca o ponto exato. Ao arrastar, ele levanta. */
+.mapa__pino {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 1000;
+  width: 40px;
+  height: 52px;
+  margin: -52px 0 0 -20px;
+  pointer-events: none;
+  transition: transform var(--dur-2) var(--ease-saida);
+}
+.mapa[data-movendo] .mapa__pino {
+  transform: translateY(-10px);
+}
+.mapa__pino-desenho {
+  display: block;
+}
+.mapa__pino-corpo {
+  fill: var(--cor-destaque);
+  stroke: var(--cor-superficie);
+  stroke-width: 2.5;
+}
+.mapa__pino-miolo {
+  fill: var(--cor-superficie);
+}
+.mapa__sombra {
+  position: absolute;
+  left: 50%;
+  bottom: -2px;
+  width: 16px;
+  height: 5px;
+  margin-left: -8px;
+  border-radius: 50%;
+  background: rgb(0 0 0 / 0.3);
+  z-index: -1;
+  transition: transform var(--dur-2) var(--ease-saida), opacity var(--dur-2) ease;
+}
+.mapa[data-movendo] .mapa__sombra {
+  transform: translateY(10px) scale(0.6);
+  opacity: 0.6;
+}
+.mapa__localizar {
+  position: absolute;
+  right: var(--e-3);
+  bottom: var(--e-3);
+  z-index: 1000;
+  box-shadow: var(--sombra-2);
+}
+.mapa__aviso {
+  position: absolute;
+  left: var(--e-3);
+  right: 4.25rem;
+  top: var(--e-3);
+  z-index: 1000;
+  padding: var(--e-2) var(--e-3);
+  border-radius: var(--raio-1);
+  background: var(--cor-superficie);
+  box-shadow: var(--sombra-2);
+  font-size: var(--texto-3);
+}
+.mapa__aviso[hidden] {
+  display: none;
+}
+.mapa__aviso[data-erro] {
+  background: var(--cor-perigo-suave);
+  color: var(--cor-perigo);
+  font-weight: 600;
+}
+.mapa__rodape {
+  gap: var(--e-3);
+}
+.mapa__endereco {
+  display: grid;
+  gap: 0.125rem;
+  align-content: center;
+  min-height: 3.5rem;
+}
+.mapa__rua {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--e-2);
+  font-size: var(--texto-5);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.mapa__rua svg {
+  flex: none;
+  margin-top: 0.15rem;
+  color: var(--cor-destaque);
+}
+.mapa__bairro {
+  padding-left: calc(18px + var(--e-2));
+  color: var(--cor-texto-2);
+}
+.mapa__dica {
+  font-size: var(--texto-3);
+  color: var(--cor-texto-2);
+}
+.mapa__acoes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--e-3);
+}
+@media (prefers-reduced-motion: reduce) {
+  .mapa__pino,
+  .mapa__sombra {
+    transition: none;
+  }
 }

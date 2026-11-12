@@ -12,14 +12,20 @@ export function criarFonte({ aoMudar, aoChegar = () => {}, antesDeMudar = () => 
   let desde = null;            // hora (do servidor) da última consulta
   let primeiraCarga = true;
   let buscando = false;
+  let deslocamento = 0;        // quanto o relógio do servidor está à frente do deste aparelho (ms)
 
   const fonte = {
     pedidos,
     conectado: true,
     carregado: false,
     ultimaSincronia: null,
+    /** Números do dia (pedidos, concluídos, cancelados...) vindos junto com a lista. */
+    fechamento: null,
 
     lista: () => [...pedidos.values()],
+
+    /** Agora (ms), pela hora do servidor: o cronômetro dos cartões não depende do relógio deste aparelho estar certo. */
+    agora: () => Date.now() + deslocamento,
 
     async sincronizar() {
       if (buscando) return;
@@ -29,7 +35,10 @@ export function criarFonte({ aoMudar, aoChegar = () => {}, antesDeMudar = () => 
         // Só interessa o que é novo ou tem data de atualização diferente da que já temos.
         const alterados = r.pedidos.filter((p) => pedidos.get(p.id)?.atualizado_em !== p.atualizado_em);
         const novos = primeiraCarga ? [] : alterados.filter((p) => !pedidos.has(p.id) && p.status === 'novo');
-        const mudou = alterados.length > 0 || !fonte.carregado || !fonte.conectado;
+        deslocamento = new Date(r.agora).getTime() - Date.now();
+        const mudouFechamento = JSON.stringify(r.fechamento) !== JSON.stringify(fonte.fechamento);
+        fonte.fechamento = r.fechamento ?? null;
+        const mudou = alterados.length > 0 || mudouFechamento || !fonte.carregado || !fonte.conectado;
         if (alterados.length > 0) {
           antesDeMudar(); // a tela guarda a posição dos cartões para animar a mudança
           for (const pedido of alterados) pedidos.set(pedido.id, pedido);

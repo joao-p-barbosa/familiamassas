@@ -19,7 +19,7 @@ final class PrecoService
 {
     /**
      * @param array $cardapio resultado de CardapioRepository::publico()
-     * @param array{tamanho_id?:mixed, massa_id?:mixed, molho_id?:mixed, ingrediente_ids?:mixed, queijo_ralado?:mixed} $escolha
+     * @param array{tamanho_id?:mixed, massa_id?:mixed, molho_id?:mixed, ingrediente_ids?:mixed} $escolha
      * @return array{preco_centavos:int, montagem:array}
      */
     public function montar(array $cardapio, array $escolha): array
@@ -56,7 +56,6 @@ final class PrecoService
                 'molho'   => ['id' => $molho['id'], 'nome' => $molho['nome'], 'acrescimo_centavos' => $molho['acrescimo_centavos']],
                 'inclusos' => array_map($resumo, $inclusos),
                 'extras'   => array_map($resumo, $extras),
-                'queijo_ralado' => !empty($escolha['queijo_ralado']),
             ],
         ];
     }

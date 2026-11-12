@@ -952,23 +952,41 @@ dialog.folha[data-arrastando] {
   outline: 2px solid var(--cor-foco);
   outline-offset: 4px;
 }
-/* Atrasado: borda e tempo em tom de alerta; muito atrasado: perigo. */
-.cartao-pedido[data-atraso="1"] {
+/* Cor pelo tempo em Novo + Em preparo (public/assets/js/shared/tempo.js):
+   até 19 min neutro; 20 a 29 min amarelo (atencao); 30 min ou mais vermelho (atrasado).
+   A cor nunca vai sozinha: o texto "Atenção" / "Atrasado" aparece junto do tempo. */
+.cartao-pedido[data-faixa="atencao"] {
   border-color: var(--cor-alerta);
   background: var(--cor-alerta-suave);
 }
-.cartao-pedido[data-atraso="1"] .cartao-pedido__tempo {
+.cartao-pedido[data-faixa="atencao"] .cartao-pedido__tempo {
   color: var(--cor-alerta);
 }
-.cartao-pedido[data-atraso="2"] {
+.cartao-pedido[data-faixa="atrasado"] {
   border-color: var(--cor-perigo);
   background: var(--cor-perigo-suave);
 }
-.cartao-pedido[data-atraso="2"] .cartao-pedido__tempo {
+.cartao-pedido[data-faixa="atrasado"] .cartao-pedido__tempo {
   color: var(--cor-perigo);
 }
-.cartao-pedido[data-atraso] .cartao-pedido__itens {
+.cartao-pedido[data-faixa] .cartao-pedido__itens {
   color: var(--cor-texto);
+}
+.cartao-pedido__faixa {
+  font-size: var(--texto-2);
+  font-weight: 800;
+}
+.cartao-pedido__faixa[hidden] {
+  display: none;
+}
+/* Quem pediu e como vai chegar: a modalidade é o que a equipe procura primeiro. */
+.cartao-pedido__modalidade {
+  gap: var(--e-1);
+  font-weight: 700;
+}
+.cartao-pedido__preparo {
+  font-size: var(--texto-2);
+  color: var(--cor-texto-2);
 }
 
 /* ---------- Resumo de pedido e blocos de formulário (usados no cardápio e no painel) ---------- */
@@ -1123,4 +1141,110 @@ dialog.folha[data-arrastando] {
 }
 details.bloco::details-content {
   min-width: 0;
+}
+
+/* ---------- Animação de status do pedido (cardapio/animacao-status.js) ----------
+   Só transform e opacity se mexem. A pose "parada" de cada cena é a de baixo; as animações só a movem.
+   Com prefers-reduced-motion tudo para na pose parada. */
+.an {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+  color: var(--cor-texto);
+}
+.an .an-papel { fill: var(--cor-superficie); }
+.an .an-verde { fill: var(--cor-acento); stroke: var(--cor-acento); }
+.an .an-verde-suave { fill: var(--cor-acento-suave); }
+.an .an-fogo { fill: var(--cor-destaque); stroke: var(--cor-destaque); }
+.an .an-macarrao { fill: var(--cor-alerta-suave); }
+.an .an-massa-fio { stroke: var(--cor-alerta); }
+.an .an-check-branco { stroke: var(--cor-acento-texto); stroke-width: 3; }
+.an .an-onda { stroke: var(--cor-acento); fill: none; opacity: 0.55; }
+.an .an-cabo { stroke-width: 5; }
+.an .an-fio { opacity: 0.45; }
+.an .an-brilho { fill: var(--cor-acento); stroke: none; }
+.an .an-estrada { stroke-dasharray: 12 14; }
+.an .an-desenha { stroke: var(--cor-acento); stroke-width: 6; stroke-dasharray: 60; }
+.an .an-ding { opacity: 0; }
+
+.an .an-flutua { animation: an-flutua 3.2s ease-in-out infinite; }
+.an .an-onda { transform-box: fill-box; transform-origin: center; animation: an-onda 2s ease-out infinite; }
+.an .an-chama { transform-box: fill-box; transform-origin: 50% 100%; animation: an-chama 0.7s ease-in-out var(--d, 0s) infinite alternate; }
+.an .an-frigideira { transform-box: fill-box; transform-origin: 100% 40%; animation: an-sacode 1.6s ease-in-out infinite; }
+.an .an-pedaco { transform-box: fill-box; transform-origin: center; animation: an-pula 1.6s cubic-bezier(0.3, 0.7, 0.4, 1) var(--d, 0s) infinite; }
+.an .an-fio { animation: an-vapor 2.2s ease-in-out var(--d, 0s) infinite; }
+.an .an-cloche { transform-box: fill-box; transform-origin: center; animation: an-levanta 3.4s ease-in-out infinite; }
+.an .an-brilho { transform-box: fill-box; transform-origin: center; animation: an-brilha 2.4s ease-in-out infinite; }
+.an .an-brilho--b { animation-delay: 0.8s; }
+.an .an-brilho--c { animation-delay: 1.6s; }
+.an .an-estrada { animation: an-estrada 0.55s linear infinite; }
+.an .an-roda { transform-box: fill-box; transform-origin: center; animation: an-gira 0.6s linear infinite; }
+.an .an-moto { animation: an-quica 0.45s ease-in-out infinite; }
+.an .an-linhas { animation: an-linhas 0.9s linear infinite; }
+.an .an-sino { transform-box: fill-box; transform-origin: 50% 100%; animation: an-toca 2.6s ease-in-out infinite; }
+.an .an-ding { animation: an-ding 2.6s ease-in-out infinite; }
+.an .an-desenha { animation: an-desenha 0.7s var(--ease-saida) 0.2s both; }
+
+@keyframes an-flutua { 50% { transform: translateY(-3px); } }
+@keyframes an-onda { from { transform: scale(1); opacity: 0.6; } to { transform: scale(2); opacity: 0; } }
+@keyframes an-chama { from { transform: scale(1, 0.8); } to { transform: scale(1, 1.2); } }
+@keyframes an-sacode { 0%, 100% { transform: rotate(-3deg); } 50% { transform: rotate(3.5deg); } }
+@keyframes an-pula {
+  0%, 100% { transform: translateY(0) rotate(0); }
+  35% { transform: translateY(-22px) rotate(110deg); }
+  62% { transform: translateY(-5px) rotate(220deg); }
+  82% { transform: translateY(0) rotate(320deg); }
+}
+@keyframes an-vapor { 0% { transform: translateY(6px); opacity: 0; } 40% { opacity: 0.6; } 100% { transform: translateY(-9px); opacity: 0; } }
+@keyframes an-levanta {
+  0%, 12% { transform: translateY(0) rotate(0); }
+  34%, 68% { transform: translateY(-17px) rotate(-6deg); }
+  90%, 100% { transform: translateY(0) rotate(0); }
+}
+@keyframes an-brilha { 0%, 100% { transform: scale(0.2); opacity: 0; } 50% { transform: scale(1); opacity: 1; } }
+@keyframes an-estrada { to { stroke-dashoffset: 26; } }
+@keyframes an-gira { to { transform: rotate(360deg); } }
+@keyframes an-quica { 50% { transform: translateY(-2px); } }
+@keyframes an-linhas { 0% { transform: translateX(10px); opacity: 0; } 40% { opacity: 0.7; } 100% { transform: translateX(-12px); opacity: 0; } }
+@keyframes an-toca {
+  0%, 34%, 100% { transform: rotate(0); }
+  5% { transform: rotate(-12deg); }
+  11% { transform: rotate(10deg); }
+  17% { transform: rotate(-8deg); }
+  23% { transform: rotate(6deg); }
+  29% { transform: rotate(-3deg); }
+}
+@keyframes an-ding { 0%, 3%, 34%, 100% { opacity: 0; } 8%, 26% { opacity: 1; } }
+@keyframes an-desenha { from { stroke-dashoffset: 60; } to { stroke-dashoffset: 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .an,
+  .an * {
+    animation: none !important;
+  }
+  .an .an-ding { opacity: 1; }
+}
+
+/* Trilha de etapas: um segmento por etapa; o da etapa atual pulsa devagar. */
+.trilha {
+  display: flex;
+  gap: var(--e-1);
+}
+.trilha__passo {
+  flex: 1;
+  height: 0.375rem;
+  border-radius: 999px;
+  background: var(--cor-borda);
+  transition: background-color var(--dur-3) ease;
+}
+.trilha__passo[data-feita] {
+  background: var(--cor-acento);
+}
+.trilha__passo[data-atual] {
+  animation: trilha-pulsa 1.8s ease-in-out infinite;
+}
+@keyframes trilha-pulsa { 50% { opacity: 0.45; } }
+@media (prefers-reduced-motion: reduce) {
+  .trilha__passo[data-atual] { animation: none; }
 }

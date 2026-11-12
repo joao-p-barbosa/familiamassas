@@ -5,8 +5,8 @@ import { reais, hora, telefone } from '../shared/formato.js';
 import { api } from '../shared/api.js';
 import { abrirFolha, fecharFolha } from '../shared/folha.js';
 import { avisar } from '../shared/avisos.js';
-import { FLUXOS, STATUS, ACAO_PARA, TIPOS, ORIGENS, PAGAMENTOS, encerrado, proximaEtapa, etapaAnterior, linhasMontagem } from '../shared/pedido.js';
-import { usuario, mostrarErro } from './casca.js';
+import { FLUXOS, STATUS, ACAO_PARA, TIPOS, ORIGENS, PAGAMENTOS, encerrado, proximaEtapa, etapaAnterior, linhasMontagem, rotuloDoTipo, linkDoPonto } from '../shared/pedido.js';
+import { mostrarErro } from './casca.js';
 import { reimprimir } from './impressao.js';
 
 const lateral = $('#folha-lateral');
@@ -61,9 +61,7 @@ function desenhar() {
   const proxima = proximaEtapa(p);
   const anterior = etapaAnterior(p);
   const fechado = encerrado(p.status);
-  const cozinha = usuario.perfil === 'cozinha';
-  const podeAvancar = proxima && (!cozinha || ['em_preparo', 'pronto'].includes(proxima));
-  const zap = `https://wa.me/${encodeURIComponent(p.cliente_telefone)}`;
+  const zap = p.cliente_telefone ? `https://wa.me/${encodeURIComponent(p.cliente_telefone)}` : null;
   const rolagem = $('.folha__corpo', lateral)?.scrollTop ?? 0;
 
   lateral.innerHTML = `
@@ -74,7 +72,7 @@ function desenhar() {
     <div class="folha__corpo detalhe">
       <div class="detalhe__selos">
         <span class="selo ${SELO_STATUS[p.status]}">${STATUS[p.status].rotulo}</span>
-        <span class="selo">${icone(TIPOS[p.tipo].icone, 14)}${p.tipo === 'local' ? `Mesa ${esc(p.mesa)}` : TIPOS[p.tipo].rotulo}</span>
+        <span class="selo">${icone(TIPOS[p.tipo].icone, 14)}${esc(rotuloDoTipo(p))}</span>
         <span class="selo">${esc(ORIGENS[p.origem] ?? p.origem)}</span>
         <span class="selo">${p.impresso_em ? `Impresso às ${hora(p.impresso_em)}` : 'Comanda não impressa'}</span>
       </div>
@@ -102,8 +100,8 @@ function desenhar() {
         <h3 class="detalhe__titulo">Cliente</h3>
         <dl class="resumo-dados">
           <div><dt>Nome</dt><dd>${esc(p.cliente_nome)}</dd></div>
-          <div><dt>WhatsApp</dt><dd><a href="${esc(zap)}" target="_blank" rel="noopener">${esc(telefone(p.cliente_telefone))}</a></dd></div>
-          ${p.tipo === 'entrega' ? `<div><dt>Endereço</dt><dd>${esc(p.endereco_rua)}, ${esc(p.endereco_numero)}${p.endereco_complemento ? ` · ${esc(p.endereco_complemento)}` : ''}<br>${esc(p.endereco_bairro)}${p.endereco_referencia ? `<br>Ref.: ${esc(p.endereco_referencia)}` : ''}</dd></div>` : ''}
+          ${zap ? `<div><dt>WhatsApp</dt><dd><a href="${esc(zap)}" target="_blank" rel="noopener">${esc(telefone(p.cliente_telefone))}</a></dd></div>` : ''}
+          ${p.tipo === 'entrega' ? `<div><dt>Endereço</dt><dd>${esc(p.endereco_rua)}, ${esc(p.endereco_numero)}${p.endereco_complemento ? ` · ${esc(p.endereco_complemento)}` : ''}<br>${esc(p.endereco_bairro)}${p.endereco_referencia ? `<br>Ref.: ${esc(p.endereco_referencia)}` : ''}${p.entrega_lat !== null && p.entrega_lng !== null ? `<br><a href="${esc(linkDoPonto(p.entrega_lat, p.entrega_lng))}" target="_blank" rel="noopener">${icone('mapa', 14)} Ver o local marcado no mapa</a>` : ''}</dd></div>` : ''}
           <div><dt>Pagamento</dt><dd>${PAGAMENTOS[p.pagamento]}${p.troco_para_centavos ? `, troco para ${reais(p.troco_para_centavos)} (levar ${reais(p.troco_para_centavos - p.total_centavos)})` : ''}</dd></div>
         </dl>
       </section>
@@ -118,11 +116,11 @@ function desenhar() {
       </section>
     </div>
     <footer class="folha__rodape">
-      ${podeAvancar ? `<button type="button" class="botao botao--g botao--bloco" data-detalhe="avancar" data-para="${proxima}">${ACAO_PARA[proxima]}${icone('seta-dir', 20)}</button>` : ''}
+      ${proxima ? `<button type="button" class="botao botao--g botao--bloco" data-detalhe="avancar" data-para="${proxima}">${ACAO_PARA[proxima]}${icone('seta-dir', 20)}</button>` : ''}
       <div class="detalhe__acoes">
         <button type="button" class="botao botao--secundario" data-detalhe="reimprimir">${icone('impressora', 18)}${p.impresso_em ? 'Reimprimir' : 'Imprimir'}</button>
         ${!fechado && anterior ? `<button type="button" class="botao botao--secundario" data-detalhe="voltar" data-para="${anterior}">${icone('desfazer', 18)}Voltar etapa</button>` : ''}
-        ${!fechado && !cozinha ? `<button type="button" class="botao botao--perigo-suave" data-detalhe="cancelar">Cancelar pedido</button>` : ''}
+        ${!fechado ? `<button type="button" class="botao botao--perigo-suave" data-detalhe="cancelar">Cancelar pedido</button>` : ''}
       </div>
     </footer>`;
   $('.folha__corpo', lateral).scrollTop = rolagem;
@@ -182,8 +180,7 @@ export function pedirCancelamento(id) {
 export function pedirMovimento(id) {
   const p = fonte.pedidos.get(id);
   if (!p || encerrado(p.status)) return;
-  const cozinha = usuario.perfil === 'cozinha';
-  const destinos = FLUXOS[p.tipo].filter((s) => s !== p.status && (!cozinha || ['novo', 'em_preparo', 'pronto'].includes(s)));
+  const destinos = FLUXOS[p.tipo].filter((s) => s !== p.status);
   dialogo.innerHTML = `
     <header class="folha__topo">
       <h2 class="folha__titulo" id="folha-dialogo-titulo">Mover o pedido #${p.id} para…</h2>

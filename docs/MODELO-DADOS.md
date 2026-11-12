@@ -14,49 +14,86 @@ Esquema completo em `data/schema.sqlite.sql`; dados iniciais em `data/seed.php`.
 | Tabela | Campos principais | Observações |
 |---|---|---|
 | `categorias` | `nome`, `ordem`, `estado` (`disponivel` \| `oculto`) | Categoria oculta esconde todos os itens dela. |
-| `tamanhos` | `nome`, `sigla`, `descricao` (peso), `preco_centavos`, `inclusos`, `estado`, `ordem` | `inclusos` = quantos ingredientes já estão no preço. |
+| `tamanhos` | `nome`, `sigla`, `descricao` (quanto serve e pesa), `preco_centavos`, `inclusos`, `estado`, `ordem` | Hoje dois: **Meio** e **Inteiro** (D33). `inclusos` = quantos ingredientes já estão no preço. A descrição é o que o cliente lê para escolher, então diz quanto serve. |
 | `massas` | `nome`, `descricao`, `acrescimo_centavos`, `estado`, `ordem` | |
 | `molhos` | `nome`, `descricao`, `acrescimo_centavos`, `cor`, `estado`, `ordem` | `cor` é a bolinha do montador. |
-| `ingredientes` | `nome`, `grupo`, `preco_extra_centavos`, `estado`, `ordem` | Preço cobrado só quando passa dos inclusos (D12). |
+| `ingredientes` | `nome`, `grupo`, `preco_extra_centavos`, `estado`, `ordem` | Preço cobrado só quando passa dos inclusos (D12). Três grupos, nesta ordem (D47): **Proteínas** (Carne moída, Picadinho de frango, Carne seca, Camarão), **Acompanhamentos** (Bacon, Calabresa, Presunto e todos os vegetais) e **Queijos**. O grupo é só organização: o preço e a montagem não dependem dele; a ordem (`ordem`) só desempata ingredientes de mesmo preço. |
 | `itens` | `categoria_id`, `tipo` (`simples` \| `prato_casa`), `nome`, `descricao`, `preco_centavos`, `imagem`, `massa_id`, `molho_id`, `estado`, `ordem` | `simples` tem preço fixo; `prato_casa` usa a regra do montador (D14). |
 | `item_ingredientes` | `item_id`, `ingrediente_id` | Ingredientes sugeridos de um prato da casa. |
 
 `estado` dos itens do cardápio: `disponivel` · `esgotado` (aparece desabilitado) · `oculto` (some).
+
+## Atendimentos do salão (a conta do cliente)
+
+O **pedido** e o **atendimento** são coisas diferentes (D48). Pedido = uma remessa para a cozinha, com status próprio. Atendimento = a conta de um cliente no salão (Mesa ou Pra viagem): reúne vários pedidos e só fecha quando o pagamento é registrado.
+
+| Tabela | Campos principais | Observações |
+|---|---|---|
+| `atendimentos` | `id`, `cliente_nome`, `modalidade` (`mesa` \| `viagem`), `mesa`, `status` (`aberto` \| `encerrado`), `pagamento` (`pix` \| `cartao` \| `dinheiro`), `total_centavos`, `aberto_por`, `encerrado_por`, `aberto_em`, `encerrado_em`, `atualizado_em` | `mesa` só existe em `modalidade = mesa`. `pagamento` e `total_centavos` só são preenchidos **ao fechar a conta** (D49); `pagamento` fica vazio quando não havia valor a cobrar. `status` não depende do status dos pedidos. |
+| `pedidos.atendimento_id` | chave estrangeira para `atendimentos` | Só pedidos do salão (`origem = balcao`) têm. Um atendimento tem 1 ou mais pedidos. |
+
+- **Valor da conta** = soma dos pedidos **não cancelados** do atendimento, cada um uma vez (`AtendimentoRepository::somaDosPedidos`). Com a conta aberta é calculado na hora; ao fechar, é gravado em `total_centavos` e não muda mais.
+- **Pagamento** do pedido do salão é `caixa` ("na conta"). A forma de pagamento real fica no atendimento.
+- **Fase no quadro** (derivada, calculada no servidor, não é coluna): `cozinha` = algum pedido ainda `novo` ou `em_preparo`; `pronto` = nada em produção e algum pedido `pronto`; `conta` = tudo servido (ou cancelado), só falta fechar a conta; `encerrado` = conta fechada. Pedido cancelado não conta.
+- **Fechar a conta** é transacional: um `UPDATE ... WHERE status = 'aberto'` decide quem fecha (duplo clique e dois aparelhos não cobram duas vezes) e o total é conferido contra `total_esperado_centavos`. Somar pedido a uma conta fechada é recusado no mesmo tipo de guarda.
+- **Faturamento do dia** = pedidos de entrega/retirada concluídos + atendimentos fechados hoje pelo `total_centavos` (um pedido servido de conta ainda aberta não é dinheiro recebido).
 
 ## Pedidos
 
 | Tabela | Campos principais | Observações |
 |---|---|---|
 | `clientes` | `nome`, `telefone` (único, só dígitos com DDI 55) | Um registro por telefone; base do futuro CRM. |
-| `pedidos` | `id` (é o número #123), `codigo` (aleatório, link do cliente), `cliente_*`, `tipo`, `mesa`, `endereco_*`, `pagamento`, `troco_para_centavos`, `observacoes`, `subtotal_centavos`, `taxa_entrega_centavos`, `total_centavos`, `status`, `origem`, `impresso_em`, `impresso_por`, `status_atualizado_em`, `atualizado_em`, `criado_em` | Nome e telefone são copiados para o pedido: mudar o cadastro do cliente não muda pedido antigo. |
+| `pedidos` | `id` (é o número #123), `atendimento_id` (só salão), `codigo` (aleatório, link do cliente), `cliente_*`, `tipo`, `mesa`, `endereco_*`, `entrega_lat`, `entrega_lng`, `pagamento`, `troco_para_centavos`, `observacoes`, `subtotal_centavos`, `taxa_entrega_centavos`, `total_centavos`, `status`, `origem`, `criado_por`, `impresso_em`, `impresso_por`, `status_atualizado_em`, `atualizado_em`, `criado_em` | Nome e telefone são copiados para o pedido: mudar o cadastro do cliente não muda pedido antigo. `entrega_lat/lng` = o local marcado no mapa (opcional, D39). `criado_por` = usuário que registrou (só pedido do salão). Pedido do salão tem `cliente_telefone` vazio e não cria registro em `clientes`. |
 | `itens_pedido` | `pedido_id`, `item_id`, `tipo` (`montado` \| `simples`), `nome`, `quantidade`, `preco_unit_centavos`, `montagem` (JSON), `observacoes` | Nome, preço e montagem são **cópias** da hora do pedido. |
 | `pedido_status_historico` | `pedido_id`, `status`, `motivo`, `usuario_id`, `criado_em` | Uma linha por mudança. `usuario_id` nulo = feito pelo cliente. |
 | `estacoes_impressao` | `id`, `nome`, `ativa`, `ultimo_contato_em` | Registrada quando um aparelho pede para imprimir. |
 
-**`status`:** `novo` → `em_preparo` → `pronto` → `saiu_entrega` (entrega) | `aguardando_retirada` (retirada) → `concluido`. No local: `pronto` → `concluido`. Mais `cancelado` (com motivo).
+**`tipo`:** `entrega` · `retirada` (o cliente pede pelo cardápio) · `local` (**Mesa**) · `viagem` (**Pra viagem**) (os dois só no salão, D34).
 
-**`origem`:** `cardapio` · `whatsapp` (veio pelo link com token) · `balcao` · `ifood` (futuro).
+**`pagamento`:** `pix` · `cartao` · `dinheiro` · `caixa` (**"na conta"**: pedido do salão; o pagamento real é registrado no atendimento ao fechar a conta, D49).
+
+**`status`:** `novo` → `em_preparo` → `pronto` → `saiu_entrega` (entrega) | `aguardando_retirada` (retirada) → `concluido`. Mesa e pra viagem: `pronto` → `concluido`. Mais `cancelado` (com motivo).
+
+**`origem`:** `cardapio` · `whatsapp` (veio pelo link com token) · `balcao` (registrado pela atendente no salão) · `ifood` (futuro).
+
+**Tempo de preparo (derivado, não é coluna).** O cartão do Kanban muda de cor pelo tempo somado em `novo` e `em_preparo`, calculado pelo `pedido_status_historico` (D41): cada linha vale do momento em que entrou naquele status até a linha seguinte. A API devolve `producao_acumulado_s` (períodos já fechados) e `producao_desde` (quando começou o período aberto; `null` se o pedido já passou de `em_preparo`). O navegador faz `acumulado + (agora - desde)`. Mudar de etapa não zera; voltar de `pronto` para `em_preparo` soma o tempo antigo ao novo. Faixas: até 19 min neutro, 20 a 29 min amarelo, 30 min ou mais vermelho. Código: `app/Services/TempoDePreparo.php` e `public/assets/js/shared/tempo.js`.
+
+**Fechamento do dia (derivado).** `PedidoRepository::fechamentoDoDia()` conta os pedidos **criados** hoje (dia da loja): total, concluídos, cancelados e em andamento. O faturamento soma os pedidos de entrega/retirada concluídos **mais** o valor cobrado nas contas do salão fechadas hoje (D49).
 
 **`montagem`** (JSON em `itens_pedido`):
 
 ```json
 {
-  "tamanho": { "id": 2, "nome": "Médio", "sigla": "M", "descricao": "400 g", "preco_centavos": 3190, "inclusos": 4 },
+  "tamanho": { "id": 2, "nome": "Inteiro", "sigla": "INT", "descricao": "Porção inteira · serve 2 pessoas · 550 g", "preco_centavos": 3990, "inclusos": 6 },
   "massa":   { "id": 1, "nome": "Penne", "acrescimo_centavos": 0 },
   "molho":   { "id": 2, "nome": "Bolonhesa", "acrescimo_centavos": 300 },
   "inclusos": [{ "id": 6, "nome": "Camarão", "preco_extra_centavos": 900 }],
-  "extras":   [{ "id": 9, "nome": "Milho", "preco_extra_centavos": 300 }],
-  "queijo_ralado": true
+  "extras":   [{ "id": 9, "nome": "Milho", "preco_extra_centavos": 300 }]
 }
 ```
+
+Pedidos antigos podem ter `"queijo_ralado"` na montagem (a opção foi retirada, D33). O campo é ignorado.
 
 ## Painel
 
 | Tabela | Campos | Observações |
 |---|---|---|
-| `usuarios` | `nome`, `login`, `senha_hash`, `perfil` (`admin` \| `atendente` \| `cozinha`), `ativo` | Senha com `password_hash`. |
+| `usuarios` | `nome`, `login`, `senha_hash`, `perfil` (`admin` \| `atendente`), `ativo` | Senha com `password_hash`. `admin` = proprietário (D42). Uma sessão de perfil que não existe mais (ex.: `cozinha`) deixa de valer. |
 | `tentativas_login` | `chave` (`ip:...` ou `login:...`), `tentativas`, `bloqueado_ate` | 5 erros seguidos bloqueiam por 5 min. |
-| `configuracoes` | `chave`, `valor` | Nome da loja, tema, horários (JSON), taxa, tempos, comanda, polling, atraso. |
+| `configuracoes` | `chave`, `valor` | Nome da loja, tema, horários (JSON), taxa, tempos, endereço do restaurante (destino do "Como chegar"), comanda, polling. |
+
+**Cookies:** `painel` (sessão, 12 h), `painel_menu` (`recolhido` ou `aberto`: o estado do menu lateral, D43) e `fm_pedidos` (acompanhamento na Home, D37).
+
+## Versão do esquema e migrações (D50)
+
+O banco guarda a versão do esquema em `PRAGMA user_version`; a versão atual está em `Banco::VERSAO_DO_ESQUEMA` (hoje **2**). Banco novo nasce direto no esquema atual (`data/schema.sqlite.sql` + `data/seed.php`). Banco que já existe é atualizado sozinho na primeira requisição: cada arquivo `data/migracoes/NNN_nome.php` com número maior que a versão do banco roda **uma vez**, em transação (se falha, nada fica pela metade), e antes de mexer o sistema guarda uma cópia do arquivo em `data/backups/` (fora do Git).
+
+| Versão | O que mudou |
+|---|---|
+| 1 | Esquema da rodada da manhã de 12/11 (perfis, tipos de pedido, `entrega_lat/lng`). Banco sem número de versão que tenha `entrega_lat` é tratado como versão 1. |
+| 2 | Tabela `atendimentos` + `pedidos.atendimento_id`; cada pedido antigo do salão vira o seu próprio atendimento (concluído/cancelado → encerrado; o que ainda anda → aberto). Ingredientes: Frango desfiado vira Picadinho de frango (mesmo registro), entra Carne seca, e os grupos passam a Proteínas, Acompanhamentos e Queijos. |
+
+Banco anterior ao esquema da versão 1 é recusado com uma mensagem clara (apague `data/restaurante.sqlite` para recomeçar). Para criar uma migração nova: ponha o arquivo `data/migracoes/003_...php` (uma função que recebe o `PDO`), atualize `data/schema.sqlite.sql` e `Banco::VERSAO_DO_ESQUEMA`; `tests/regras.php` confere que a versão do esquema é a da última migração e testa a migração 002 contra um banco "antigo" congelado em `tests/fixtures/schema-v1.sqlite.sql`.
 
 ## WhatsApp (tabelas criadas; uso começa na Etapa 4)
 

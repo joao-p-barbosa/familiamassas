@@ -8,6 +8,7 @@ export const FLUXOS = {
   entrega: ['novo', 'em_preparo', 'pronto', 'saiu_entrega', 'concluido'],
   retirada: ['novo', 'em_preparo', 'pronto', 'aguardando_retirada', 'concluido'],
   local: ['novo', 'em_preparo', 'pronto', 'concluido'],
+  viagem: ['novo', 'em_preparo', 'pronto', 'concluido'],
 };
 
 export const STATUS = {
@@ -32,11 +33,17 @@ export const ACAO_PARA = {
 export const TIPOS = {
   entrega: { rotulo: 'Entrega', icone: 'moto' },
   retirada: { rotulo: 'Retirada', icone: 'loja' },
-  local: { rotulo: 'No local', icone: 'talheres' },
+  local: { rotulo: 'Mesa', icone: 'talheres' },
+  viagem: { rotulo: 'Pra viagem', icone: 'sacola' },
 };
 
-export const ORIGENS = { cardapio: 'Cardápio', whatsapp: 'WhatsApp', balcao: 'Balcão', ifood: 'iFood' };
-export const PAGAMENTOS = { pix: 'Pix', cartao: 'Cartão', dinheiro: 'Dinheiro' };
+/** "Entrega", "Retirada", "Mesa 5" ou "Pra viagem": a modalidade do pedido como aparece no cartão. */
+export const rotuloDoTipo = (pedido) => (pedido.tipo === 'local' && pedido.mesa ? `Mesa ${pedido.mesa}` : TIPOS[pedido.tipo]?.rotulo ?? pedido.tipo);
+
+export const ORIGENS = { cardapio: 'Cardápio', whatsapp: 'WhatsApp', balcao: 'Salão', ifood: 'iFood' };
+export const PAGAMENTOS = { pix: 'Pix', cartao: 'Cartão', dinheiro: 'Dinheiro', caixa: 'Na conta' };
+/** "No caixa" é só do salão (a atendente cobra no caixa): o cliente do cardápio escolhe uma destas. */
+export const PAGAMENTOS_DO_CLIENTE = ['pix', 'cartao', 'dinheiro'];
 
 export const encerrado = (status) => status === 'concluido' || status === 'cancelado';
 
@@ -54,7 +61,7 @@ export function etapaAnterior(pedido) {
   return i > 0 ? fluxo[i - 1] : null;
 }
 
-/** "Médio · Penne · Bolonhesa" */
+/** "Meio · Penne · Bolonhesa" */
 export function resumoMontagem(m) {
   return m ? [m.tamanho?.nome, m.massa?.nome, m.molho?.nome].filter(Boolean).join(' · ') : '';
 }
@@ -71,6 +78,14 @@ export function linhasMontagem(m, { comPrecos = true } = {}) {
     m.inclusos.length ? `<li><span>Ingredientes</span> ${nomes(m.inclusos)}</li>` : '',
     m.extras.length ? `<li><span>Extras</span> ${extras}</li>` : '',
     !m.inclusos.length && !m.extras.length ? '<li><span>Ingredientes</span> Nenhum</li>' : '',
-    `<li><span>Queijo ralado</span> ${m.queijo_ralado ? 'Sim' : 'Não'}</li>`,
   ].join('');
 }
+
+/**
+ * Link que abre o Google Maps (ou o app de mapas do aparelho) com o restaurante como destino.
+ * No celular, o link do Google Maps abre direto o app instalado; no computador, abre o site.
+ */
+export const linkComoChegar = (endereco) => `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(endereco)}`;
+
+/** Link para ver um ponto (latitude, longitude) no mapa: usado no detalhe do pedido de entrega. */
+export const linkDoPonto = (lat, lng) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${lat},${lng}`)}`;

@@ -27,18 +27,16 @@ return static function (PDO $pdo): void {
         'endereco_loja'         => 'Rua das Massas, Centro',
         'aceita_entrega'        => '1',
         'aceita_retirada'       => '1',
-        'aceita_local'          => '1',
         'comanda_largura_mm'    => '80',
         'comanda_mostra_preco'  => '0',
         'polling_segundos'      => '5',
-        'atraso_minutos'        => '20',                      // card do Kanban muda de cor depois disso
     ];
     foreach ($config as $chave => $valor) {
         $inserir('configuracoes', ['chave' => $chave, 'valor' => $valor]);
     }
 
     // ---------- Usuários do painel (senha inicial: trocar123) ----------
-    foreach ([['Administrador', 'admin', 'admin'], ['Atendimento', 'atendente', 'atendente'], ['Cozinha', 'cozinha', 'cozinha']] as [$nome, $login, $perfil]) {
+    foreach ([['Administrador', 'admin', 'admin'], ['Atendimento', 'atendente', 'atendente']] as [$nome, $login, $perfil]) {
         $inserir('usuarios', [
             'nome' => $nome, 'login' => $login, 'senha_hash' => password_hash('trocar123', PASSWORD_DEFAULT),
             'perfil' => $perfil, 'ativo' => 1, 'criado_em' => $agora,
@@ -46,10 +44,10 @@ return static function (PDO $pdo): void {
     }
 
     // ---------- Monte seu prato ----------
+    // Duas porções: a descrição é o que o cliente lê para escolher, então diz quanto serve e quanto pesa.
     foreach ([
-        ['Pequeno', 'P', '300 g', 2490, 3],
-        ['Médio',   'M', '400 g', 3190, 4],
-        ['Grande',  'G', '550 g', 3990, 6],
+        ['Meio',    'MEI', 'Meia porção · serve 1 pessoa · 300 g',    2490, 3],
+        ['Inteiro', 'INT', 'Porção inteira · serve 2 pessoas · 550 g', 3990, 6],
     ] as $i => [$nome, $sigla, $descricao, $preco, $inclusos]) {
         $inserir('tamanhos', compact('nome', 'sigla', 'descricao', 'inclusos') + ['preco_centavos' => $preco, 'ordem' => $i]);
     }
@@ -80,10 +78,16 @@ return static function (PDO $pdo): void {
 
     $ingredientes = [];
     $ordem = 0;
+    // Três grupos: Proteínas, Acompanhamentos (bacon, calabresa, presunto e todos os vegetais) e Queijos.
+    // Não há "queijo ralado por cima". Os grupos aparecem na ordem em que estão aqui.
     foreach ([
-        'Proteínas' => [['Frango desfiado', 500], ['Bacon', 500], ['Calabresa', 400], ['Presunto', 400], ['Carne moída', 500], ['Camarão', 900]],
-        'Vegetais'  => [['Brócolis', 300], ['Champignon', 400], ['Milho', 300], ['Ervilha', 300], ['Tomate-cereja', 300], ['Azeitona preta', 300], ['Palmito', 400], ['Cebola roxa', 300], ['Alho frito', 300], ['Manjericão', 300]],
-        'Queijos'   => [['Muçarela', 400], ['Requeijão cremoso', 400], ['Parmesão', 400], ['Gorgonzola', 500]],
+        'Proteínas' => [['Carne moída', 500], ['Picadinho de frango', 500], ['Carne seca', 700], ['Camarão', 900]],
+        'Acompanhamentos' => [
+            ['Bacon', 500], ['Calabresa', 400], ['Presunto', 400],
+            ['Brócolis', 300], ['Champignon', 400], ['Milho', 300], ['Ervilha', 300], ['Tomate-cereja', 300], ['Azeitona preta', 300],
+            ['Palmito', 400], ['Cebola roxa', 300], ['Alho frito', 300], ['Manjericão', 300],
+        ],
+        'Queijos' => [['Muçarela', 400], ['Requeijão cremoso', 400], ['Parmesão', 400], ['Gorgonzola', 500]],
     ] as $grupo => $lista) {
         foreach ($lista as [$nome, $preco]) {
             $ingredientes[$nome] = $inserir('ingredientes', compact('nome', 'grupo') + ['preco_extra_centavos' => $preco, 'ordem' => $ordem++]);
@@ -102,7 +106,7 @@ return static function (PDO $pdo): void {
         ['Penne à bolonhesa',     'Penne, bolonhesa e muçarela',               'Penne',     'Bolonhesa',      ['Muçarela']],
         ['Talharim ao pesto',     'Talharim, pesto, tomate-cereja e parmesão', 'Talharim',  'Pesto',          ['Tomate-cereja', 'Parmesão']],
         ['Nhoque quatro queijos', 'Nhoque de batata, quatro queijos e alho frito', 'Nhoque', 'Quatro queijos', ['Alho frito']],
-        ['Fusilli rosé com frango', 'Fusilli, rosé, frango desfiado, milho e requeijão', 'Fusilli', 'Rosé',   ['Frango desfiado', 'Milho', 'Requeijão cremoso']],
+        ['Fusilli rosé com frango', 'Fusilli, rosé, picadinho de frango, milho e requeijão', 'Fusilli', 'Rosé',   ['Picadinho de frango', 'Milho', 'Requeijão cremoso']],
     ] as $i => [$nome, $descricao, $massa, $molho, $lista]) {
         $id = $inserir('itens', [
             'categoria_id' => $casa, 'tipo' => 'prato_casa', 'nome' => $nome, 'descricao' => $descricao,

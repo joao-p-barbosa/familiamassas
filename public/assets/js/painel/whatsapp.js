@@ -5,7 +5,9 @@ import { icone } from '../shared/icones.js';
 import { telefone as formatarTelefone } from '../shared/formato.js';
 import { api } from '../shared/api.js';
 import { avisar } from '../shared/avisos.js';
-import { conteudo, mostrarErro } from './casca.js';
+import { recipienteDaTela, mostrarErro } from './casca.js';
+
+const conteudo = recipienteDaTela();   // o contêiner desta tela (criado pelo roteador)
 
 function desenhar(s) {
   const item = (ok, texto) => `<li ${ok ? 'data-ok' : ''}><span class="checagem__marca">${icone(ok ? 'check' : 'menos', 14)}</span><span>${texto}</span></li>`;
@@ -94,4 +96,7 @@ conteudo.addEventListener('submit', async (e) => {
   botao.removeAttribute('aria-busy');
 });
 
-api('/api/admin/whatsapp').then(desenhar).catch(mostrarErro);
+/** A tela abriu (a primeira vez ou de novo): busca a situação da integração e desenha. */
+export function montar() {
+  return api('/api/admin/whatsapp').then(desenhar).catch(mostrarErro);
+}
