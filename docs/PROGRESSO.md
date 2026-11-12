@@ -18,14 +18,14 @@
 
 1. Dê dois cliques em **`iniciar.bat`** (na raiz). Ele liga o SQLite só para este servidor, sem mexer no `php.ini`.
 2. Cardápio: <http://localhost:8090/> · Painel: <http://localhost:8090/painel> · Guia de estilo: <http://localhost:8090/styleguide>
-3. Usuários (senha inicial **`trocar123`**, troque em Configurações → Minha senha): `admin` (proprietário) e `atendente`. O módulo Cozinha e o usuário `cozinha` foram retirados (D42).
+3. Usuários (no desenvolvimento a senha inicial é **`trocar123`**; na hospedagem vem das variáveis `SENHA_*_INICIAL`, veja `docs/DEPLOY.md`; troque em Configurações → Minha senha): `admin` (proprietário) e `atendente`. O módulo Cozinha e o usuário `cozinha` foram retirados (D42).
 4. No celular, na mesma rede Wi-Fi: o `iniciar.bat` mostra o IP do computador; abra `http://<IP>:8090/`. **A localização do aparelho no mapa só funciona em https** (ou em `localhost`): no celular por `http://<IP>` o mapa abre, avisa disso e o cliente arrasta o mapa ou digita o endereço.
 5. Banco: `data/restaurante.sqlite`. Um banco que já existe é **atualizado sozinho** na primeira requisição (migrações, com cópia de segurança em `data/backups/`, D50): não precisa apagar nada. Para recomeçar do zero, pare o servidor e apague o arquivo (ele é recriado com os dados de exemplo).
 
 **Testes automáticos** (na raiz):
 
 ```
-php -d extension=pdo_sqlite tests/regras.php   # 152 testes: preço, grupos, pedido, atendimentos e fechar conta, histórico, tempo, fechamento do dia, perfis, cookie da Home, status, impressão, token, horários, migração
+php -d extension=pdo_sqlite tests/regras.php   # 160 testes: preço, grupos, pedido, atendimentos e fechar conta, histórico, tempo, fechamento do dia, perfis, cookie da Home, status, impressão, token, horários, produção, migração
 node tests/preco.test.mjs                      # o preço do navegador bate com o do servidor
 node tests/tempo.test.mjs                      # as regras de tempo e cor do cartão no navegador
 node tests/contraste.mjs                       # contraste AA dos 4 temas
@@ -93,7 +93,7 @@ Cliente                                Painel (/painel), com menu lateral retrá
 - ✅ Validações claras (preço, obrigatórios, categoria com itens não apaga)
 
 ### RODADA DE AJUSTES (12/11, tarde): proteínas, atendimentos do salão e SPA
-Testados no navegador (celular 390 px e desktop 1280/1440 px) e com testes automáticos (152 no PHP). `⚠️` = o que só você consegue conferir.
+Testados no navegador (celular 390 px e desktop 1280/1440 px) e com testes automáticos (160 no PHP). `⚠️` = o que só você consegue conferir.
 
 Classificação dos ingredientes (seção 1 do pedido)
 - ✅ **Proteínas**: Carne moída, Picadinho de frango, Carne seca, Camarão. **Acompanhamentos**: Bacon, Calabresa, Presunto e todos os vegetais. **Queijos**: sem mudança. As proteínas não foram para Acompanhamentos. Conferido no montador do cliente, no do salão e no cadastro do cardápio. Preço, regra de inclusos/extras, resumo e pedido seguem iguais; sem "queijo ralado". ⚠️ Confirme o preço de exemplo da Carne seca (R$ 7,00) e a troca do nome "Frango desfiado" para "Picadinho de frango" (D47).

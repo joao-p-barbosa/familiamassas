@@ -1,0 +1,20 @@
+# Fora da imagem: segredos, banco local, sessões, testes e tudo que só serve no computador do desenvolvedor.
+.git
+.gitignore
+.gitattributes
+.env
+.playwright-mcp
+.impeccable
+data/*.sqlite
+data/*.sqlite-wal
+data/*.sqlite-shm
+data/sessoes
+data/backups
+public/uploads/*
+!public/uploads/.htaccess
+tests
+docs
+README.md
+PROMPT-MVP.md
+iniciar.bat
+render.yaml

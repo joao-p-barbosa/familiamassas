@@ -76,6 +76,12 @@ Toda decisão do projeto, com data e motivo. As marcadas **(confirmar)** foram t
 | D53 | 2026-11-12 | **O painel é uma SPA** (sem framework, JavaScript puro em módulos): o servidor entrega a mesma casca para qualquer `/painel/{tela}` e o roteador (`painel/roteador.js`, History API) troca a tela sem recarregar. Cada tela é um módulo com `montar()` e `desmontar()` e um contêiner próprio mantido na página (voltar a uma tela não perde o estado). O fluxo de pedidos, o som, a impressão automática da comanda e o aviso "pedido pronto para servir" vivem na casca (`painel/servicos.js`) e funcionam em qualquer tela. Voltar/avançar do navegador, link direto e F5 funcionam; as janelas (folhas) fecham no "voltar" sem trocar de tela. A troca de tela avisa leitor de tela (`aria-live`) e leva o foco ao título. | O pedido da rodada mencionava SPA e o painel ainda era de várias páginas. O estado global (som, impressão) deixava de funcionar fora do quadro de Pedidos. O cardápio público continua uma página simples (D1: sem framework). |
 | D54 | 2026-11-12 | O aviso e o som de **"Pedido novo"** não disparam para o pedido que a própria pessoa acabou de registrar no salão (`criado_por` = ela); quem está em outro aparelho continua sendo avisado. | Sem isso a atendente ouvia o alerta do pedido que ela mesma enviou. |
 
+## Publicação (2026-11-12)
+
+| # | Data | Decisão | Motivo |
+|---|---|---|---|
+| D55 | 2026-11-12 | **Hospedagem na Render** com Docker (PHP 8.3 + Apache, `Dockerfile`, `docker/entrypoint.sh` e `render.yaml`), não na Vercel. As senhas iniciais vêm de variáveis de ambiente (`SENHA_ADMIN_INICIAL`, `SENHA_ATENDENTE_INICIAL`) e, fora do modo dev, o sistema nunca nasce com `trocar123` (usa a variável ou sorteia e registra no log). O `Env` passa a ler as variáveis do processo quando não há `.env`, e `TRUST_PROXY=1` faz o login usar o IP de `X-Forwarded-For`. **(confirmar)** Plano gratuito: o disco é temporário (banco, sessões e fotos somem ao reiniciar). Para guardar pedidos de verdade: plano pago com disco persistente (`DATA_DIR`). Detalhes em `docs/DEPLOY.md`. | A Vercel não roda PHP de forma oficial e o disco das funções não persiste, então o SQLite não funcionaria. O repositório é público, então a senha padrão num site no ar seria um risco. O custo do plano pago é decisão sua. |
+
 ## Pendências que dependem de você
 
 - Responder as perguntas da Etapa 0 (lista em `docs/PROGRESSO.md`).

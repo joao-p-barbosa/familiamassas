@@ -30,9 +30,14 @@ final class Env
         self::$valores[$chave] = $valor;
     }
 
+    /** O .env vale primeiro; sem ele (hospedagem em contêiner, como a Render), valem as variáveis de ambiente do processo. */
     public static function get(string $chave, string $padrao = ''): string
     {
         $valor = self::$valores[$chave] ?? '';
+        if ($valor === '') {
+            $doProcesso = getenv($chave);
+            $valor = is_string($doProcesso) ? $doProcesso : '';
+        }
         return $valor !== '' ? $valor : $padrao;
     }
 }

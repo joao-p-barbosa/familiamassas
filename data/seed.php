@@ -35,10 +35,25 @@ return static function (PDO $pdo): void {
         $inserir('configuracoes', ['chave' => $chave, 'valor' => $valor]);
     }
 
-    // ---------- Usuários do painel (senha inicial: trocar123) ----------
-    foreach ([['Administrador', 'admin', 'admin'], ['Atendimento', 'atendente', 'atendente']] as [$nome, $login, $perfil]) {
+    // ---------- Usuários do painel ----------
+    // Senha inicial: em desenvolvimento (APP_ENV=dev) é "trocar123". Fora dele, vem da variável SENHA_ADMIN_INICIAL /
+    // SENHA_ATENDENTE_INICIAL (8+ caracteres); sem ela, o sistema sorteia uma e a registra no log do servidor, para um
+    // site público nunca nascer com a senha padrão conhecida.
+    $senhaInicial = static function (string $variavel, string $login): string {
+        if (\App\Core\Env::get('APP_ENV') === 'dev') {
+            return 'trocar123';
+        }
+        $valor = \App\Core\Env::get($variavel);
+        if (mb_strlen($valor) >= 8) {
+            return $valor;
+        }
+        $sorteada = bin2hex(random_bytes(6));
+        error_log("[seed] Usuário \"{$login}\" criado com senha sorteada (defina {$variavel} para escolher a sua): {$sorteada}");
+        return $sorteada;
+    };
+    foreach ([['Administrador', 'admin', 'admin', 'SENHA_ADMIN_INICIAL'], ['Atendimento', 'atendente', 'atendente', 'SENHA_ATENDENTE_INICIAL']] as [$nome, $login, $perfil, $variavel]) {
         $inserir('usuarios', [
-            'nome' => $nome, 'login' => $login, 'senha_hash' => password_hash('trocar123', PASSWORD_DEFAULT),
+            'nome' => $nome, 'login' => $login, 'senha_hash' => password_hash($senhaInicial($variavel, $login), PASSWORD_DEFAULT),
             'perfil' => $perfil, 'ativo' => 1, 'criado_em' => $agora,
         ]);
     }

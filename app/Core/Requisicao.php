@@ -64,8 +64,18 @@ final class Requisicao
         return is_string($valor) ? $valor : '';
     }
 
+    /**
+     * IP de quem está acessando (usado no bloqueio de tentativas de login). Atrás de um proxy (Render) o REMOTE_ADDR é o do
+     * proxy, e todo mundo cairia no mesmo contador: com TRUST_PROXY=1 vale o primeiro IP de X-Forwarded-For.
+     */
     public function ip(): string
     {
+        if (Env::get('TRUST_PROXY') === '1') {
+            $primeiro = trim(explode(',', (string) ($_SERVER['HTTP_X_FORWARDED_FOR'] ?? ''))[0]);
+            if (filter_var($primeiro, FILTER_VALIDATE_IP) !== false) {
+                return $primeiro;
+            }
+        }
         return (string) ($_SERVER['REMOTE_ADDR'] ?? '0.0.0.0');
     }
 

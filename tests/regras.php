@@ -355,6 +355,46 @@ conferir('Terça 12:00', $loja->estado($em('2026-11-10 12:00')), ['aberta' => fa
 conferir('Fechada à mão vence o horário', $loja->estado($em('2026-11-11 12:00'))['aberta'], false);
 conferir('Loja fechada recusa pedido', codigoDoErro(fn () => $pedidos->criar($base)), '409 loja_fechada');
 
+echo "\nPRODUÇÃO (Render): ambiente, IP atrás do proxy e senhas iniciais\n";
+putenv('FM_TESTE_AMBIENTE=do-processo');
+conferir('Sem .env, vale a variável de ambiente do processo', Env::get('FM_TESTE_AMBIENTE'), 'do-processo');
+Env::definir('FM_TESTE_AMBIENTE', 'do-env');
+conferir('Com o .env, ele vale primeiro', Env::get('FM_TESTE_AMBIENTE'), 'do-env');
+$_SERVER['REMOTE_ADDR'] = '10.0.0.1';
+$_SERVER['HTTP_X_FORWARDED_FOR'] = '203.0.113.9, 10.0.0.1';
+$requisicaoProxy = new Requisicao();
+Env::definir('TRUST_PROXY', '0');
+conferir('Sem TRUST_PROXY o IP é o da conexão (X-Forwarded-For não vale)', $requisicaoProxy->ip(), '10.0.0.1');
+Env::definir('TRUST_PROXY', '1');
+conferir('Com TRUST_PROXY o IP é o do cliente em X-Forwarded-For', $requisicaoProxy->ip(), '203.0.113.9');
+$_SERVER['HTTP_X_FORWARDED_FOR'] = 'lixo, 10.0.0.1';
+conferir('X-Forwarded-For inválido é ignorado', $requisicaoProxy->ip(), '10.0.0.1');
+Env::definir('TRUST_PROXY', '0');
+unset($_SERVER['HTTP_X_FORWARDED_FOR'], $_SERVER['REMOTE_ADDR']);
+
+$antesAmbiente = Env::get('APP_ENV');
+$logAntes = (string) ini_get('error_log');
+ini_set('error_log', sys_get_temp_dir() . '/familiamassas-seed-teste.log');   // a senha sorteada vai para o log, não para a tela
+$senhas = static function (string $ambiente) use ($banco): array {
+    Env::definir('APP_ENV', $ambiente);
+    $pdo = new PDO('sqlite::memory:', null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC]);
+    $pdo->exec((string) file_get_contents(dirname(__DIR__) . '/data/schema.sqlite.sql'));
+    (require dirname(__DIR__) . '/data/seed.php')($pdo);
+    return array_column($pdo->query('SELECT login, senha_hash FROM usuarios')->fetchAll(), 'senha_hash', 'login');
+};
+$emDev = $senhas('dev');
+conferir('Em desenvolvimento a senha inicial continua "trocar123"', [password_verify('trocar123', $emDev['admin']), password_verify('trocar123', $emDev['atendente'])], [true, true]);
+Env::definir('SENHA_ADMIN_INICIAL', 'minha-senha-forte');
+Env::definir('SENHA_ATENDENTE_INICIAL', 'curta');
+$emProducao = $senhas('producao');
+conferir('Em produção, a senha do admin vem da variável SENHA_ADMIN_INICIAL', password_verify('minha-senha-forte', $emProducao['admin']), true);
+conferir('Em produção, senha curta demais não vale: a do atendente é sorteada, nunca "trocar123"', [password_verify('curta', $emProducao['atendente']), password_verify('trocar123', $emProducao['atendente']), password_verify('trocar123', $emProducao['admin'])], [false, false, false]);
+Env::definir('APP_ENV', $antesAmbiente);
+Env::definir('SENHA_ADMIN_INICIAL', '');
+Env::definir('SENHA_ATENDENTE_INICIAL', '');
+ini_set('error_log', $logAntes);
+@unlink(sys_get_temp_dir() . '/familiamassas-seed-teste.log');
+
 echo "\nATUALIZAÇÃO DO BANCO (migrações)\n";
 $ultima = max(array_map(static fn (string $caminho): int => (int) basename($caminho), glob(dirname(__DIR__) . '/data/migracoes/*.php') ?: [0]));
 conferir('A versão do esquema é a da última migração', App\Core\Banco::VERSAO_DO_ESQUEMA, $ultima);

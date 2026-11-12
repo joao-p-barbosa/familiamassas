@@ -12,6 +12,12 @@ PHP 8.2+ puro, SQLite (Postgres/Neon depois), HTML + CSS + JavaScript sem framew
 
 O banco `data/restaurante.sqlite` é criado sozinho com dados de exemplo na primeira vez. Um banco que já existe é atualizado sozinho (migrações em `data/migracoes/`, com cópia de segurança em `data/backups/`). Os usuários (proprietário e atendente) e a senha inicial estão em `docs/PROGRESSO.md`. Troque a senha antes de usar de verdade.
 
+## Publicar na Render
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/joao-p-barbosa/familiamassas)
+
+Docker (PHP + Apache) com HTTPS. No plano gratuito o disco é temporário (demonstração); para guardar pedidos de verdade, use disco persistente. Passo a passo, limites e variáveis em `docs/DEPLOY.md`. A Vercel não roda este sistema (PHP + SQLite em arquivo).
+
 ## Testes
 
 ```
@@ -27,4 +33,5 @@ node tests/contraste.mjs
 - `docs/DECISOES.md`: decisões com data e motivo
 - `docs/API.md`: contrato da API
 - `docs/MODELO-DADOS.md`: tabelas e regras do banco
+- `docs/DEPLOY.md`: publicar na Render (e por que não na Vercel)
 - `PROMPT-MVP.md`: briefing original do projeto

@@ -1,0 +1,31 @@
+# Blueprint da Render: cria o serviço web do sistema (cardápio + painel) a partir deste repositório.
+# Passo a passo e limites do plano gratuito: docs/DEPLOY.md
+services:
+  - type: web
+    name: familia-massas
+    runtime: docker
+    plan: free
+    region: virginia            # a mais próxima do Brasil entre as da Render
+    healthCheckPath: /api/cardapio
+    autoDeploy: true            # cada push na main publica de novo
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: APP_TIMEZONE
+        value: America/Sao_Paulo
+      - key: APP_KEY            # assina o link do WhatsApp; a Render sorteia
+        generateValue: true
+      - key: TRUST_PROXY        # a Render fica na frente do site: vale o IP do X-Forwarded-For
+        value: "1"
+      - key: SENHA_ADMIN_INICIAL        # você digita ao criar o serviço (8+ caracteres)
+        sync: false
+      - key: SENHA_ATENDENTE_INICIAL    # idem
+        sync: false
+      # Para guardar os pedidos de verdade (exige plano pago): troque "plan: free" por "plan: starter",
+      # descomente o disco abaixo e a variável DATA_DIR.
+      # - key: DATA_DIR
+      #   value: /var/data
+    # disk:
+    #   name: dados
+    #   mountPath: /var/data
+    #   sizeGB: 1
