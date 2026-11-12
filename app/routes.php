@@ -8,6 +8,7 @@ use App\Controllers\AdminConfigController;
 use App\Controllers\AdminPedidoController;
 use App\Controllers\PainelController;
 use App\Controllers\PublicoController;
+use App\Controllers\WhatsAppController;
 use App\Core\Roteador;
 
 return static function (Roteador $r): void {
@@ -17,6 +18,7 @@ return static function (Roteador $r): void {
     $atendimentos = new AdminAtendimentoController();
     $config = new AdminConfigController();
     $cardapio = static fn (): AdminCardapioController => new AdminCardapioController();
+    $whatsapp = new WhatsAppController();
 
     // ---------- Páginas do cliente ----------
     $r->get('/', $publico->paginaCardapio(...));
@@ -63,6 +65,16 @@ return static function (Roteador $r): void {
 
     $r->get('/api/admin/configuracoes', $config->ler(...));
     $r->put('/api/admin/configuracoes', $config->salvar(...));
-    $r->get('/api/admin/whatsapp', $config->whatsapp(...));
     $r->post('/api/admin/whatsapp/link', $config->linkDeTeste(...));
+
+    // ---------- WhatsApp (Cloud API) ----------
+    // Webhook da Meta: sem sessão; vale a assinatura X-Hub-Signature-256 (POST) e o verify token (GET).
+    $r->get('/webhook/whatsapp.php', $whatsapp->verificar(...));
+    $r->post('/webhook/whatsapp.php', $whatsapp->receber(...));
+    $r->get('/cron/whatsapp', $whatsapp->cron(...));
+    $r->get('/api/admin/whatsapp', $whatsapp->situacao(...));
+    $r->post('/api/admin/whatsapp/simular', $whatsapp->simular(...));
+    $r->get('/api/admin/whatsapp/conversa', $whatsapp->conversa(...));
+    $r->post('/api/admin/whatsapp/conversas/{telefone}/responder', $whatsapp->responder(...));
+    $r->post('/api/admin/whatsapp/conversas/{telefone}/bot', $whatsapp->devolverAoBot(...));
 };

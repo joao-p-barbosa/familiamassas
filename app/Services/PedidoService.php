@@ -8,6 +8,7 @@ use App\Repositories\AtendimentoRepository;
 use App\Repositories\CardapioRepository;
 use App\Repositories\ConfigRepository;
 use App\Repositories\PedidoRepository;
+use App\WhatsApp\Avisos;
 
 // Regras do pedido: validar o que veio do cardápio, recalcular preços e controlar as mudanças de status.
 final class PedidoService
@@ -37,7 +38,21 @@ final class PedidoService
         private readonly LojaService $loja = new LojaService(),
         private readonly TokenWhatsApp $token = new TokenWhatsApp(),
         private readonly AtendimentoRepository $atendimentos = new AtendimentoRepository(),
+        private readonly Avisos $avisos = new Avisos(),
     ) {}
+
+    /** Pedido criado ou com status novo: aviso ao cliente pelo WhatsApp (só se ele veio pelo bot). Nunca derruba o pedido. */
+    private function avisarCliente(int $id): void
+    {
+        try {
+            $pedido = $this->pedidos->porId($id);
+            if ($pedido !== null) {
+                $this->avisos->pedidoMudou($pedido);
+            }
+        } catch (\Throwable $e) {
+            error_log('[whatsapp] aviso do pedido ' . $id . ' não entrou na fila: ' . $e->getMessage());
+        }
+    }
 
     /**
      * Pedido feito pelo cliente no cardápio. Nada de preço vindo do navegador é aceito:
@@ -109,7 +124,7 @@ final class PedidoService
         }
         $this->conferirTotal($dados, $total);
 
-        return $this->pedidos->criar([
+        $criado = $this->pedidos->criar([
             'cliente_nome' => $nome,
             'cliente_telefone' => $telefone,
             'tipo' => $tipo,
@@ -130,6 +145,8 @@ final class PedidoService
             'total_centavos' => $total,
             'origem' => $telefoneDoToken !== null ? 'whatsapp' : 'cardapio',
         ], $itens);
+        $this->avisarCliente($criado['id']);   // "Recebemos seu pedido #123" (pedido que veio pelo bot)
+        return $criado;
     }
 
     /**
@@ -232,6 +249,7 @@ final class PedidoService
         if (!$this->pedidos->mudarStatus($id, $atual, $para, $motivo, $usuario['id'])) {
             throw new ErroHttp(409, 'conflito', 'Outra pessoa acabou de mover este pedido. A tela já vai atualizar.');
         }
+        $this->avisarCliente($id);   // cada avanço no Kanban avisa o cliente que veio pelo WhatsApp
         return $this->pedidos->porId($id);
     }
 

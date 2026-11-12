@@ -109,7 +109,28 @@ O mapa do fechamento do pedido de entrega fala **direto do navegador** com o Ope
 
 O OpenStreetMap exige saber de que site vem o pedido, então só essas chamadas mandam o endereço do site (`referrerPolicy: origin`); o resto do site continua com `Referrer-Policy: same-origin`. As coordenadas do cliente vão para o Nominatim, que é um serviço de voluntários com limite de uso (1 consulta por segundo, sem uso pesado). Com a loja crescendo, o caminho é um provedor de mapas contratado (a troca é a URL das imagens em `public/assets/js/cardapio/mapa.js`). A biblioteca Leaflet 1.9.4 fica no próprio site em `public/assets/vendor/leaflet/` (licença BSD-2 junto).
 
-## Ainda não existe (Etapa 4)
+## WhatsApp (Etapa 4)
 
-- `GET/POST /webhook/whatsapp.php` (verificação da Meta, assinatura `X-Hub-Signature-256`, idempotência por `wamid`).
-- Envio de avisos de status ao cliente e retentativa por cron.
+### Webhook da Meta (sem sessão)
+| Método e rota | O que faz |
+|---|---|
+| `GET /webhook/whatsapp.php?hub.mode=subscribe&hub.verify_token=…&hub.challenge=…` | Cadastro do webhook na Meta. Verify token igual a `WHATSAPP_VERIFY_TOKEN` → `200` com o `hub.challenge` em texto puro; senão `403`. |
+| `POST /webhook/whatsapp.php` | Mensagens dos clientes e status das nossas mensagens. Exige `X-Hub-Signature-256: sha256=<HMAC-SHA256 do corpo cru com WHATSAPP_APP_SECRET>`; inválida ou ausente → `401 assinatura_invalida`. Responde `200 {ok, mensagens, repetidas, falhas_de_entrega}`. Mesmo `wamid` de novo (a Meta reenvia) → conta em `repetidas` e nada é respondido de novo (D57). |
+| `GET /cron/whatsapp?chave=<CRON_TOKEN>` | Processa a fila de avisos (até 20). Para um serviço de cron externo, opcional: a fila também anda quando o painel consulta os pedidos e quando chega evento no webhook. Sem `CRON_TOKEN` ou chave errada → `404`. |
+
+### Painel (proprietário)
+| Método e rota | O que faz |
+|---|---|
+| `GET /api/admin/whatsapp` | Situação: `simulado`, credenciais preenchidas (nunca o valor), `https`, `webhook` (endereço para cadastrar na Meta), `modelo_status`, `humano_horas`, números das últimas 24 h (`recebidas_24h`, `enviadas_24h`, `falhas_24h`, `envios_pendentes`, `pedidos_whatsapp_hoje`), `recentes` (sem texto e com telefone mascarado), `fila` (avisos esperando ou que a fila desistiu) e `atendimento` (conversas em atendimento humano). |
+| `POST /api/admin/whatsapp/simular` | `{telefone, texto?, botao?: "pedir"\|"acompanhar"\|"atendente", nome?}` → faz de conta que o cliente mandou a mensagem; passa pelo mesmo bot do webhook. Só no modo simulado (com credenciais reais → `409 whatsapp_real`). Devolve a conversa. |
+| `GET /api/admin/whatsapp/conversa?telefone=` | `{telefone, modo: "bot"\|"humano", humano_ate, janela_aberta, mensagens: [{direcao, tipo, em, texto, botoes, link, erro, nome}]}`. |
+| `POST /api/admin/whatsapp/conversas/{telefone}/responder` | `{texto}` → resposta da equipe. Fora da janela de 24 h → `409 janela_fechada`. Falha na Meta → `502 whatsapp_falhou`. |
+| `POST /api/admin/whatsapp/conversas/{telefone}/bot` | Encerra o atendimento humano (o bot volta a responder). |
+| `POST /api/admin/whatsapp/link` | `{telefone}` → `{url, validade_minutos}`: o mesmo link do botão "Fazer pedido". |
+
+### O que o bot envia (Cloud API: `POST https://graph.facebook.com/<versão>/<WHATSAPP_PHONE_NUMBER_ID>/messages`)
+- **Qualquer mensagem** (fora do atendimento humano) → texto de boas-vindas com o status da loja + 3 botões de resposta: `pedir`, `acompanhar`, `atendente`.
+- **`pedir`** → loja aberta: mensagem com botão de link (`cta_url`) para `<site>/?t=<token>`; loja fechada: texto com o horário, sem link.
+- **`acompanhar`** → status do último pedido em andamento do telefone e o link `/pedido/{codigo}`; sem pedido: botões `pedir` e `atendente`.
+- **`atendente`** → modo humano por `whatsapp_humano_horas` (padrão 2 h): o bot fica em silêncio e a conversa aparece na caixa de entrada do painel.
+- **Avisos de status** (só pedidos com `origem = whatsapp`, D58): "Recebemos seu pedido #N" (total, previsão e link), "em preparo", "pronto", "saiu para entrega", "esperando você no balcão", "concluído", "cancelado" (com o motivo). Dentro da janela de 24 h vai texto; fora dela, o template `WHATSAPP_MODELO_STATUS` (padrão `atualizacao_pedido`, parâmetros `{{1}}` número e `{{2}}` status).

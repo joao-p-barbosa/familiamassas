@@ -358,6 +358,157 @@ $repo->mudarStatus($foraDoPlaneta['id'], 'novo', 'concluido', null, null);
 App\Core\Banco::conexao()->prepare('UPDATE pedidos SET status_atualizado_em = ? WHERE id = ?')->execute([gmdate('Y-m-d H:i:s', time() - 4 * 3600), $foraDoPlaneta['id']]);
 conferir('Pedido encerrado há mais de 3 h sai da Home', count($acompanhamento->paraHome($req)), 0);
 
+echo "\nWHATSAPP: webhook, bot, avisos de status e atendimento humano (Etapa 4)\n";
+// Um mensageiro de mentira: guarda o que seria enviado e devolve a resposta que o teste quiser.
+$falsoWhats = new class implements App\WhatsApp\Mensageiro {
+    public array $enviadas = [];
+    public array $respostas = [];
+    public function enviar(string $telefone, array $mensagem): array
+    {
+        $this->enviadas[] = ['para' => $telefone] + $mensagem;
+        return array_shift($this->respostas) ?? ['ok' => true, 'wamid' => 'teste.' . bin2hex(random_bytes(6)), 'erro' => null, 'transitorio' => false, 'janela_fechada' => false];
+    }
+};
+App\WhatsApp\WhatsApp::usarMensageiro($falsoWhats);
+Env::definir('APP_URL', 'https://exemplo.test');
+App\Core\Banco::conexao()->exec('DELETE FROM whatsapp_envios_pendentes');   // avisos de pedidos das seções anteriores não contam aqui
+$logAntesWa = (string) ini_get('error_log');
+ini_set('error_log', sys_get_temp_dir() . '/familiamassas-whatsapp-teste.log');   // as falhas simuladas de propósito não poluem a saída
+(new ConfigRepository())->salvar(['funcionamento' => 'aberta']);
+$webhook = new App\WhatsApp\Webhook();
+$conversasWa = new App\WhatsApp\Conversas();
+$avisosWa = new App\WhatsApp\Avisos();
+$foneWa = '5511987650001';
+$mensagemWa = static fn (string $wamid, string $texto, ?string $botao = null): array => ['entry' => [['changes' => [['value' => [
+    'contacts' => [['wa_id' => $foneWa, 'profile' => ['name' => 'Maria Silva']]],
+    'messages' => [$botao === null
+        ? ['id' => $wamid, 'from' => $foneWa, 'type' => 'text', 'text' => ['body' => $texto]]
+        : ['id' => $wamid, 'from' => $foneWa, 'type' => 'interactive', 'interactive' => ['type' => 'button_reply', 'button_reply' => ['id' => $botao, 'title' => $texto]]]],
+]]]]]];
+$ultimaWa = static function () use ($falsoWhats): array {
+    return $falsoWhats->enviadas[count($falsoWhats->enviadas) - 1] ?? [];
+};
+
+conferir('GET da Meta: verify token certo devolve o hub.challenge', App\WhatsApp\Webhook::desafio('subscribe', 'segredo-verificacao', '12345', 'segredo-verificacao'), '12345');
+conferir('GET da Meta: verify token errado, ou sem verify token configurado, é recusado', [App\WhatsApp\Webhook::desafio('subscribe', 'outro', '1', 'segredo-verificacao'), App\WhatsApp\Webhook::desafio('subscribe', '', '1', '')], [null, null]);
+$corpoWa = '{"entry":[]}';
+$assinaturaWa = 'sha256=' . hash_hmac('sha256', $corpoWa, 'app-secret-de-teste');
+conferir('Assinatura X-Hub-Signature-256 certa é aceita', App\WhatsApp\Webhook::assinaturaValida($corpoWa, $assinaturaWa, 'app-secret-de-teste'), true);
+conferir('Corpo alterado, assinatura sem "sha256=" ou sem app secret: recusado', [
+    App\WhatsApp\Webhook::assinaturaValida($corpoWa . ' ', $assinaturaWa, 'app-secret-de-teste'),
+    App\WhatsApp\Webhook::assinaturaValida($corpoWa, substr($assinaturaWa, 7), 'app-secret-de-teste'),
+    App\WhatsApp\Webhook::assinaturaValida($corpoWa, $assinaturaWa, ''),
+], [false, false, false]);
+
+$antes = count($falsoWhats->enviadas);
+$r = $webhook->processar($mensagemWa('wamid.oi.1', 'oi'));
+$boasVindas = $ultimaWa();
+conferir('"oi" → boas-vindas com o nome do cliente, o status da loja e os 3 botões', [
+    $r['mensagens'], count($falsoWhats->enviadas) - $antes, $boasVindas['type'] ?? null,
+    str_contains($boasVindas['interactive']['body']['text'] ?? '', 'Olá, Maria!'), str_contains($boasVindas['interactive']['body']['text'] ?? '', 'Aberto agora'),
+    array_column(array_column($boasVindas['interactive']['action']['buttons'] ?? [], 'reply'), 'id'),
+], [1, 1, 'interactive', true, true, ['pedir', 'acompanhar', 'atendente']]);
+$r = $webhook->processar($mensagemWa('wamid.oi.1', 'oi'));
+conferir('Evento repetido da Meta (mesmo wamid): não responde de novo', [$r['repetidas'], $r['mensagens'], count($falsoWhats->enviadas) - $antes], [1, 0, 1]);
+conferir('A mensagem do cliente abre a janela de 24 h', $conversasWa->janelaAberta($foneWa), true);
+
+$webhook->processar($mensagemWa('wamid.pedir.1', 'Fazer pedido', 'pedir'));
+$link = $ultimaWa();
+$urlDoLink = $link['interactive']['action']['parameters']['url'] ?? '';
+parse_str((string) parse_url($urlDoLink, PHP_URL_QUERY), $consultaDoLink);
+conferir('[Fazer pedido] → botão com o link do cardápio; o token do link leva o telefone de quem pediu', [
+    $link['interactive']['type'] ?? null, str_starts_with($urlDoLink, 'https://exemplo.test/?t='), (new TokenWhatsApp())->validar($consultaDoLink['t'] ?? ''),
+], ['cta_url', true, $foneWa]);
+(new ConfigRepository())->salvar(['funcionamento' => 'fechada']);
+$webhook->processar($mensagemWa('wamid.pedir.2', 'Fazer pedido', 'pedir'));
+conferir('Loja fechada: [Fazer pedido] avisa o horário e não manda o link', [$ultimaWa()['type'] ?? null, str_contains($ultimaWa()['text']['body'] ?? '', 'fechados')], ['text', true]);
+(new ConfigRepository())->salvar(['funcionamento' => 'aberta']);
+
+$webhook->processar($mensagemWa('wamid.acomp.1', 'Acompanhar pedido', 'acompanhar'));
+conferir('[Acompanhar pedido] sem pedido em andamento: oferece fazer um ou falar com atendente', array_column(array_column($ultimaWa()['interactive']['action']['buttons'] ?? [], 'reply'), 'id'), ['pedir', 'atendente']);
+
+// O cliente abre o link e faz o pedido no cardápio: origem whatsapp, e o aviso "Recebemos" entra na fila.
+$pedidoWa = $pedidos->criar($base + ['t' => $consultaDoLink['t']]);
+$doBancoWa = $repo->porId($pedidoWa['id']);
+conferir('Pedido pelo link do bot: origem "whatsapp" e o telefone vem do token', [$doBancoWa['origem'], $doBancoWa['cliente_telefone']], ['whatsapp', $foneWa]);
+$antes = count($falsoWhats->enviadas);
+conferir('O aviso "Recebemos seu pedido" é enviado pela fila (dentro da janela, texto livre)', [
+    $avisosWa->processar(), count($falsoWhats->enviadas) - $antes, $ultimaWa()['type'] ?? null, str_contains($ultimaWa()['text']['body'] ?? '', "Recebemos seu pedido #{$pedidoWa['id']}"),
+], [1, 1, 'text', true]);
+conferir('A fila ficou vazia e a conversa guarda o último pedido', [count($avisosWa->pendentes()), $conversasWa->conversa($foneWa)['ultimo_pedido_id']], [0, $pedidoWa['id']]);
+$webhook->processar($mensagemWa('wamid.acomp.2', 'Acompanhar pedido', 'acompanhar'));
+conferir('[Acompanhar pedido] com pedido: número, status e link de acompanhamento', [
+    str_contains($ultimaWa()['text']['body'] ?? '', "Pedido #{$pedidoWa['id']}: Recebido"), str_contains($ultimaWa()['text']['body'] ?? '', "https://exemplo.test/pedido/{$doBancoWa['codigo']}"),
+], [true, true]);
+
+$pedidos->mudarStatus($pedidoWa['id'], 'em_preparo', null, $atendente);
+$avisosWa->processar();
+conferir('Avanço no Kanban → aviso ao cliente ("está em preparo")', str_contains($ultimaWa()['text']['body'] ?? '', 'está em preparo'), true);
+$pedidos->mudarStatus($pedidoWa['id'], 'pronto', null, $atendente);
+$pedidos->mudarStatus($pedidoWa['id'], 'aguardando_retirada', null, $atendente);
+$antes = count($falsoWhats->enviadas);
+$avisosWa->processar();
+conferir('Dois avanços seguidos antes de enviar: vai só o mais novo ("esperando você no balcão")', [count($falsoWhats->enviadas) - $antes, str_contains($ultimaWa()['text']['body'] ?? '', 'esperando você no balcão')], [1, true]);
+
+App\Core\Banco::conexao()->prepare('UPDATE whatsapp_conversas SET ultima_msg_cliente_em = ? WHERE telefone = ?')->execute([gmdate('Y-m-d H:i:s', time() - 25 * 3600), $foneWa]);
+$pedidos->mudarStatus($pedidoWa['id'], 'concluido', null, $atendente);
+$avisosWa->processar();
+conferir('Fora da janela de 24 h: o aviso vai pelo template aprovado (número e status como parâmetros)', [
+    $ultimaWa()['type'] ?? null, $ultimaWa()['template']['name'] ?? null, array_column($ultimaWa()['template']['components'][0]['parameters'] ?? [], 'text'),
+], ['template', 'atualizacao_pedido', [(string) $pedidoWa['id'], 'Concluído']]);
+
+$pedidoSemBot = $pedidos->criar($base);
+$pedidos->mudarStatus($pedidoSemBot['id'], 'em_preparo', null, $atendente);
+conferir('Pedido feito direto no cardápio (sem o bot): nenhum aviso pelo WhatsApp', count($avisosWa->pendentes()), 0);
+
+// Falhas: tentativa de novo (com espera) quando a falha é passageira; desiste quando é definitiva.
+$webhook->processar($mensagemWa('wamid.oi.2', 'oi de novo'));   // reabre a janela
+$pedidoFalha = $pedidos->criar($base + ['t' => (new TokenWhatsApp())->gerar($foneWa)]);
+$falsoWhats->respostas[] = ['ok' => false, 'wamid' => null, 'erro' => 'Meta 503/0: fora do ar', 'transitorio' => true, 'janela_fechada' => false];
+$avisosWa->processar();
+$filaWa = $avisosWa->pendentes();
+conferir('Falha passageira: o aviso fica na fila, com 1 tentativa, o erro e a próxima tentativa marcada', [count($filaWa), $filaWa[0]['tentativas'] ?? null, $filaWa[0]['ultimo_erro'] ?? null, $filaWa[0]['desistiu'] ?? null, ($filaWa[0]['proxima_tentativa_em'] ?? '') > gmdate('Y-m-d\TH:i:s\Z')], [1, 1, 'Meta 503/0: fora do ar', false, true]);
+App\Core\Banco::conexao()->exec("UPDATE whatsapp_envios_pendentes SET proxima_tentativa_em = '2000-01-01 00:00:00'");
+$antes = count($falsoWhats->enviadas);
+conferir('Na hora marcada a fila tenta de novo e entrega', [$avisosWa->processar(), count($avisosWa->pendentes()), str_contains($ultimaWa()['text']['body'] ?? '', "Recebemos seu pedido #{$pedidoFalha['id']}")], [1, 0, true]);
+$pedidos->mudarStatus($pedidoFalha['id'], 'em_preparo', null, $atendente);
+$falsoWhats->respostas[] = ['ok' => false, 'wamid' => null, 'erro' => 'Meta 400/100: número inválido', 'transitorio' => false, 'janela_fechada' => false];
+$avisosWa->processar();
+conferir('Falha definitiva (ex.: número inválido): a fila desiste e a tela mostra o erro', [$avisosWa->pendentes()[0]['desistiu'] ?? null, $avisosWa->pendentes()[0]['ultimo_erro'] ?? null], [true, 'Meta 400/100: número inválido']);
+conferir('Aviso que a fila desistiu não volta a ser tentado', $avisosWa->processar(), 0);
+App\Core\Banco::conexao()->exec('DELETE FROM whatsapp_envios_pendentes');
+$pedidos->mudarStatus($pedidoFalha['id'], 'pronto', null, $atendente);
+$falsoWhats->respostas[] = ['ok' => false, 'wamid' => null, 'erro' => 'Meta 400/131047: fora da janela', 'transitorio' => false, 'janela_fechada' => true];
+$avisosWa->processar();
+conferir('A Meta diz que a janela fechou: a janela é dada como fechada e o aviso volta já, agora como template', [$conversasWa->janelaAberta($foneWa), $avisosWa->processar(), $ultimaWa()['type'] ?? null], [false, 1, 'template']);
+
+// Atendimento humano
+$webhook->processar($mensagemWa('wamid.humano.1', 'Falar com atendente', 'atendente'));
+conferir('[Falar com atendente] → modo humano, com aviso ao cliente', [$conversasWa->emAtendimentoHumano($foneWa), str_contains($ultimaWa()['text']['body'] ?? '', 'equipe vai responder')], [true, true]);
+$antes = count($falsoWhats->enviadas);
+$webhook->processar($mensagemWa('wamid.humano.2', 'olá, alguém aí?'));
+$mensagensWa = $conversasWa->mensagens($foneWa);
+conferir('No modo humano o bot fica em silêncio (a mensagem fica na caixa de entrada)', [count($falsoWhats->enviadas) - $antes, $mensagensWa[count($mensagensWa) - 1]['texto'] ?? null], [0, 'olá, alguém aí?']);
+$caixa = $conversasWa->emAtendimento();
+conferir('A caixa de entrada lista a conversa, com o nome do cliente e a janela aberta', [count($caixa), $caixa[0]['telefone'] ?? null, $caixa[0]['nome'] ?? null, $caixa[0]['janela_aberta'] ?? null], [1, $foneWa, 'Maria Silva', true]);
+App\Core\Banco::conexao()->prepare('UPDATE whatsapp_conversas SET humano_ate = ? WHERE telefone = ?')->execute([gmdate('Y-m-d H:i:s', time() - 60), $foneWa]);
+$antes = count($falsoWhats->enviadas);
+$webhook->processar($mensagemWa('wamid.humano.3', 'oi'));
+conferir('Passou o prazo do atendimento humano: o bot volta sozinho e responde', [$conversasWa->emAtendimentoHumano($foneWa), count($falsoWhats->enviadas) - $antes], [false, 1]);
+$webhook->processar($mensagemWa('wamid.humano.4', 'Falar com atendente', 'atendente'));
+$conversasWa->voltarAoBot($foneWa);
+conferir('"Devolver ao bot" no painel encerra o atendimento humano', $conversasWa->emAtendimentoHumano($foneWa), false);
+
+// Status de entrega que a Meta manda de volta: só as falhas ficam registradas, uma vez só.
+$statusFalho = ['entry' => [['changes' => [['value' => ['statuses' => [['id' => 'wamid.saida.9', 'status' => 'failed', 'recipient_id' => $foneWa, 'errors' => [['code' => 131026, 'title' => 'Message undeliverable']]]]]]]]]];
+conferir('Status "failed" da Meta fica registrado uma vez (repetido não duplica)', [$webhook->processar($statusFalho)['falhas_de_entrega'], $webhook->processar($statusFalho)['falhas_de_entrega']], [1, 0]);
+conferir('A atividade recente mostra o telefone mascarado e nunca o texto', [($conversasWa->recentes(1)[0]['telefone'] ?? ''), array_key_exists('texto', $conversasWa->recentes(1)[0] ?? [])], ['55 11 9••••-0001', false]);
+conferir('Sem credenciais da Meta o WhatsApp fica no modo simulado', App\WhatsApp\WhatsApp::simulado(), true);
+App\WhatsApp\WhatsApp::usarMensageiro(null);
+Env::definir('APP_URL', '');
+ini_set('error_log', $logAntesWa);
+@unlink(sys_get_temp_dir() . '/familiamassas-whatsapp-teste.log');
+
 echo "\nTOKEN DO WHATSAPP\n";
 $tokens = new TokenWhatsApp();
 $agora = 1_800_000_000;

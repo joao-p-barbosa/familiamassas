@@ -33,7 +33,10 @@ final class AdminPedidoController
         if ($usuario['perfil'] !== 'admin') {
             unset($fechamento['faturamento_centavos']);
         }
-        Resposta::json(['agora' => $agora, 'pedidos' => $pedidos->paraPainel($desdeBanco), 'fechamento' => $fechamento]);
+        $lista = $pedidos->paraPainel($desdeBanco);
+        // O painel consulta a cada poucos segundos durante o expediente: é o "relógio" da fila de avisos do WhatsApp.
+        WhatsAppController::processarFila(3);
+        Resposta::json(['agora' => $agora, 'pedidos' => $lista, 'fechamento' => $fechamento]);
     }
 
     public function detalhe(Requisicao $req): void

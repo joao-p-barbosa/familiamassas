@@ -88,6 +88,15 @@ final class PedidoRepository
         return $pedido ? $this->completar([$pedido], true)[0] : null;
     }
 
+    /** O pedido mais recente ainda em andamento deste telefone (o "Acompanhar pedido" do bot do WhatsApp). */
+    public function ultimoAbertoDoTelefone(string $telefone): ?array
+    {
+        $sql = Banco::conexao()->prepare("SELECT * FROM pedidos WHERE cliente_telefone = ? AND status NOT IN ('concluido', 'cancelado') ORDER BY id DESC LIMIT 1");
+        $sql->execute([$telefone]);
+        $pedido = $sql->fetch();
+        return $pedido ? $this->completar([$pedido], true)[0] : null;
+    }
+
     /**
      * Pedidos para o painel.
      * Sem $desde: só os que estão abertos. Com $desde: o que mudou desde então, inclusive o que acabou de encerrar

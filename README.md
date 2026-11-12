@@ -1,8 +1,8 @@
 # Família Massas · cardápio e painel
 
-Sistema de pedidos para um restaurante de massas do tipo "monte seu prato": cardápio web para o cliente, painel com quadro de pedidos para a equipe, Salão (atendimentos com conta, mesa ou pra viagem e fechamento com pagamento) para a atendente, histórico para o proprietário, impressão de comanda e (em breve) bot do WhatsApp.
+Sistema de pedidos para um restaurante de massas do tipo "monte seu prato": cardápio web para o cliente, painel com quadro de pedidos para a equipe, Salão (atendimentos com conta, mesa ou pra viagem e fechamento com pagamento) para a atendente, histórico para o proprietário, impressão de comanda e bot do WhatsApp (Cloud API oficial: link do cardápio, acompanhamento, avisos de status e atendimento humano; com simulador enquanto não há conta Meta).
 
-PHP 8.2+ puro, SQLite (Postgres/Neon depois), HTML + CSS + JavaScript sem framework e sem build. O painel é uma SPA em JavaScript puro (módulos ES, History API).
+PHP 8.2+ puro, SQLite no computador e Postgres (Neon) na hospedagem, HTML + CSS + JavaScript sem framework e sem build. O painel é uma SPA em JavaScript puro (módulos ES, History API).
 
 ## Rodar no Windows
 

@@ -25,6 +25,12 @@ final class Requisicao
         $this->caminho = $caminho === '/' ? '/' : rtrim($caminho, '/');
     }
 
+    /** Corpo cru, como chegou (o webhook do WhatsApp confere a assinatura sobre estes bytes exatos). */
+    public function corpoCru(): string
+    {
+        return (string) file_get_contents('php://input');
+    }
+
     /** Corpo JSON da requisição, já como array. */
     public function json(): array
     {

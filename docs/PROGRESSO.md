@@ -10,7 +10,7 @@
 | 1 · Design system | ✅ Feito. `/styleguide` com troca de tema ao vivo. |
 | 2 · Cardápio + checkout | ✅ Feito. |
 | 3 · Painel: login, Kanban, impressão | ✅ Feito (impressão testada só em simulação; falta a impressora real). O modo cozinha foi retirado na rodada de melhorias. |
-| 4 · Bot WhatsApp | ⏳ Não começou. Já existem: tabelas, token assinado do link, link de teste e tela de integração. |
+| 4 · Bot WhatsApp | ✅ Feito e testado no **modo simulado** e com o webhook por HTTP (assinatura, verificação, evento repetido). ⚠️ Falta ligar na Meta de verdade (conta, número, token e template aprovado). Decisões D57 a D62. |
 | 5 · Edição do cardápio | ✅ Feito (adiantado, faz parte da "página de gestão"). |
 | 6 · Revisão final e piloto | ⏳ Não começou. |
 
@@ -25,7 +25,7 @@
 **Testes automáticos** (na raiz):
 
 ```
-php -d extension=pdo_sqlite tests/regras.php   # 167 testes em segundos no SQLite; com o argumento "pg" e TEST_DATABASE_URL no .env rodam também no Postgres/Neon (uns 10 min): preço, grupos, pedido, atendimentos e fechar conta, histórico, tempo, fechamento do dia, perfis, cookie da Home, status, impressão, token, horários, produção, acesso em paralelo, migração
+php -d extension=pdo_sqlite tests/regras.php   # 198 testes em segundos no SQLite; com o argumento "pg" e TEST_DATABASE_URL no .env rodam também no Postgres/Neon (uns 10 min): preço, grupos, pedido, atendimentos e fechar conta, histórico, tempo, fechamento do dia, perfis, cookie da Home, status, impressão, token, horários, produção, acesso em paralelo, migração
 node tests/preco.test.mjs                      # o preço do navegador bate com o do servidor
 node tests/tempo.test.mjs                      # as regras de tempo e cor do cartão no navegador
 node tests/contraste.mjs                       # contraste AA dos 4 temas
@@ -56,7 +56,7 @@ Cliente                                Painel (/painel), com menu lateral retrá
 
 **Ciclo no quadro (Kanban de 3 colunas):** pedido novo aparece em até ~5 s (som e destaque) → a estação de impressão imprime a comanda uma vez → "Iniciar preparo" → "Marcar pronto" → "Saiu para entrega" ou "Chamar para retirada" (continuam na coluna Prontos, com o status no cartão) → "Concluir" (o cartão sai do quadro e entra nos números de "Hoje"). Mesa e pra viagem: "Marcar pronto" → "Concluir". Cancelar a qualquer momento, com motivo. O cartão fica amarelo aos 20 min e vermelho aos 30 min de Novo + Em preparo.
 
-**Conversa do bot (Etapa 4, ainda não feito):** qualquer mensagem → boas-vindas + 3 botões → "Fazer pedido" manda o link `/?t=<token>` (já funciona: teste em Painel → WhatsApp → Link de teste).
+**Conversa do bot (Etapa 4):** qualquer mensagem → boas-vindas com o status da loja + 3 botões. **Fazer pedido** → botão com o link `/?t=<token>` (loja fechada: avisa o horário, sem link) → o cliente monta o prato com o WhatsApp já preenchido → pedido chega no quadro com origem "WhatsApp" → "Recebemos seu pedido #N" e um aviso a cada avanço no Kanban. **Acompanhar pedido** → status do pedido em andamento. **Falar com atendente** → o bot fica em silêncio por 2 h e a conversa aparece na caixa de entrada da tela WhatsApp, onde a equipe responde. Sem credenciais da Meta, tudo isso roda no **simulador** da tela WhatsApp.
 
 ## Checklists dos gates
 
@@ -87,13 +87,24 @@ Cliente                                Painel (/painel), com menu lateral retrá
 - ⚠️ Funciona por teclado ✅ e com clique/arrasto ✅; **falta testar num tablet de verdade**
 - ✅ Perfis veem só o que devem (testado pela API: atendente não lê nem salva configurações, não vê o WhatsApp, não cria nem oculta item do cardápio, só marca esgotado; sem CSRF → 403). O perfil Cozinha foi retirado (D42).
 
+### GATE 4 (bot do WhatsApp)
+Testado no modo simulado (simulador da tela WhatsApp, no navegador) e com o webhook por HTTP (curl com assinatura). `⚠️` = depende da Meta ou de hardware.
+- ✅ "oi" → boas-vindas e 3 botões → **Fazer pedido** → link → pedido no cardápio (WhatsApp preenchido e travado) → aparece no Kanban com origem **WhatsApp**. ⚠️ Com o número de verdade, falta a conta Meta; ⚠️ a comanda impressa depende da impressora real (a impressão automática já roda para qualquer pedido novo).
+- ✅ Cada avanço no Kanban gera aviso ao cliente: "Recebemos seu pedido #4", "está em preparo"… (texto dentro da janela de 24 h; template fora dela, conferido nos testes). Dois avanços seguidos mandam só o mais novo.
+- ✅ Evento repetido da Meta não duplica resposta (mesmo `wamid`: `repetidas: 1`, nenhuma mensagem nova), nem pedido (o pedido nasce no cardápio, uma vez).
+- ✅ Webhook: verify token certo devolve o `hub.challenge`, errado dá 403; assinatura errada ou ausente dá 401.
+- ✅ Atendimento humano: bot em silêncio, conversa na caixa de entrada, resposta da equipe, "Devolver ao bot" e volta automática depois de 2 h.
+- ✅ Falhas: nova tentativa com espera, desistência com o erro visível na tela, e a janela tratada como fechada quando a Meta recusa.
+- ✅ Tela de integração sem segredos, com número mascarado e sem o texto das mensagens; 390 px sem rolagem lateral.
+- ⚠️ Teste com o WhatsApp de verdade: precisa da conta Meta, do número e do template aprovado (passo a passo em `docs/DEPLOY.md`).
+
 ### GATE 5
 - ✅ Alteração no admin aparece no cardápio
 - ✅ Esgotado reflete no montador: o cardápio aberto se atualiza a cada 1 min e ao voltar para a aba; quem já estava montando recebe o aviso na hora de confirmar e o carrinho marca o item
 - ✅ Validações claras (preço, obrigatórios, categoria com itens não apaga)
 
 ### RODADA DE AJUSTES (12/11, tarde): proteínas, atendimentos do salão e SPA
-Testados no navegador (celular 390 px e desktop 1280/1440 px) e com testes automáticos (167 no PHP). `⚠️` = o que só você consegue conferir.
+Testados no navegador (celular 390 px e desktop 1280/1440 px) e com testes automáticos (198 no PHP). `⚠️` = o que só você consegue conferir.
 
 Classificação dos ingredientes (seção 1 do pedido)
 - ✅ **Proteínas**: Carne moída, Picadinho de frango, Carne seca, Camarão. **Acompanhamentos**: Bacon, Calabresa, Presunto e todos os vegetais. **Queijos**: sem mudança. As proteínas não foram para Acompanhamentos. Conferido no montador do cliente, no do salão e no cadastro do cardápio. Preço, regra de inclusos/extras, resumo e pedido seguem iguais; sem "queijo ralado". ⚠️ Confirme o preço de exemplo da Carne seca (R$ 7,00) e a troca do nome "Frango desfiado" para "Picadinho de frango" (D47).
@@ -154,5 +165,5 @@ Testados no navegador (celular e desktop) e com testes automáticos. `⚠️` = 
 
 ## O que falta depois da validação
 
-- **Etapa 4** (você pediu para seguir): webhook, bot de 3 botões, avisos de status ao cliente, atendimento humano. Depende de fora: conta no Meta Business, hospedagem com HTTPS e as respostas da Etapa 0.
+- **Etapa 4, ligar na Meta:** criar a conta no Meta Business, o app, o número e o template `atualizacao_pedido`; pôr as 4 credenciais na Render; cadastrar o webhook (passo a passo em `docs/DEPLOY.md`). O código está pronto e testado no modo simulado.
 - Etapa 6: revisão final, script SQL do Postgres (Neon), plano de produção e piloto.

@@ -939,6 +939,189 @@
   overflow-wrap: anywhere;
   user-select: all;
 }
+.whatsapp .bloco__titulo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--e-2);
+}
+/* Conversa (simulador e atendimento humano): cliente à esquerda, loja à direita, como no WhatsApp da loja. */
+.conversa {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-2);
+  height: 22rem;
+  margin: 0;
+  padding: var(--e-3);
+  overflow-y: auto;
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio-2);
+  background: var(--cor-superficie-2);
+  list-style: none;
+  overscroll-behavior: contain;
+}
+.conversa__vazia {
+  margin: auto;
+  font-size: var(--texto-3);
+  color: var(--cor-texto-2);
+}
+.balao {
+  display: grid;
+  gap: var(--e-1);
+  max-width: min(85%, 26rem);
+  padding: var(--e-2) var(--e-3);
+  border-radius: var(--raio-2);
+  font-size: var(--texto-3);
+  line-height: 1.4;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+.balao--cliente {
+  align-self: flex-start;
+  border-bottom-left-radius: var(--raio-1);
+  background: var(--cor-superficie);
+  box-shadow: var(--sombra-1);
+}
+.balao--loja {
+  align-self: flex-end;
+  border-bottom-right-radius: var(--raio-1);
+  background: var(--cor-sucesso-suave);
+}
+.balao--falha {
+  align-self: flex-end;
+  background: var(--cor-perigo-suave);
+  color: var(--cor-perigo);
+  font-weight: 600;
+}
+.balao__quem {
+  font-size: var(--texto-2);
+  font-weight: 700;
+  color: var(--cor-texto-2);
+}
+.balao__hora {
+  justify-self: end;
+  font-size: var(--texto-2);
+  color: var(--cor-texto-2);
+  font-variant-numeric: tabular-nums;
+}
+.balao__apagado {
+  font-weight: 400;
+  text-decoration: line-through;
+}
+.balao__botoes {
+  display: grid;
+  gap: var(--e-1);
+  margin-top: var(--e-1);
+}
+.balao__acao {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--e-1);
+  min-height: 2.25rem;
+  padding: var(--e-1) var(--e-3);
+  border: 1px solid var(--cor-borda-forte);
+  border-radius: var(--raio-1);
+  background: var(--cor-superficie);
+  color: var(--cor-texto);
+  font: inherit;
+  font-weight: 700;
+  text-decoration: none;
+  white-space: normal;
+}
+button.balao__acao,
+a.balao__acao {
+  cursor: pointer;
+}
+@media (hover: hover) and (pointer: fine) {
+  button.balao__acao:hover,
+  a.balao__acao:hover {
+    border-color: var(--cor-acento);
+    color: var(--cor-acento);
+  }
+}
+.conversa__envio {
+  display: flex;
+  gap: var(--e-2);
+}
+.conversa__envio .entrada {
+  flex: 1;
+  min-width: 0;
+}
+.caixa-entrada {
+  display: grid;
+  gap: var(--e-2);
+}
+.caixa-entrada__item {
+  display: grid;
+  gap: 0.125rem;
+  width: 100%;
+  min-height: var(--toque);
+  padding: var(--e-2) var(--e-3);
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio-2);
+  background: var(--cor-superficie);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.caixa-entrada__item span {
+  font-size: var(--texto-3);
+  color: var(--cor-texto-2);
+}
+.caixa-entrada__item[aria-current="true"] {
+  border-color: var(--cor-acento);
+  box-shadow: inset 4px 0 0 var(--cor-acento);
+}
+#painel-atendimento {
+  display: grid;
+  gap: var(--e-3);
+  justify-items: stretch;
+}
+#painel-atendimento[hidden] {
+  display: none;
+}
+#painel-atendimento [data-devolver] {
+  justify-self: start;
+}
+.tabela-rolagem {
+  overflow-x: auto;
+  margin-inline: calc(var(--e-5) * -1);
+  padding-inline: var(--e-5);
+}
+.tabela {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--texto-3);
+}
+.tabela th,
+.tabela td {
+  padding: var(--e-2) var(--e-2);
+  border-bottom: 1px solid var(--cor-borda);
+  text-align: left;
+  vertical-align: top;
+}
+.tabela th {
+  font-size: var(--texto-2);
+  color: var(--cor-texto-2);
+  font-weight: 700;
+  white-space: nowrap;
+}
+.tabela td:last-child {
+  min-width: 10rem;
+}
+.tabela tr[data-erro] td {
+  color: var(--cor-perigo);
+}
+.fila-avisos {
+  display: grid;
+  gap: var(--e-2);
+  font-size: var(--texto-3);
+}
+.fila-avisos li[data-erro] {
+  color: var(--cor-perigo);
+}
 
 @media (prefers-reduced-motion: reduce) {
   .cartao-pedido[data-chegou] {

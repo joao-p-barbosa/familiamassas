@@ -3,8 +3,6 @@ declare(strict_types=1);
 
 namespace App\Controllers;
 
-use App\Core\Banco;
-use App\Core\Env;
 use App\Core\ErroHttp;
 use App\Core\Requisicao;
 use App\Core\Resposta;
@@ -138,30 +136,5 @@ final class AdminConfigController
             'validade_minutos' => intdiv(\App\Services\TokenWhatsApp::VALIDADE_SEGUNDOS, 60),
         ]);
     }
-
-    /** Situação da integração com o WhatsApp. Nunca devolve o valor de nenhum segredo, só se está preenchido. */
-    public function whatsapp(Requisicao $req): void
-    {
-        Sessao::exigir($req, ['admin']);
-        $pdo = Banco::conexao();
-        $ontem = gmdate('Y-m-d H:i:s', time() - 86400);
-        $conta = static function (string $sql, array $parametros = []) use ($pdo): int {
-            $consulta = $pdo->prepare($sql);
-            $consulta->execute($parametros);
-            return (int) $consulta->fetchColumn();
-        };
-        $chaves = [];
-        foreach (['WHATSAPP_TOKEN' => 'Token permanente', 'WHATSAPP_PHONE_NUMBER_ID' => 'ID do número', 'WHATSAPP_APP_SECRET' => 'App secret', 'WHATSAPP_VERIFY_TOKEN' => 'Verify token'] as $chave => $rotulo) {
-            $chaves[] = ['chave' => $chave, 'rotulo' => $rotulo, 'preenchida' => Env::get($chave) !== ''];
-        }
-        Resposta::json([
-            'configurado' => !in_array(false, array_column($chaves, 'preenchida'), true),
-            'chaves' => $chaves,
-            'https' => $req->https(),
-            'recebidas_24h' => $conta("SELECT COUNT(*) FROM whatsapp_eventos WHERE direcao = 'in' AND criado_em >= ?", [$ontem]),
-            'enviadas_24h' => $conta("SELECT COUNT(*) FROM whatsapp_eventos WHERE direcao = 'out' AND criado_em >= ?", [$ontem]),
-            'envios_pendentes' => $conta('SELECT COUNT(*) FROM whatsapp_envios_pendentes'),
-            'pedidos_whatsapp_hoje' => $conta("SELECT COUNT(*) FROM pedidos WHERE origem = 'whatsapp' AND criado_em >= ?", [\App\Core\Relogio::inicioDoDiaDaLoja()]),
-        ]);
-    }
+    // A situação da integração com o WhatsApp (GET /api/admin/whatsapp) fica em WhatsAppController::situacao.
 }

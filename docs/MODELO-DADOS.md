@@ -107,10 +107,12 @@ O banco guarda a versão do esquema em `PRAGMA user_version`; a versão atual es
 
 Banco anterior ao esquema da versão 1 é recusado com uma mensagem clara (apague `data/restaurante.sqlite` para recomeçar). Para criar uma migração nova: ponha o arquivo `data/migracoes/003_...php` (uma função que recebe o `PDO`), atualize `data/schema.sqlite.sql` e `Banco::VERSAO_DO_ESQUEMA`; `tests/regras.php` confere que a versão do esquema é a da última migração e testa a migração 002 contra um banco "antigo" congelado em `tests/fixtures/schema-v1.sqlite.sql`.
 
-## WhatsApp (tabelas criadas; uso começa na Etapa 4)
+## WhatsApp (Etapa 4)
 
-| Tabela | Campos |
-|---|---|
-| `whatsapp_conversas` | `telefone` (PK), `modo` (`bot` \| `humano`), `humano_ate`, `ultima_msg_cliente_em`, `ultimo_pedido_id` |
-| `whatsapp_eventos` | `wamid` (único: idempotência), `telefone`, `direcao` (`in` \| `out`), `tipo`, `payload_resumido` |
-| `whatsapp_envios_pendentes` | `telefone`, `pedido_id`, `tipo`, `tentativas`, `proxima_tentativa_em`, `ultimo_erro` |
+| Tabela | Campos | Para quê |
+|---|---|---|
+| `whatsapp_conversas` | `telefone` (PK, formato da Meta: DDI + DDD + número), `modo` (`bot` \| `humano`), `humano_ate`, `ultima_msg_cliente_em`, `ultimo_pedido_id` | Uma linha por cliente. `ultima_msg_cliente_em` é a base da **janela de 24 h** (dentro dela, texto livre; fora, só template). `modo = humano` até `humano_ate`: o bot fica em silêncio e a conversa aparece na caixa de entrada; passou do prazo, volta sozinho ao bot. |
+| `whatsapp_eventos` | `wamid` (único), `telefone`, `direcao` (`in` \| `out`), `tipo`, `payload_resumido`, `criado_em` | Registro das mensagens e a **idempotência**: o INSERT usa `ON CONFLICT (wamid) DO NOTHING`; se não entrou, a Meta reenviou um evento já respondido. `payload_resumido` é um JSON curto (`texto`, `botoes`, `link`, `nome`, `motivo`, `erro`), nunca o JSON inteiro da Meta. Falhas de envio ficam com `tipo = falha` (wamid `falha.*`) ou `falha_entrega` (status `failed` vindo da Meta, wamid `status.<id>.failed`). Apagado depois de 30 dias. |
+| `whatsapp_envios_pendentes` | `telefone`, `pedido_id`, `tipo` (o status avisado), `tentativas`, `proxima_tentativa_em`, `ultimo_erro` | **Fila de avisos de status** (todos passam por ela). Processada pelo polling do painel, pelo webhook e por `/cron/whatsapp`. Reserva por `UPDATE ... WHERE proxima_tentativa_em = <valor lido>` (dois painéis não mandam o mesmo aviso). Falha passageira: nova tentativa em 1, 5, 15, 60 e 240 min; falha definitiva ou tentativas esgotadas: `proxima_tentativa_em = 9999-12-31 00:00:00` (a fila desistiu; a tela mostra o erro). Aviso de um status que já ficou para trás é descartado. |
+
+Só pedidos com `origem = whatsapp` geram avisos (D58). Nenhuma tabela nova: as três existiam desde o esquema da Etapa 0.

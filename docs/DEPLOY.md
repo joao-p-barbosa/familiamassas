@@ -58,6 +58,23 @@ Limites do plano gratuito do Neon: 0,5 GB, e o banco "dorme" depois de uns 5 min
 | `DATA_DIR` | Só com SQLite em disco persistente (plano pago). Com o Neon não é preciso. |
 | `WHATSAPP_*` | Credenciais da Meta, na Etapa 4. Coloque em **Environment** no painel da Render, nunca no repositório (ele é público). |
 
+## Ligar o WhatsApp de verdade (Etapa 4)
+
+Sem as credenciais, o bot fica no **modo simulado**: nada sai para a Meta e a tela **WhatsApp** do painel tem um simulador. Para ligar:
+
+1. **Meta:** conta no Meta Business do restaurante → app no [Meta for Developers](https://developers.facebook.com/) com o produto WhatsApp → número **dedicado** (não pode estar ativo no WhatsApp pessoal; se estiver no app WhatsApp Business, avalie a Coexistência).
+2. **Token permanente:** crie um *System User* no Business Manager, dê acesso ao app e à conta do WhatsApp, e gere um token com as permissões `whatsapp_business_messaging` e `whatsapp_business_management`. Não use o token temporário de 24 h do painel.
+3. **Na Render → Environment**, adicione (nunca no repositório):
+   - `WHATSAPP_TOKEN` (o token permanente) e `WHATSAPP_PHONE_NUMBER_ID` (o *Phone number ID*, não o número);
+   - `WHATSAPP_APP_SECRET` (App settings → Basic → App secret);
+   - `WHATSAPP_VERIFY_TOKEN` (um texto que você inventa, igual ao do passo 4);
+   - opcionais: `APP_URL=https://familia-massas.onrender.com` (links do bot), `CRON_TOKEN` (para um cron externo chamar `/cron/whatsapp?chave=...`).
+4. **Webhook:** no app, WhatsApp → Configuration → Callback URL `https://familia-massas.onrender.com/webhook/whatsapp.php` e o mesmo verify token → *Verify and save* → assine o campo **messages**.
+5. **Template dos avisos fora da janela de 24 h:** em WhatsApp Manager → Message templates, crie um template da categoria **Utility**, idioma **Portuguese (BR)**, nome `atualizacao_pedido`, com o corpo, por exemplo: "Seu pedido #{{1}} está: {{2}}." Espere a aprovação. Outro nome: ponha em `WHATSAPP_MODELO_STATUS`.
+6. **Teste:** mande "oi" para o número. A tela WhatsApp do painel passa a mostrar "Ligado na Meta" e a atividade recente.
+
+Custo (base nov/2026, confira na tabela da Meta): conversas iniciadas pelo cliente e mensagens dentro da janela de 24 h são gratuitas; cada template fora da janela custa alguns centavos.
+
 ## Cuidados
 
 - O repositório é **público**: nunca coloque senha, token ou `.env` nele.
