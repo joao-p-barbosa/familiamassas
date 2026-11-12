@@ -1,4 +1,4 @@
-// Configurações da loja: dados, funcionamento e horários, tipos de pedido, tema, impressão e senha.
+// Configurações da loja: dados, funcionamento e horários, tipos de pedido, tema e impressão. (Senhas e usuários: tela Usuários.)
 import { $, $$, esc, delegar } from '../shared/dom.js';
 import { icone } from '../shared/icones.js';
 import { centavosDeTexto, textoDeCentavos, telefone as formatarTelefone } from '../shared/formato.js';
@@ -126,17 +126,6 @@ function desenhar() {
         <span class="barra-salvar__nota" id="nota-salvar" role="status"></span>
         <button type="submit" class="botao botao--g">Salvar configurações</button>
       </div>
-    </form>
-
-    <form class="config" id="form-senha" novalidate style="margin-top: var(--e-12);">
-      <section class="bloco">
-        <h2 class="bloco__titulo">Minha senha</h2>
-        <div class="bloco__grade">
-          ${campo('atual', 'Senha atual', '', { tipo: 'password', extra: 'autocomplete="current-password"' })}
-          ${campo('nova', 'Nova senha', '', { tipo: 'password', extra: 'autocomplete="new-password"', ajuda: 'Pelo menos 8 caracteres.' })}
-        </div>
-        <div><button type="submit" class="botao botao--secundario">Trocar senha</button></div>
-      </section>
     </form>`;
 }
 
@@ -204,21 +193,6 @@ conteudo.addEventListener('submit', async (e) => {
   e.preventDefault();
   const form = e.target;
   const botao = form.querySelector('button[type="submit"]');
-
-  if (form.id === 'form-senha') {
-    botao.setAttribute('aria-busy', 'true');
-    try {
-      await api('/api/admin/senha', { metodo: 'POST', corpo: { atual: form.atual.value, nova: form.nova.value } });
-      form.reset();
-      mostrarErros(form, {});
-      avisar('Senha trocada');
-    } catch (erro) {
-      if (erro.codigo === 'validacao') mostrarErros(form, erro.campos);
-      else mostrarErro(erro);
-    }
-    botao.removeAttribute('aria-busy');
-    return;
-  }
 
   const taxa = centavosDeTexto(form.taxa_entrega.value);
   if (taxa === null) {

@@ -1,7 +1,7 @@
-// "Novo pedido" no Salão: as duas primeiras etapas do atendimento.
+// "Novo pedido salão" (botão do quadro de Pedidos): as duas primeiras etapas do atendimento.
 //   1. Cliente: o nome (obrigatório). É ele que identifica o atendimento no quadro.
 //   2. Modalidade: Mesa (com a identificação da mesa) ou Pra viagem. Definida ANTES de escolher os produtos.
-// Depois, a atendente vai para a tela "Produtos do atendimento" (etapa 3) e envia para o Salão (etapa 4).
+// Depois, a atendente vai para a tela "Produtos do atendimento" (etapa 3) e envia o pedido (etapa 4), que entra na coluna "Salão" do quadro.
 // Nada é gravado no servidor aqui: o atendimento só nasce quando o primeiro pedido é enviado.
 import { $, esc, delegar, guardado } from '../shared/dom.js';
 import { icone } from '../shared/icones.js';
@@ -43,7 +43,7 @@ function desenhar() {
       <label class="campo">
         <span class="campo__rotulo">Nome do cliente</span>
         <input class="entrada" name="nome" value="${esc(dados.nome)}" maxlength="80" autocomplete="off" aria-describedby="ajuda-nome erro-nome">
-        <span class="campo__ajuda" id="ajuda-nome">É o nome que aparece no cartão do Salão.</span>
+        <span class="campo__ajuda" id="ajuda-nome">É o nome que aparece no cartão do pedido.</span>
         <span class="campo__erro" id="erro-nome" hidden></span>
       </label>` : `
       <fieldset class="grupo-opcoes grupo-opcoes--duas">

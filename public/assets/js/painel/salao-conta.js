@@ -1,5 +1,5 @@
 // A conta de um atendimento do salão: o detalhe (pedidos, produtos e personalizações) e o fechamento (resumo, forma de
-// pagamento e confirmação). Usado pelo quadro do Salão e pelo histórico do proprietário.
+// pagamento e confirmação). Usado pela coluna "Salão" do quadro de Pedidos.
 // O valor da conta é sempre o do servidor; ao fechar, o total que a atendente conferiu volta junto: se um pedido entrou
 // ou saiu nesse meio-tempo, o servidor recusa e a tela mostra a conta atualizada.
 import { $, esc, delegar } from '../shared/dom.js';

@@ -2,7 +2,7 @@
 // produtos a uma conta aberta. Usa o MESMO cardápio, montador, carrinho e preço da página do cliente (cardapio/vitrine.js):
 // uma só regra de montagem e de preço. Cada atendimento tem o seu carrinho.
 //
-//   /painel/atendimento?novo=1   atendimento novo: nome e modalidade vêm do assistente do Salão (guardados na aba);
+//   /painel/atendimento?novo=1   atendimento novo: nome e modalidade vêm do assistente "Novo pedido salão" (guardados na aba);
 //   /painel/atendimento?id=7     mais produtos para a conta aberta do atendimento 7.
 import { esc } from '../shared/dom.js';
 import { icone } from '../shared/icones.js';
@@ -34,7 +34,7 @@ function topoHtml(contexto) {
   const nome = novo ? d.nome : d.cliente_nome;
   const ETAPAS = ['Cliente', 'Modalidade', 'Produtos', 'Enviar'];
   return `
-    <a class="botao botao--fantasma atendimento__voltar" href="/painel/salao">${icone('seta-esq', 18)}Voltar ao Salão</a>
+    <a class="botao botao--fantasma atendimento__voltar" href="/painel/pedidos">${icone('seta-esq', 18)}Voltar aos pedidos</a>
     <div class="cabecalho-tela">
       <div>
         <h1 class="cabecalho-tela__titulo">${novo ? `Pedido de ${esc(nome)}` : `Mais produtos para ${esc(nome)}`}</h1>
@@ -47,7 +47,7 @@ function topoHtml(contexto) {
     ${novo ? `
     <div class="atendimento__etapas">
       <div class="trilha trilha--etapas" aria-hidden="true">${ETAPAS.map((_, i) => `<span class="trilha__passo" ${i < 2 ? 'data-feita' : ''} ${i === 2 ? 'data-atual' : ''}></span>`).join('')}</div>
-      <p class="novo__etapa"><strong>Etapa 3 de 4</strong> · Produtos. Depois você envia para o Salão.</p>
+      <p class="novo__etapa"><strong>Etapa 3 de 4</strong> · Produtos. Depois você envia o pedido.</p>
     </div>` : ''}`;
 }
 
@@ -60,19 +60,19 @@ export async function montar({ consulta }) {
       atendimento = await api(`/api/admin/atendimentos/${id}`);
     } catch (erro) {
       mostrarErro(erro);
-      navegar('/painel/salao', { substituir: true });
+      navegar('/painel/pedidos', { substituir: true });
       return;
     }
     if (atendimento.status !== 'aberto') {
       avisar(`A conta de ${atendimento.cliente_nome} já foi fechada: não dá para somar produtos.`, { tipo: 'erro' });
-      navegar('/painel/salao', { substituir: true });
+      navegar('/painel/pedidos', { substituir: true });
       return;
     }
     contexto = { tipo: 'existente', atendimento, chave: String(id) };
   } else {
     const rascunho = lerRascunho();
     if (!rascunho) {
-      navegar('/painel/salao?novo=1', { substituir: true });   // não há atendimento em andamento: recomeça pelo nome
+      navegar('/painel/pedidos?novo=1', { substituir: true });   // não há atendimento em andamento: recomeça pelo nome
       return;
     }
     contexto = { tipo: 'novo', rascunho, chave: 'novo' };

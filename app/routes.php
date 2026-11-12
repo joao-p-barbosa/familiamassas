@@ -6,6 +6,7 @@ use App\Controllers\AdminCardapioController;
 use App\Controllers\AdminAtendimentoController;
 use App\Controllers\AdminConfigController;
 use App\Controllers\AdminPedidoController;
+use App\Controllers\AdminUsuarioController;
 use App\Controllers\PainelController;
 use App\Controllers\PublicoController;
 use App\Controllers\WhatsAppController;
@@ -40,7 +41,6 @@ return static function (Roteador $r): void {
     // ---------- API do painel (sessão + CSRF) ----------
     $r->post('/api/admin/login', $painel->apiLogin(...));
     $r->post('/api/admin/logout', $painel->apiLogout(...));
-    $r->post('/api/admin/senha', $painel->apiTrocarSenha(...));
 
     $r->get('/api/admin/pedidos', $pedidos->listar(...));
     $r->get('/api/admin/pedidos/{id}', $pedidos->detalhe(...));
@@ -66,6 +66,13 @@ return static function (Roteador $r): void {
     $r->get('/api/admin/configuracoes', $config->ler(...));
     $r->put('/api/admin/configuracoes', $config->salvar(...));
     $r->post('/api/admin/whatsapp/link', $config->linkDeTeste(...));
+
+    // Usuários do painel (só o proprietário)
+    $usuarios = new AdminUsuarioController();
+    $r->get('/api/admin/usuarios', $usuarios->listar(...));
+    $r->post('/api/admin/usuarios', $usuarios->criar(...));
+    $r->put('/api/admin/usuarios/{id}', $usuarios->atualizar(...));
+    $r->post('/api/admin/usuarios/{id}/senha', $usuarios->senha(...));
 
     // ---------- WhatsApp (Cloud API) ----------
     // Webhook da Meta: sem sessão; vale a assinatura X-Hub-Signature-256 (POST) e o verify token (GET).

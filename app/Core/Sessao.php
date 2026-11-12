@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 namespace App\Core;
 
+use App\Repositories\UsuarioRepository;
+
 // Sessão do painel: quem está logado, proteção CSRF e checagem de perfil.
 final class Sessao
 {
@@ -42,11 +44,25 @@ final class Sessao
     /** Perfis que existem. admin = proprietário. Sessão de um perfil que deixou de existir (ex.: cozinha) não vale mais. */
     public const PERFIS = ['admin', 'atendente'];
 
-    /** @return array{id:int, nome:string, login:string, perfil:string}|null */
+    /**
+     * Quem está logado, conferido no banco a cada requisição: usuário desativado sai na hora, e nome ou perfil
+     * trocados na tela Usuários valem já no próximo clique, sem precisar entrar de novo.
+     * @return array{id:int, nome:string, login:string, perfil:string}|null
+     */
     public static function usuario(): ?array
     {
         $usuario = $_SESSION['usuario'] ?? null;
-        return is_array($usuario) && in_array($usuario['perfil'] ?? '', self::PERFIS, true) ? $usuario : null;
+        if (!is_array($usuario) || !isset($usuario['id'])) {
+            return null;
+        }
+        $atual = (new UsuarioRepository())->porId((int) $usuario['id']);
+        if ($atual === null || !$atual['ativo'] || !in_array($atual['perfil'], self::PERFIS, true)) {
+            unset($_SESSION['usuario']);
+            return null;
+        }
+        $usuario = ['id' => $atual['id'], 'nome' => $atual['nome'], 'login' => $atual['login'], 'perfil' => $atual['perfil']];
+        $_SESSION['usuario'] = $usuario;
+        return $usuario;
     }
 
     /** @param array{id:int, nome:string, login:string, perfil:string} $usuario */

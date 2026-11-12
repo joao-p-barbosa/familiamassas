@@ -21,31 +21,29 @@ final class PainelController
      */
     public const TELAS = [
         'pedidos'       => ['titulo' => 'Pedidos',                 'grupo' => 'Operação', 'perfis' => ['admin', 'atendente']],
-        'salao'         => ['titulo' => 'Salão',                   'grupo' => 'Operação', 'perfis' => ['admin', 'atendente']],
-        'atendimento'   => ['titulo' => 'Produtos do atendimento', 'grupo' => 'Operação', 'perfis' => ['admin', 'atendente'], 'oculta' => true, 'menu_ativo' => 'salao'],
-        'historico'     => ['titulo' => 'Histórico do salão',      'grupo' => 'Operação', 'perfis' => ['admin']],
+        'atendimento'   => ['titulo' => 'Produtos do atendimento', 'grupo' => 'Operação', 'perfis' => ['admin', 'atendente'], 'oculta' => true, 'menu_ativo' => 'pedidos'],
         'cardapio'      => ['titulo' => 'Cardápio',                'grupo' => 'Loja',     'perfis' => ['admin', 'atendente']],
+        'usuarios'      => ['titulo' => 'Usuários',                'grupo' => 'Loja',     'perfis' => ['admin']],
         'configuracoes' => ['titulo' => 'Configurações',           'grupo' => 'Loja',     'perfis' => ['admin']],
         'whatsapp'      => ['titulo' => 'WhatsApp',                'grupo' => 'Loja',     'perfis' => ['admin']],
     ];
 
-    /** A atendente entra direto no quadro do Salão; o proprietário, no quadro de pedidos. */
+    /** Telas que saíram do painel: quem tinha o endereço salvo cai no quadro de pedidos. */
+    private const TELAS_RETIRADAS = ['cozinha', 'salao', 'historico'];
+
+    /** Todo mundo entra no quadro de pedidos (os pedidos do salão ficam na coluna "Salão" dele). */
     public static function telaInicial(string $perfil): string
     {
-        return $perfil === 'atendente' ? '/painel/salao' : '/painel/pedidos';
+        return '/painel/pedidos';
     }
 
     /**
-     * Telas que o perfil enxerga no menu, na ordem do menu. Para a atendente o Salão vem primeiro (é o que ela mais usa).
+     * Telas que o perfil enxerga no menu, na ordem do menu.
      * @return array<string, array{titulo:string, grupo:string, perfis:list<string>}>
      */
     public static function menuDo(string $perfil): array
     {
-        $menu = array_filter(self::TELAS, static fn (array $t): bool => in_array($perfil, $t['perfis'], true) && empty($t['oculta']));
-        if ($perfil === 'atendente') {
-            $menu = ['salao' => $menu['salao']] + $menu;
-        }
-        return $menu;
+        return array_filter(self::TELAS, static fn (array $t): bool => in_array($perfil, $t['perfis'], true) && empty($t['oculta']));
     }
 
     public function entrada(Requisicao $req): void
@@ -79,9 +77,9 @@ final class PainelController
             return;
         }
         $tela = $req->parametro('tela');
-        if ($tela === 'cozinha') {
-            // O módulo Cozinha foi retirado: quem tinha o endereço nos favoritos cai no quadro de pedidos.
-            Resposta::redirecionar(self::telaInicial($usuario['perfil']));
+        if (in_array($tela, self::TELAS_RETIRADAS, true)) {
+            // Cozinha, Salão e Histórico do salão saíram: o endereço antigo leva ao quadro (e "?novo=1" abre o novo pedido do salão).
+            Resposta::redirecionar(self::telaInicial($usuario['perfil']) . ($req->consulta('novo') !== '' ? '?novo=1' : ''));
             return;
         }
         if (!isset(self::TELAS[$tela])) {
@@ -162,20 +160,5 @@ final class PainelController
         Sessao::sair();
         Resposta::json(['ir_para' => '/painel/login']);
     }
-
-    public function apiTrocarSenha(Requisicao $req): void
-    {
-        $usuario = Sessao::exigir($req, [], true);
-        $dados = $req->json();
-        $nova = (string) ($dados['nova'] ?? '');
-        $registro = (new UsuarioRepository())->porLogin($usuario['login']);
-        if ($registro === null || !password_verify((string) ($dados['atual'] ?? ''), $registro['senha_hash'])) {
-            throw ErroHttp::validacao(['atual' => 'A senha atual não confere.']);
-        }
-        if (mb_strlen($nova) < 8) {
-            throw ErroHttp::validacao(['nova' => 'A nova senha precisa de pelo menos 8 caracteres.']);
-        }
-        (new UsuarioRepository())->trocarSenha($usuario['id'], password_hash($nova, PASSWORD_DEFAULT));
-        Resposta::json(['ok' => true]);
-    }
+    // Senhas e perfis: tela Usuários (AdminUsuarioController).
 }

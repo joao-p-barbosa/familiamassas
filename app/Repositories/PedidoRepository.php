@@ -106,7 +106,10 @@ final class PedidoRepository
     {
         $pdo = Banco::conexao();
         if ($desde === null) {
-            $sql = $pdo->prepare("SELECT * FROM pedidos WHERE status NOT IN ('concluido', 'cancelado') ORDER BY id");
+            // Abertos + os do salão já servidos cuja conta ainda não foi fechada (ficam na coluna "Salão" até o pagamento).
+            $sql = $pdo->prepare("SELECT * FROM pedidos WHERE status NOT IN ('concluido', 'cancelado')
+                                     OR (status = 'concluido' AND atendimento_id IN (SELECT id FROM atendimentos WHERE status = 'aberto'))
+                                  ORDER BY id");
             $sql->execute();
         } else {
             $sql = $pdo->prepare('SELECT * FROM pedidos WHERE atualizado_em >= ? ORDER BY id');
@@ -246,7 +249,18 @@ final class PedidoRepository
             ];
         }
 
-        return array_map(static function (array $p) use ($itens, $historico, $linhasDeTempo, $comHistorico): array {
+        // Pedido do salão: a conta (atendimento) dele ainda está aberta?
+        $contas = [];
+        $atendimentoIds = array_values(array_unique(array_filter(array_map(static fn (array $p): ?int => $p['atendimento_id'] === null ? null : (int) $p['atendimento_id'], $pedidos))));
+        if ($atendimentoIds !== []) {
+            $sql = $pdo->prepare('SELECT id, status FROM atendimentos WHERE id IN (' . implode(', ', array_fill(0, count($atendimentoIds), '?')) . ')');
+            $sql->execute($atendimentoIds);
+            foreach ($sql as $a) {
+                $contas[(int) $a['id']] = $a['status'] === 'aberto';
+            }
+        }
+
+        return array_map(static function (array $p) use ($itens, $historico, $linhasDeTempo, $comHistorico, $contas): array {
             $id = (int) $p['id'];
             foreach (['id', 'cliente_id', 'atendimento_id', 'criado_por', 'troco_para_centavos', 'subtotal_centavos', 'taxa_entrega_centavos', 'total_centavos'] as $coluna) {
                 $p[$coluna] = $p[$coluna] === null ? null : (int) $p[$coluna];
@@ -258,6 +272,7 @@ final class PedidoRepository
                 $p[$coluna] = Relogio::iso($p[$coluna]);
             }
             $p['itens'] = $itens[$id] ?? [];
+            $p['conta_aberta'] = $p['atendimento_id'] === null ? null : ($contas[$p['atendimento_id']] ?? false);
             // Tempo em "Novo" + "Em preparo" (regra das cores do cartão): o navegador soma o período que ainda está aberto.
             $tempo = TempoDePreparo::calcular($linhasDeTempo[$id] ?? []);
             $p['producao_acumulado_s'] = $tempo['acumulado_s'];

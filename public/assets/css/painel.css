@@ -869,18 +869,21 @@
   overflow: hidden;
   box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.12);
 }
+/* Barra de salvar: cartão que flutua no pé da tela, com a mesma largura dos blocos do formulário. */
 .barra-salvar {
   position: sticky;
-  bottom: 0;
+  bottom: calc(var(--e-3) + env(safe-area-inset-bottom));
   z-index: var(--z-fixo);
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
-  gap: var(--e-4);
-  margin: var(--e-2) calc(var(--margem) * -1) calc(var(--e-12) * -1);
-  padding: var(--e-3) var(--margem) calc(var(--e-3) + env(safe-area-inset-bottom));
-  border-top: 1px solid var(--cor-borda);
+  gap: var(--e-2) var(--e-4);
+  padding: var(--e-3) var(--e-4);
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio-2);
   background: var(--cor-superficie);
+  box-shadow: var(--sombra-2);
 }
 /* Com a barra de salvar na tela, os avisos sobem para não cobrir o botão. */
 .painel:has(.barra-salvar) {
@@ -1258,131 +1261,38 @@ a.balao__acao {
   max-width: 40rem;
 }
 
-/* ---------- Salão: o quadro dos atendimentos (a conta de cada cliente) ---------- */
+/* ---------- Quadro de pedidos com a coluna "Salão" (pedidos da atendente) ---------- */
 .quadro--quatro {
-  grid-template-columns: repeat(4, minmax(16.5rem, 1fr));
+  grid-template-columns: repeat(4, minmax(14rem, 1fr));
 }
-.cartao-atendimento {
-  position: relative;
-  display: grid;
-  gap: var(--e-3);
-  padding: var(--e-4);
-  border: 1px solid var(--cor-borda);
-  border-radius: var(--raio-2);
-  background: var(--cor-superficie);
-  box-shadow: var(--sombra-1);
-}
-.cartao-atendimento__topo {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--e-2);
-}
-.cartao-atendimento__tempo {
-  font-size: var(--texto-3);
-  color: var(--cor-texto-2);
-}
-.cartao-atendimento__abrir {
-  display: grid;
-  gap: var(--e-1);
-  min-height: var(--toque);
-  padding: 0;
-  border: 0;
-  background: none;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-.cartao-atendimento__abrir:focus-visible {
-  outline: 2px solid var(--cor-foco);
-  outline-offset: 4px;
-  border-radius: var(--raio-1);
-}
-.cartao-atendimento__cliente {
-  font-size: var(--texto-5);
-  font-weight: 800;
-  overflow-wrap: anywhere;
-}
-.cartao-atendimento__conta {
-  font-size: var(--texto-3);
-  color: var(--cor-texto-2);
-}
-.cartao-atendimento__conta strong {
-  color: var(--cor-texto);
-  font-size: var(--texto-4);
-}
-.cartao-atendimento__aberto-as {
-  font-size: var(--texto-2);
-  color: var(--cor-texto-2);
-}
-.cartao-atendimento__pedidos {
-  display: grid;
-  gap: var(--e-2);
-  padding-top: var(--e-3);
-  border-top: 1px solid var(--cor-borda);
-}
-.cartao-atendimento__pedidos li {
-  display: grid;
-  justify-items: start;
-  gap: var(--e-1);
-}
-.cartao-atendimento__pedidos li[data-status="cancelado"] .cartao-atendimento__itens {
-  text-decoration: line-through;
-  color: var(--cor-texto-2);
-}
-.cartao-atendimento__itens {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  overflow: hidden;
-  font-size: var(--texto-3);
-  overflow-wrap: anywhere;
-}
-.cartao-atendimento__mais {
-  font-size: var(--texto-2);
-  color: var(--cor-texto-2);
-}
-.cartao-atendimento__acoes {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--e-2);
-}
-.cartao-atendimento__acoes .botao {
-  flex: 1 1 auto;
-}
-.cartao-atendimento__pago {
-  display: flex;
-  align-items: center;
-  gap: var(--e-2);
-  font-size: var(--texto-3);
-  font-weight: 700;
-  color: var(--cor-sucesso);
-}
-/* Pronto para servir é o que pede ação agora: ganha um filete de destaque. */
-.cartao-atendimento[data-fase="pronto"] {
-  border-color: var(--cor-sucesso);
-  box-shadow: inset 4px 0 0 var(--cor-sucesso), var(--sombra-1);
-}
-.cartao-atendimento[data-fase="encerrado"] {
-  background: var(--cor-superficie-2);
-  box-shadow: none;
-}
-.cartao-atendimento[data-chegou] {
-  animation: chegou 2.4s ease-out;
-}
-@media (prefers-reduced-motion: reduce) {
-  .cartao-atendimento[data-chegou] {
-    animation: none;
-    box-shadow: 0 0 0 3px var(--cor-info);
-  }
-}
-/* O Salão não tem arrasto: se as quatro colunas não couberem, o quadro rola por dentro (e a página não estoura). */
 @media (min-width: 75rem) {
+  /* Entre 75 e 80rem as quatro colunas podem não caber: o quadro rola por dentro e a página não estoura. */
   .quadro--quatro {
     overflow-x: auto;
   }
+}
+@media (min-width: 80rem) {
+  /* Tela larga: as quatro colunas cabem, sem rolagem lateral (e o arrasto não é cortado). */
+  .quadro--quatro {
+    overflow: visible;
+  }
+}
+/* Cor sutil para separar Mesa de Pra viagem: um filete à esquerda e um fundo levemente tingido. */
+.cartao-pedido[data-modalidade="local"] {
+  border-left: 4px solid var(--cor-info);
+  background: color-mix(in srgb, var(--cor-info-suave) 45%, var(--cor-superficie));
+}
+.cartao-pedido[data-modalidade="viagem"] {
+  border-left: 4px solid var(--cor-alerta);
+  background: color-mix(in srgb, var(--cor-alerta-suave) 45%, var(--cor-superficie));
+}
+.cartao-pedido__conta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e-2);
+}
+.cartao-pedido__conta .botao {
+  flex: 1 1 auto;
 }
 
 /* ---------- Novo atendimento (assistente) e envio ---------- */
@@ -1528,91 +1438,62 @@ a.balao__acao {
   font-weight: 800;
 }
 
-/* ---------- Histórico ---------- */
-.historico-filtros {
-  display: grid;
-  gap: var(--e-2);
-  margin-bottom: var(--e-3);
+/* ---------- Usuários ---------- */
+.avatar {
+  border-radius: 50%;
+  background: var(--cor-acento-suave);
+  color: var(--cor-texto);
+  font-size: var(--texto-3);
+  font-weight: 800;
+  letter-spacing: 0.02em;
 }
-.historico-filtros .abas {
-  margin-bottom: 0;
+.linha-usuario[data-estado="oculto"] .avatar {
+  background: var(--cor-superficie-2);
+  color: var(--cor-texto-2);
 }
-.historico-contas {
-  display: grid;
-  gap: var(--e-2);
+.entrada-senha {
+  position: relative;
 }
-.historico-conta {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: var(--e-1) var(--e-4);
-  width: 100%;
-  min-height: var(--toque);
-  padding: var(--e-3) var(--e-4);
+.entrada-senha .entrada {
+  padding-right: 3rem;
+}
+.entrada-senha [data-mostrar-senha] {
+  position: absolute;
+  top: 50%;
+  right: var(--e-1);
+  transform: translateY(-50%);
+}
+.escolha-perfil {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.escolha-perfil__opcao {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--e-3);
+  padding: var(--e-3);
   border: 1px solid var(--cor-borda);
   border-radius: var(--raio-2);
-  background: var(--cor-superficie);
-  color: inherit;
-  font: inherit;
-  text-align: left;
   cursor: pointer;
 }
-.historico-conta:focus-visible {
-  outline: 2px solid var(--cor-foco);
-  outline-offset: 2px;
+.escolha-perfil__opcao + .escolha-perfil__opcao {
+  margin-top: var(--e-2);
 }
-.historico-conta small {
-  display: block;
-  font-size: var(--texto-2);
-  color: var(--cor-texto-2);
+.escolha-perfil__opcao:has(input:checked) {
+  border-color: var(--cor-acento);
+  box-shadow: inset 0 0 0 1px var(--cor-acento);
 }
-.historico-conta small svg {
-  display: inline;
-  margin-inline: 0.25em;
-  vertical-align: -0.15em;
+.escolha-perfil__opcao input {
+  margin-top: 0.2rem;
+  accent-color: var(--cor-acento);
 }
-.historico-conta__cliente {
-  grid-column: 1;
-  overflow-wrap: anywhere;
+.escolha-perfil__opcao > span {
+  display: grid;
+  gap: 2px;
 }
-.historico-conta__valor {
-  grid-column: 2;
-  grid-row: 1;
-  align-self: center;
-  font-size: var(--texto-5);
-}
-.historico-conta__quando,
-.historico-conta__itens,
-.historico-conta__pago {
-  font-size: var(--texto-3);
-  color: var(--cor-texto-2);
-}
-.historico-conta__pago {
-  grid-column: 2;
-  justify-self: end;
-}
-@media (hover: hover) and (pointer: fine) {
-  .historico-conta:hover {
-    border-color: var(--cor-borda-forte);
-    background: var(--cor-superficie-2);
-  }
-}
-@media (min-width: 48rem) {
-  .historico-conta {
-    grid-template-columns: minmax(10rem, 1.4fr) minmax(8rem, 1fr) minmax(6rem, 0.8fr) 7rem 6rem;
-    align-items: center;
-  }
-  .historico-conta__cliente,
-  .historico-conta__quando,
-  .historico-conta__itens,
-  .historico-conta__pago,
-  .historico-conta__valor {
-    grid-column: auto;
-    grid-row: auto;
-  }
-  .historico-conta__pago {
-    justify-self: start;
-  }
-  .historico-conta__valor {
-    text-align: right;
-  }
+.escolha-perfil:disabled .escolha-perfil__opcao {
+  cursor: not-allowed;
+  opacity: 0.7;
 }

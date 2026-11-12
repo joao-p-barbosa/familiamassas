@@ -76,6 +76,8 @@ final class AtendimentoRepository
                     throw new \DomainException('pagamento_obrigatorio');
                 }
                 $pdo->prepare('UPDATE atendimentos SET pagamento = ?, total_centavos = ? WHERE id = ?')->execute([$total > 0 ? $pagamento : null, $total, $id]);
+                // Os pedidos da conta "mudam" junto: o quadro de Pedidos (polling por atualizado_em) tira os cartões da coluna Salão.
+                $pdo->prepare('UPDATE pedidos SET atualizado_em = ? WHERE atendimento_id = ?')->execute([$agora, $id]);
                 return ['estado' => 'ok', 'total_centavos' => $total];
             });
         } catch (\DomainException $e) {

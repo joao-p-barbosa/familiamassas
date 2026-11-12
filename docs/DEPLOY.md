@@ -78,7 +78,7 @@ Custo (base nov/2026, confira na tabela da Meta): conversas iniciadas pelo clien
 ## Cuidados
 
 - O repositório é **público**: nunca coloque senha, token ou `.env` nele.
-- Troque a senha em **Configurações → Minha senha** se a combinada for provisória. No plano gratuito, lembre que ela volta à da variável quando o serviço reinicia.
+- Troque a senha na tela **Usuários** (proprietário) se a combinada for provisória, e crie um login para cada pessoa da equipe. Com o banco no Neon (D56), usuários e senhas sobrevivem a reinícios.
 - O HTTPS da Render libera a **localização do aparelho** no mapa da entrega (só funciona em https), então dá para testar com o GPS de um celular de verdade.
 - A Etapa 4 (bot do WhatsApp) precisa de um endereço público com HTTPS para o webhook da Meta: este deploy já resolve isso.
 - A imagem Docker foi escrita e conferida por partes (script de entrada, regras de reescrita, o comportamento de produção do PHP com as mesmas variáveis), mas **a construção completa da imagem só acontece na Render**: não há Docker neste computador. Se a primeira construção falhar, o log da Render mostra a linha do erro.

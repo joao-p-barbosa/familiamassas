@@ -15,10 +15,9 @@ import { conteudo, telas, inicio, definirRecipiente, fecharMenuDoCelular } from 
 
 const MODULOS = {
   pedidos: () => import('./pedidos.js'),
-  salao: () => import('./salao.js'),
   atendimento: () => import('./atendimento.js'),
-  historico: () => import('./historico.js'),
   cardapio: () => import('./cardapio.js'),
+  usuarios: () => import('./usuarios.js'),
   configuracoes: () => import('./configuracoes.js'),
   whatsapp: () => import('./whatsapp.js'),
 };
@@ -38,7 +37,7 @@ function analisar(endereco) {
 
 /**
  * Vai para outra tela do painel sem recarregar a página.
- * @param {string} destino  ex.: "/painel/salao?novo=1"
+ * @param {string} destino  ex.: "/painel/pedidos?novo=1"
  * @param {{ substituir?: boolean }} opcoes  substituir = não cria uma entrada nova no histórico (use ao redirecionar)
  */
 export function navegar(destino, { substituir = false } = {}) {

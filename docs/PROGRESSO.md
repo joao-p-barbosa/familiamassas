@@ -18,7 +18,7 @@
 
 1. Dê dois cliques em **`iniciar.bat`** (na raiz). Ele liga o SQLite só para este servidor, sem mexer no `php.ini`.
 2. Cardápio: <http://localhost:8090/> · Painel: <http://localhost:8090/painel> · Guia de estilo: <http://localhost:8090/styleguide>
-3. Usuários (no desenvolvimento a senha inicial é **`trocar123`**; na hospedagem vem das variáveis `SENHA_*_INICIAL`, veja `docs/DEPLOY.md`; troque em Configurações → Minha senha): `admin` (proprietário) e `atendente`. O módulo Cozinha e o usuário `cozinha` foram retirados (D42).
+3. Usuários (no desenvolvimento a senha inicial é **`trocar123`**; na hospedagem vem das variáveis `SENHA_*_INICIAL`, veja `docs/DEPLOY.md`; troque na tela **Usuários**, só do proprietário): `admin` (proprietário) e `atendente`. O módulo Cozinha e o usuário `cozinha` foram retirados (D42).
 4. No celular, na mesma rede Wi-Fi: o `iniciar.bat` mostra o IP do computador; abra `http://<IP>:8090/`. **A localização do aparelho no mapa só funciona em https** (ou em `localhost`): no celular por `http://<IP>` o mapa abre, avisa disso e o cliente arrasta o mapa ou digita o endereço.
 5. Banco: `data/restaurante.sqlite`. Um banco que já existe é **atualizado sozinho** na primeira requisição (migrações, com cópia de segurança em `data/backups/`, D50): não precisa apagar nada. Para recomeçar do zero, pare o servidor e apague o arquivo (ele é recriado com os dados de exemplo).
 
@@ -35,13 +35,12 @@ node tests/contraste.mjs                       # contraste AA dos 4 temas
 
 ```
 Cliente                                Painel (/painel), com menu lateral retrátil
-/                cardápio               /painel/login          entrar             (atendente cai em /painel/salao)
-  ├ seus pedidos (acompanhamento)       /painel/pedidos        Kanban             admin, atendente
-  ├ Monte seu prato (folha, 6 passos)   /painel/salao          Kanban do Salão    admin, atendente
-                                        /painel/atendimento    produtos da conta  admin, atendente (fora do menu)
-                                        /painel/historico      histórico do salão admin
+/                cardápio               /painel/login          entrar             (os dois perfis caem em /painel/pedidos)
+  ├ seus pedidos (acompanhamento)       /painel/pedidos        Kanban + Salão     admin, atendente
+  ├ Monte seu prato (folha, 6 passos)   /painel/atendimento    produtos da conta  admin, atendente (fora do menu)
   ├ item pronto (folha)                 /painel/cardapio       cadastro           admin, atendente (só admin edita)
-  ├ carrinho (lateral / folha)          /painel/configuracoes  loja e senha       admin
+  ├ carrinho (lateral / folha)          /painel/usuarios       usuários e senhas  admin
+                                        /painel/configuracoes  loja               admin
   └ fechar pedido → mapa → revisão      /painel/whatsapp       integração         admin
 /pedido/{codigo} acompanhamento
 /?t={token}      vindo do WhatsApp
@@ -102,6 +101,14 @@ Testado no modo simulado (simulador da tela WhatsApp, no navegador) e com o webh
 - ✅ Alteração no admin aparece no cardápio
 - ✅ Esgotado reflete no montador: o cardápio aberto se atualiza a cada 1 min e ao voltar para a aba; quem já estava montando recebe o aviso na hora de confirmar e o carrinho marca o item
 - ✅ Validações claras (preço, obrigatórios, categoria com itens não apaga)
+
+### RODADA DE AJUSTES (12/11, noite): coluna Salão, Usuários e barra de salvar
+- ✅ Salão virou a **4ª coluna do quadro de Pedidos** (D63): todo pedido feito pela atendente entra nela, com cor sutil para **Mesa** (azul) e **Pra viagem** (âmbar). Os pedidos online seguem nas colunas Novos, Em preparo e Prontos.
+- ✅ O cartão do salão tem **Ver conta** e **Produtos**; concluído com a conta aberta, mostra **Fechar conta** e só sai do quadro quando a conta é paga.
+- ✅ Menus **Salão** e **Histórico do salão** retirados; links antigos levam a Pedidos. O botão do topo é **Novo pedido salão** (os outros pedidos chegam pelo WhatsApp e pelo cardápio online).
+- ✅ Barra **Salvar configurações** com fundo próprio (cartão flutuante alinhado ao formulário), sem a faixa quebrada (D65).
+- ✅ **Usuários** (D64, só proprietário): lista, criar (nome, login, perfil, senha inicial), editar nome e perfil, desativar e trocar a senha de qualquer um. Não dá para se desativar, se rebaixar nem ficar sem proprietário ativo. Substitui "Minha senha" das Configurações.
+- ✅ Testes: 215 regras (perfis e telas, módulo de usuários, sessão de usuário desativado, coluna Salão). Verificado no navegador em 1440 e 390 px.
 
 ### RODADA DE AJUSTES (12/11, tarde): proteínas, atendimentos do salão e SPA
 Testados no navegador (celular 390 px e desktop 1280/1440 px) e com testes automáticos (198 no PHP). `⚠️` = o que só você consegue conferir.

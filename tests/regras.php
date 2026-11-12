@@ -84,6 +84,17 @@ function codigoDoErro(callable $acao): string
     }
 }
 
+/** @return array<string,string> os campos com erro de validação (vazio se não deu erro) */
+function camposDoErro(callable $acao): array
+{
+    try {
+        $acao();
+        return [];
+    } catch (ErroHttp $e) {
+        return $e->campos;
+    }
+}
+
 $cardapio = (new CardapioRepository())->publico();
 $id = static function (string $lista, string $nome) use ($cardapio): int {
     foreach ($cardapio[$lista] as $linha) {
@@ -277,6 +288,13 @@ conferir('Histórico filtra por situação', [count($salao->historico('hoje', 'e
 conferir('Período desconhecido vira "hoje"', $salao->historico('qualquer', null)['periodo'], 'hoje');
 conferir('Cada atendimento do histórico traz pedidos, itens e personalizações para consulta', isset($historico['atendimentos'][0]['pedidos'][0]['itens']), true);
 
+echo "\nCOLUNA SALÃO NO QUADRO DE PEDIDOS\n";
+$pedidos->mudarStatus($noite['pedido_id'], 'concluido', null, $atendente);
+$noPainel = array_column($repo->paraPainel(null), null, 'id');
+conferir('Pedido do salão concluído com a conta aberta fica no quadro, marcado para fechar a conta', [isset($noPainel[$noite['pedido_id']]), $noPainel[$noite['pedido_id']]['conta_aberta'] ?? null], [true, true]);
+conferir('Pedido do salão concluído com a conta já fechada sai do quadro', isset($noPainel[$bia['pedido_id']]), false);
+conferir('Pedido cancelado sai do quadro; pedido online não tem conta (conta_aberta = null)', [isset($noPainel[$ze['pedido_id']]), array_key_exists('conta_aberta', $noPainel[$criado['id']] ?? []), $noPainel[$criado['id']]['conta_aberta'] ?? null], [false, true, null]);
+
 echo "\nTEMPO DE PREPARO (cor do cartão)\n";
 $t = static fn (int $segundos): string => gmdate('Y-m-d H:i:s', 1_800_000_000 + $segundos);
 $soNovo = TempoDePreparo::calcular([['status' => 'novo', 'criado_em' => $t(0)]]);
@@ -309,7 +327,7 @@ conferir('Pedido servido de uma conta aberta ainda não é dinheiro recebido', $
 $salao->fechar($caio['id'], ['pagamento' => 'cartao', 'total_esperado_centavos' => 3380], $atendente);
 $fechado = $repo->fechamentoDoDia();
 conferir('Ao fechar a conta, o valor cobrado entra uma vez só no faturamento', $fechado['faturamento_centavos'] - $semFechar['faturamento_centavos'], 3380);
-conferir('O quadro de Pedidos só recebe os pedidos abertos (encerrados saem)', count(array_filter($repo->paraPainel(null), static fn (array $p): bool => in_array($p['status'], ['concluido', 'cancelado'], true))), 0);
+conferir('O quadro de Pedidos só recebe os pedidos abertos (encerrados saem; só fica o concluído do salão com a conta aberta)', count(array_filter($repo->paraPainel(null), static fn (array $p): bool => in_array($p['status'], ['concluido', 'cancelado'], true) && $p['conta_aberta'] !== true)), 0);
 
 echo "\nSTATUS\n";
 $idPedido = $criado['id'];
@@ -328,12 +346,41 @@ conferir('Fica registrado quem imprimiu', $repo->porId($outro)['impresso_por'], 
 
 echo "\nPERFIS E TELAS\n";
 conferir('Só existem os perfis proprietário (admin) e atendente', Sessao::PERFIS, ['admin', 'atendente']);
-conferir('Atendente entra direto no quadro do Salão; o proprietário, no quadro de pedidos', [PainelController::telaInicial('atendente'), PainelController::telaInicial('admin')], ['/painel/salao', '/painel/pedidos']);
-conferir('Menu da atendente: salão, pedidos e cardápio (nessa ordem)', array_keys(PainelController::menuDo('atendente')), ['salao', 'pedidos', 'cardapio']);
-conferir('Menu do proprietário: tudo, com o histórico do salão', array_keys(PainelController::menuDo('admin')), ['pedidos', 'salao', 'historico', 'cardapio', 'configuracoes', 'whatsapp']);
+conferir('Os dois perfis entram no quadro de pedidos (o salão é uma coluna dele)', [PainelController::telaInicial('atendente'), PainelController::telaInicial('admin')], ['/painel/pedidos', '/painel/pedidos']);
+conferir('Menu da atendente: pedidos e cardápio', array_keys(PainelController::menuDo('atendente')), ['pedidos', 'cardapio']);
+conferir('Menu do proprietário: pedidos, cardápio, usuários, configurações e WhatsApp', array_keys(PainelController::menuDo('admin')), ['pedidos', 'cardapio', 'usuarios', 'configuracoes', 'whatsapp']);
 conferir('"Produtos do atendimento" é uma tela de apoio: fora do menu, mas a atendente a abre', [isset(PainelController::menuDo('atendente')['atendimento']), PainelController::TELAS['atendimento']['perfis']], [false, ['admin', 'atendente']]);
-conferir('O módulo Cozinha não existe mais', isset(PainelController::TELAS['cozinha']), false);
-conferir('Histórico, Configurações e WhatsApp são só do proprietário', [PainelController::TELAS['historico']['perfis'], PainelController::TELAS['configuracoes']['perfis'], PainelController::TELAS['whatsapp']['perfis']], [['admin'], ['admin'], ['admin']]);
+conferir('Cozinha, Salão e Histórico do salão não são mais telas', [isset(PainelController::TELAS['cozinha']), isset(PainelController::TELAS['salao']), isset(PainelController::TELAS['historico'])], [false, false, false]);
+conferir('Usuários, Configurações e WhatsApp são só do proprietário', [PainelController::TELAS['usuarios']['perfis'], PainelController::TELAS['configuracoes']['perfis'], PainelController::TELAS['whatsapp']['perfis']], [['admin'], ['admin'], ['admin']]);
+
+echo "\nUSUÁRIOS DO PAINEL\n";
+$gestao = new \App\Services\UsuarioService();
+$usuariosRepo = new \App\Repositories\UsuarioRepository();
+$proprietario = ['id' => 1, 'perfil' => 'admin'];
+conferir('Login inválido, nome curto, perfil inexistente e senha curta: erro em cada campo', array_keys(camposDoErro(fn () => $gestao->criar(['nome' => 'M', 'login' => 'Maria Silva', 'perfil' => 'cozinha', 'senha' => '123']))), ['nome', 'login', 'perfil', 'senha']);
+$maria = $gestao->criar(['nome' => ' Maria Souza ', 'login' => 'Maria.Souza', 'perfil' => 'atendente', 'senha' => 'senha-forte-1']);
+$registroMaria = $usuariosRepo->porId($maria['id']);
+conferir('Cria a atendente: nome sem espaços nas pontas, login em minúsculas, ativa', [$registroMaria['nome'], $registroMaria['login'], $registroMaria['perfil'], $registroMaria['ativo']], ['Maria Souza', 'maria.souza', 'atendente', true]);
+conferir('A senha é guardada só como hash e confere no login', password_verify('senha-forte-1', $usuariosRepo->porLogin('maria.souza')['senha_hash']), true);
+conferir('Login repetido é recusado', array_keys(camposDoErro(fn () => $gestao->criar(['nome' => 'Outra Maria', 'login' => 'maria.souza', 'perfil' => 'atendente', 'senha' => 'senha-forte-2']))), ['login']);
+conferir('A listagem nunca traz a senha', array_key_exists('senha_hash', $usuariosRepo->listar()[0]), false);
+$gestao->definirSenha($maria['id'], ['senha' => 'nova-senha-99']);
+conferir('Trocar senha: a nova vale e a antiga não', [password_verify('nova-senha-99', $usuariosRepo->porLogin('maria.souza')['senha_hash']), password_verify('senha-forte-1', $usuariosRepo->porLogin('maria.souza')['senha_hash'])], [true, false]);
+conferir('Senha curta na troca é recusada', array_keys(camposDoErro(fn () => $gestao->definirSenha($maria['id'], ['senha' => 'curta']))), ['senha']);
+$promovida = $gestao->atualizar($maria['id'], ['perfil' => 'admin'], $proprietario);
+conferir('O proprietário promove a atendente a proprietária', $promovida['perfil'], 'admin');
+conferir('Ninguém desativa nem rebaixa o próprio usuário', [codigoDoErro(fn () => $gestao->atualizar(1, ['ativo' => false], $proprietario)), codigoDoErro(fn () => $gestao->atualizar(1, ['perfil' => 'atendente'], $proprietario))], ['409 proprio_usuario', '409 proprio_usuario']);
+$desativada = $gestao->atualizar($maria['id'], ['ativo' => false], $proprietario);
+conferir('Desativado não entra mais (o login não o encontra)', [$desativada['ativo'], $usuariosRepo->porLogin('maria.souza')], [false, null]);
+conferir('O único proprietário ativo não pode ser desativado por outra proprietária', codigoDoErro(fn () => $gestao->atualizar(1, ['ativo' => false], ['id' => $maria['id'], 'perfil' => 'admin'])), '409 ultimo_proprietario');
+conferir('Usuário que não existe: 404', codigoDoErro(fn () => $gestao->atualizar(9999, ['nome' => 'Fulano'], $proprietario)), '404 nao_encontrado');
+$_SESSION['usuario'] = ['id' => $maria['id'], 'nome' => 'Maria Souza', 'login' => 'maria.souza', 'perfil' => 'admin'];
+conferir('Sessão de usuário desativado deixa de valer na hora', [Sessao::usuario(), isset($_SESSION['usuario'])], [null, false]);
+$gestao->atualizar($maria['id'], ['ativo' => true, 'perfil' => 'atendente', 'nome' => 'Maria S.'], $proprietario);
+$_SESSION['usuario'] = ['id' => $maria['id'], 'nome' => 'Maria Souza', 'login' => 'maria.souza', 'perfil' => 'admin'];
+conferir('Perfil e nome trocados valem no próximo clique, sem entrar de novo', [Sessao::usuario()['perfil'], Sessao::usuario()['nome']], ['atendente', 'Maria S.']);
+unset($_SESSION['usuario']);
+Banco::conexao()->prepare('DELETE FROM usuarios WHERE id = ?')->execute([$maria['id']]);
 
 echo "\nACOMPANHAMENTO NA HOME (cookie)\n";
 $acompanhamento = new AcompanhamentoDoCliente();

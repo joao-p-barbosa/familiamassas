@@ -10,7 +10,7 @@ const dados = dadosDaPagina('dados-painel');
 export const usuario = dados.usuario;   // { id, nome, login, perfil }
 export const ajustes = dados.ajustes;   // { polling_segundos, comanda_largura_mm, comanda_mostra_preco, nome_loja }
 export const telas = dados.telas;       // o que este perfil abre: { pedidos: {titulo, menu_ativo}, ... }
-export const inicio = dados.inicio;     // tela inicial do perfil ("/painel/salao" ou "/painel/pedidos")
+export const inicio = dados.inicio;     // tela inicial do perfil ("/painel/pedidos")
 export const ehAdmin = usuario.perfil === 'admin';
 
 // O painel é uma SPA: a página carrega uma vez e o roteador (app.js) troca as telas. Cada tela vive no seu próprio

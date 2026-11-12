@@ -1,4 +1,4 @@
-// Etapa 4 do atendimento: enviar os produtos escolhidos para o quadro do Salão.
+// Etapa 4 do atendimento: enviar os produtos escolhidos. O pedido entra na coluna "Salão" do quadro de Pedidos.
 //   * atendimento novo: abre a conta (nome e modalidade vêm do assistente) e registra o primeiro pedido;
 //   * conta aberta: soma mais um pedido à mesma conta.
 // Aqui NÃO há forma de pagamento: ela só é registrada quando a conta é fechada.
@@ -30,7 +30,7 @@ export function abrirEnvio() {
   const nome = contexto.tipo === 'novo' ? d.nome : d.cliente_nome;
   dialogo.innerHTML = `
     <header class="folha__topo">
-      <h2 class="folha__titulo" id="enviar-titulo">Enviar para o Salão</h2>
+      <h2 class="folha__titulo" id="enviar-titulo">Enviar pedido</h2>
       <button type="button" class="botao botao--fantasma botao--icone" data-fechar aria-label="Fechar">${icone('fechar')}</button>
     </header>
     <div class="folha__corpo enviar">
@@ -48,7 +48,7 @@ export function abrirEnvio() {
       <p class="campo__erro" id="erro-enviar" role="alert" hidden></p>
     </div>
     <footer class="folha__rodape">
-      <button type="button" class="botao botao--g botao--bloco botao--com-valor" id="confirmar-envio"><span>Enviar para o Salão</span><span class="botao__valor">${reais(t.subtotal)}</span></button>
+      <button type="button" class="botao botao--g botao--bloco botao--com-valor" id="confirmar-envio"><span>Enviar pedido</span><span class="botao__valor">${reais(t.subtotal)}</span></button>
     </footer>`;
   enviando = false;
   abrirFolha(dialogo);
@@ -79,7 +79,7 @@ async function enviar() {
     contexto = null;
     await fecharFolha(dialogo);
     avisar(novo ? `Atendimento de ${nome} aberto · pedido #${criado.numero} enviado` : `Pedido #${criado.numero} somado à conta de ${nome}`);
-    navegar('/painel/salao');
+    navegar('/painel/pedidos');
   } catch (erro) {
     enviando = false;
     botao.removeAttribute('aria-busy');
@@ -93,7 +93,7 @@ async function enviar() {
     aviso.hidden = false;
     aviso.textContent = Object.keys(erro.campos ?? {}).length ? Object.values(erro.campos).join(' ') : erro.message;
     if (erro.codigo === 'atendimento_encerrado') {
-      botao.replaceWith(Object.assign(document.createElement('a'), { className: 'botao botao--g botao--bloco', href: '/painel/salao', textContent: 'Voltar ao Salão' }));
+      botao.replaceWith(Object.assign(document.createElement('a'), { className: 'botao botao--g botao--bloco', href: '/painel/pedidos', textContent: 'Voltar aos pedidos' }));
     }
   }
 }

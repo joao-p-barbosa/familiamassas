@@ -1,8 +1,10 @@
 // Quadro de pedidos (Kanban). Caminho principal: o botão grande de cada cartão (decisão D4).
 // Arrastar pela alça é um bônus (GSAP Draggable); a mesma alça, clicada ou pelo teclado, abre "Mover para…".
 //
-// Três colunas: Novos · Em preparo · Prontos. A coluna "Prontos" também guarda o que já saiu da cozinha
-// (saiu para entrega, aguardando retirada): cada cartão mostra a modalidade e o status, então não precisa de quadro à parte.
+// Quatro colunas: Novos · Em preparo · Prontos · Salão. As três primeiras são dos pedidos do cardápio e do WhatsApp; a coluna
+// "Prontos" também guarda o que já saiu da cozinha (saiu para entrega, aguardando retirada). A coluna "Salão" recebe todo
+// pedido feito pela atendente (Mesa ou Pra viagem, com uma cor sutil para cada), em qualquer etapa: o cartão mostra o status
+// e o botão da próxima etapa. Pedido do salão servido continua ali até a conta ser fechada ("Fechar conta").
 // O que foi concluído ou cancelado sai do quadro e entra nos números do fechamento do dia.
 import { $, $$, esc, delegar, menosMovimento } from '../shared/dom.js';
 import { icone } from '../shared/icones.js';
@@ -14,6 +16,9 @@ import { ehAdmin, recipienteDaTela } from './casca.js';
 import { fonte, ouvir, recemChegados, imprimirPendentes } from './servicos.js';
 import { ferramentasHtml, ligarFerramentas, atualizarConexao } from './ferramentas.js';
 import { abrirDetalhe, pedirMovimento, SELO_STATUS } from './detalhe.js';
+import { abrirNovoAtendimento } from './salao-novo.js';
+import { abrirConta, abrirFechamento } from './salao-conta.js';
+import { navegar, limparConsulta } from './roteador.js';
 
 const conteudo = recipienteDaTela();   // o contêiner desta tela (criado pelo roteador)
 
@@ -21,7 +26,14 @@ const COLUNAS = [
   { id: 'novo', titulo: 'Novos', status: ['novo'], vazio: 'Pedido novo aparece aqui sozinho.' },
   { id: 'em_preparo', titulo: 'Em preparo', status: ['em_preparo'], vazio: 'Nada em preparo.' },
   { id: 'pronto', titulo: 'Prontos', status: ['pronto', 'saiu_entrega', 'aguardando_retirada'], vazio: 'Nenhum pedido esperando.' },
+  { id: 'salao', titulo: 'Salão', salao: true, vazio: 'Pedido feito pela atendente (mesa ou pra viagem) aparece aqui.' },
 ];
+
+/** Pedido feito pela atendente no salão (Mesa ou Pra viagem). */
+const doSalao = (p) => p.origem === 'balcao' || p.atendimento_id != null;
+/** Fica na coluna Salão enquanto anda ou, se já foi servido, enquanto a conta dele estiver aberta. */
+const naColunaSalao = (p) => doSalao(p) && (!encerrado(p.status) || (p.status === 'concluido' && p.conta_aberta === true));
+const atualizarDepoisDaConta = () => fonte.sincronizar();
 const ROTULO_FAIXA = { atencao: 'Atenção', atrasado: 'Atrasado' };
 
 let estadoFlip = null;      // posição dos cartões antes de uma mudança (para animar)
@@ -51,7 +63,7 @@ function carregarGsap() {
 }
 
 /** A tela abriu (a primeira vez ou de novo): desenha, liga a escuta do fluxo de pedidos e o cronômetro. */
-export async function montar() {
+export async function montar({ consulta } = {}) {
   await carregarGsap();
   montarTela();
   desenharQuadro();
@@ -69,6 +81,10 @@ export async function montar() {
     }),
   ];
   relogio = setInterval(atualizarTempos, 1000);
+  if (consulta?.has('novo')) {
+    limparConsulta();
+    abrirNovoAtendimento();   // endereço antigo /painel/salao?novo=1, ou volta da tela de produtos sem atendimento em andamento
+  }
 }
 
 /** A tela fechou: para de escutar e de contar (o fluxo de pedidos, o som e a impressão continuam na casca). */
@@ -85,11 +101,11 @@ function montarTela() {
   conteudo.innerHTML = `
     <div class="cabecalho-tela">
       <h1 class="cabecalho-tela__titulo">Pedidos</h1>
-      <a class="botao" href="/painel/salao?novo=1">${icone('mais', 18)}Novo pedido</a>
+      <button type="button" class="botao botao--g" data-novo-salao>${icone('mais', 18)}Novo pedido salão</button>
     </div>
     <div id="fechamento"></div>
     <div class="cabecalho-tela">${ferramentasHtml()}</div>
-    <div class="quadro" id="quadro">
+    <div class="quadro quadro--quatro" id="quadro">
       ${COLUNAS.map((c) => `
         <section class="coluna" data-coluna="${c.id}" aria-labelledby="coluna-${c.id}">
           <header class="coluna__topo">
@@ -145,11 +161,14 @@ function linhasDeItens(p) {
 }
 
 function cartaoHtml(p) {
+  const salao = doSalao(p);
   const proxima = proximaEtapa(p);
+  // Pedido do salão servido com a conta aberta: a ação que falta é fechar a conta.
+  const fecharConta = salao && p.atendimento_id && p.status === 'concluido' && p.conta_aberta;
   const tempo = tempoDoCartao(p, fonte.agora());
   const preparo = !emProducao(p) ? ` · Preparo ${duracao(minutosDe(p.producao_acumulado_s))}` : '';
   return `
-    <article class="cartao-pedido" data-id="${p.id}" data-flip-id="pedido-${p.id}" ${tempo.faixa !== 'neutro' ? `data-faixa="${tempo.faixa}"` : ''} ${recemChegados.has(p.id) ? 'data-chegou' : ''}>
+    <article class="cartao-pedido" data-id="${p.id}" data-flip-id="pedido-${p.id}" ${salao ? `data-salao data-modalidade="${p.tipo}"` : ''} ${tempo.faixa !== 'neutro' ? `data-faixa="${tempo.faixa}"` : ''} ${recemChegados.has(p.id) ? 'data-chegou' : ''}>
       <div class="cartao-pedido__topo">
         <span class="cartao-pedido__numero">#${p.id}</span>
         <span class="cartao-pedido__tempo" data-tempo="${p.id}" title="${tempo.dica}">${icone('relogio', 16)}<span>${tempo.texto}</span></span>
@@ -171,6 +190,12 @@ function cartaoHtml(p) {
         <span class="cartao-pedido__total">${reais(p.total_centavos)}</span>
       </div>
       ${proxima ? `<button type="button" class="botao botao--bloco cartao-pedido__avancar" data-avancar="${proxima}">${ACAO_PARA[proxima]}${icone('seta-dir', 18)}</button>` : ''}
+      ${fecharConta ? `<button type="button" class="botao botao--bloco cartao-pedido__avancar" data-conta-fechar>Fechar conta${icone('check', 18)}</button>` : ''}
+      ${salao && p.atendimento_id ? `
+        <div class="cartao-pedido__conta">
+          <button type="button" class="botao botao--secundario botao--p" data-conta-ver>Ver conta</button>
+          ${p.conta_aberta ? `<button type="button" class="botao botao--secundario botao--p" data-conta-adicionar>${icone('mais', 16)}Produtos</button>` : ''}
+        </div>` : ''}
     </article>`;
 }
 
@@ -181,7 +206,7 @@ function desenharQuadro() {
   const todos = fonte.lista();
 
   for (const coluna of COLUNAS) {
-    const pedidos = todos.filter((p) => coluna.status.includes(p.status));
+    const pedidos = coluna.salao ? todos.filter(naColunaSalao) : todos.filter((p) => !doSalao(p) && coluna.status.includes(p.status));
     const lista = $(`[data-lista="${coluna.id}"]`);
     $(`[data-conta="${coluna.id}"]`).textContent = pedidos.length;
     if (pedidos.length === 0) {
@@ -211,7 +236,7 @@ function animarMudanca() {
 }
 
 // ---------- Arrastar (bônus) ----------
-const colunaDoPedido = (pedido) => COLUNAS.find((c) => c.status.includes(pedido.status))?.id ?? null;
+const colunaDoPedido = (pedido) => COLUNAS.find((c) => !c.salao && c.status.includes(pedido.status))?.id ?? null;
 
 /** Etapa em que o pedido fica ao soltá-lo numa coluna (a coluna "Prontos" leva para "Pronto"). */
 const statusDaColuna = (colunaId) => (colunaId === 'pronto' ? 'pronto' : colunaId);
@@ -230,7 +255,8 @@ function prepararArrasto() {
   const { gsap, Draggable } = window;
   if (!gsap || !Draggable) return; // CDN fora do ar: segue só com botões
   gsap.registerPlugin(Draggable);
-  for (const cartao of $$('#quadro .cartao-pedido')) {
+  // Os cartões do salão não são arrastados: eles ficam na coluna Salão em qualquer etapa (a alça abre "Mover para…").
+  for (const cartao of $$('#quadro .cartao-pedido:not([data-salao])')) {
     const pedido = fonte.pedidos.get(Number(cartao.dataset.id));
     const [arrastavel] = Draggable.create(cartao, {
       type: 'x,y',
@@ -240,7 +266,7 @@ function prepararArrasto() {
       onDragStart() {
         arrastando = true;
         cartao.dataset.arrastando = '';
-        for (const coluna of $$('.coluna')) {
+        for (const coluna of $$('.coluna:not([data-coluna="salao"])')) {
           const destino = statusDaColuna(coluna.dataset.coluna);
           // A coluna onde o cartão já está não é destino (soltar ali não muda nada).
           if (coluna.dataset.coluna !== colunaDoPedido(pedido) && FLUXOS[pedido.tipo].includes(destino)) coluna.dataset.alvo = 'valido';
@@ -299,4 +325,11 @@ delegar(conteudo, 'click', '[data-avancar]', async (e, botao) => {
 });
 delegar(conteudo, 'click', '[data-abrir]', (e, botao) => abrirDetalhe(Number(botao.closest('[data-id]').dataset.id)));
 delegar(conteudo, 'click', '[data-mover]', (e, botao) => pedirMovimento(Number(botao.closest('[data-id]').dataset.id)));
+delegar(conteudo, 'click', '[data-novo-salao]', () => abrirNovoAtendimento());
+
+// Conta do salão (o atendimento do cliente): ver, somar produtos e fechar com o pagamento.
+const atendimentoDoCartao = (botao) => fonte.pedidos.get(Number(botao.closest('[data-id]').dataset.id))?.atendimento_id;
+delegar(conteudo, 'click', '[data-conta-ver]', (e, botao) => abrirConta(atendimentoDoCartao(botao), { aoMudar: atualizarDepoisDaConta }));
+delegar(conteudo, 'click', '[data-conta-fechar]', (e, botao) => abrirFechamento(atendimentoDoCartao(botao), { aoMudar: atualizarDepoisDaConta }));
+delegar(conteudo, 'click', '[data-conta-adicionar]', (e, botao) => navegar(`/painel/atendimento?id=${atendimentoDoCartao(botao)}`));
 
