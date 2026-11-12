@@ -37,13 +37,13 @@ O disco do plano gratuito da Render é temporário, então o que fica em arquivo
 
 **Como ligar:**
 1. Crie um projeto no [Neon](https://console.neon.tech) (plano gratuito; região **AWS US East 1 (N. Virginia)**, a mesma da Render).
-2. No projeto, clique em **Connect** e copie a *connection string* (`postgresql://usuario:senha@host/neondb?sslmode=require`). Ela tem a senha do banco: trate como segredo.
+2. No projeto, clique em **Connect** e copie a *connection string* (`postgresql://usuario:senha@host/neondb?sslmode=require`). Ela tem a senha do banco: trate como segredo. O Neon mostra por padrão a do *pooler* (host com `-pooler`); pode colar essa mesma: o sistema usa sempre a conexão **direta** (o mesmo endereço sem `-pooler`) e faz a troca sozinho, porque o pooler (PgBouncer em modo transação) não aceita a transação com bloqueio exclusivo que cria e migra o banco.
 3. Na Render, abra o serviço → **Environment** → adicione `DATABASE_URL` com essa string → salve. Com `DATABASE_URL` o sistema passa a usar o Postgres sozinho (sem ela, usa o SQLite).
 4. Na primeira requisição o sistema cria as tabelas e os dados de exemplo no Neon (uma vez só, mesmo com várias requisições juntas). As senhas iniciais vêm de `SENHA_ADMIN_INICIAL` e `SENHA_ATENDENTE_INICIAL`, como antes.
 
 Limites do plano gratuito do Neon: 0,5 GB, e o banco "dorme" depois de uns 5 minutos parado (o primeiro acesso depois disso leva um instante a mais). Para o tamanho de um restaurante isso sobra. O Neon guarda o histórico das últimas horas, que permite voltar o banco no tempo em caso de erro.
 
-**Testar o Postgres no seu computador** (opcional): ponha `TEST_DATABASE_URL=<a mesma string>` no `.env` e rode `php tests/regras.php`. A suíte inteira roda no Neon dentro de um *schema* temporário que ela cria e apaga no fim: os seus dados não são tocados. Para o sistema local usar o Neon (em vez do SQLite), ponha `DB_DRIVER=pgsql` e `DATABASE_URL=...` no `.env`.
+**Testar o Postgres no seu computador** (opcional): ponha `TEST_DATABASE_URL=<a mesma string>` no `.env` e rode `php -d extension=pdo_sqlite tests/regras.php pg` (o argumento `pg` liga o Postgres; sem ele os testes usam um SQLite temporário e levam segundos). A suíte inteira roda no Neon dentro de um *schema* temporário que ela cria e apaga no fim: os seus dados não são tocados. Para o sistema local usar o Neon (em vez do SQLite), ponha `DB_DRIVER=pgsql` e `DATABASE_URL=...` no `.env`.
 
 ## Variáveis de ambiente
 

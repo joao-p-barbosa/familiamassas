@@ -83,8 +83,7 @@ final class PublicoController
      */
     public function foto(Requisicao $req): void
     {
-        $nome = $req->parametro('nome');
-        $foto = preg_match('/^[a-f0-9]{24}\.(webp|jpg|png)$/', $nome) === 1 && Banco::driver() === 'pgsql' ? (new ImagemRepository())->porNome($nome) : null;
+        $foto = self::fotoGuardada($req->parametro('nome'));
         if ($foto === null) {
             Resposta::pagina('nao-encontrado', [], 404);
             return;
@@ -94,6 +93,19 @@ final class PublicoController
         header('Cache-Control: public, max-age=31536000, immutable');   // o nome é sorteado: nunca muda de conteúdo
         header('Content-Length: ' . strlen($foto['dados']));
         echo $foto['dados'];
+    }
+
+    /**
+     * A foto guardada no banco com este nome, ou null (nome fora do padrão sorteado pelo upload, foto que não existe, ou
+     * banco que não guarda fotos, o SQLite). O padrão rígido também barra "../" e qualquer coisa estranha.
+     * @return array{tipo:string, dados:string}|null
+     */
+    public static function fotoGuardada(string $nome): ?array
+    {
+        if (preg_match('/^[a-f0-9]{24}\.(webp|jpg|png)$/', $nome) !== 1 || Banco::driver() !== 'pgsql') {
+            return null;
+        }
+        return (new ImagemRepository())->porNome($nome);
     }
 
     public function apiPedido(Requisicao $req): void

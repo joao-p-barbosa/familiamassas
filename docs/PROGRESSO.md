@@ -25,7 +25,7 @@
 **Testes automáticos** (na raiz):
 
 ```
-php -d extension=pdo_sqlite tests/regras.php   # 167 testes (rode com TEST_DATABASE_URL no .env para testar também no Postgres/Neon): preço, grupos, pedido, atendimentos e fechar conta, histórico, tempo, fechamento do dia, perfis, cookie da Home, status, impressão, token, horários, produção, acesso em paralelo, migração
+php -d extension=pdo_sqlite tests/regras.php   # 167 testes em segundos no SQLite; com o argumento "pg" e TEST_DATABASE_URL no .env rodam também no Postgres/Neon (uns 10 min): preço, grupos, pedido, atendimentos e fechar conta, histórico, tempo, fechamento do dia, perfis, cookie da Home, status, impressão, token, horários, produção, acesso em paralelo, migração
 node tests/preco.test.mjs                      # o preço do navegador bate com o do servidor
 node tests/tempo.test.mjs                      # as regras de tempo e cor do cartão no navegador
 node tests/contraste.mjs                       # contraste AA dos 4 temas

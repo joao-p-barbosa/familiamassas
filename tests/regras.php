@@ -24,8 +24,13 @@ use App\Services\TokenWhatsApp;
 
 // Banco dos testes. Padrão: um SQLite temporário. Com TEST_DATABASE_URL (a connection string do Neon, no .env ou no ambiente)
 // a mesma suíte roda no Postgres de verdade, dentro de um schema que ela cria e apaga no fim: os dados reais não são tocados.
+// Só roda no Postgres quando pedido ("php tests/regras.php pg"): cada consulta atravessa a internet, então leva uns 10 minutos.
 $urlPgTeste = Env::get('TEST_DATABASE_URL');
-$emPg = $urlPgTeste !== '';
+$emPg = $urlPgTeste !== '' && in_array('pg', $argv ?? [], true);
+if (in_array('pg', $argv ?? [], true) && $urlPgTeste === '') {
+    fwrite(STDERR, "Para testar no Postgres, defina TEST_DATABASE_URL no .env (a connection string do Neon).\n");
+    exit(1);
+}
 $banco = sys_get_temp_dir() . '/familiamassas-teste-' . bin2hex(random_bytes(4)) . '.sqlite';
 $configBancoDeTeste = [];   // o que os processos filhos precisam saber para abrir o mesmo banco
 if ($emPg) {
@@ -429,18 +434,12 @@ if ($emPg) {
     $volta = $imagens->porNome($nomeFoto);
     conferir('Foto no banco: os bytes voltam idênticos (inclusive zeros) e o tipo também', [$volta['tipo'] ?? null, ($volta['dados'] ?? '') === $bytes, strlen($volta['dados'] ?? '')], ['image/png', true, strlen($bytes)]);
     conferir('Foto que não existe', $imagens->porNome(bin2hex(random_bytes(12)) . '.png'), null);
-    $reqFoto = new Requisicao();
-    $reqFoto->parametros = ['nome' => $nomeFoto];
-    ob_start();
-    (new App\Controllers\PublicoController())->foto($reqFoto);
-    $entregue = (string) ob_get_clean();
-    conferir('GET /uploads/{nome} entrega a foto guardada', $entregue === $bytes, true);
-    $reqFoto->parametros = ['nome' => '../../etc/passwd'];
-    ob_start();
-    (new App\Controllers\PublicoController())->foto($reqFoto);
-    ob_end_clean();
-    conferir('Nome fora do padrão (../) não é entregue: 404', http_response_code(), 404);
-    http_response_code(200);
+    conferir('GET /uploads/{nome} entrega a foto guardada (mesmos bytes e tipo)', [App\Controllers\PublicoController::fotoGuardada($nomeFoto)['dados'] === $bytes, App\Controllers\PublicoController::fotoGuardada($nomeFoto)['tipo']], [true, 'image/png']);
+    conferir('Nome fora do padrão (../, sem 24 hex, extensão estranha) não é entregue', [
+        App\Controllers\PublicoController::fotoGuardada('../../etc/passwd'),
+        App\Controllers\PublicoController::fotoGuardada('abc.png'),
+        App\Controllers\PublicoController::fotoGuardada(bin2hex(random_bytes(12)) . '.php'),
+    ], [null, null, null]);
 }
 
 echo "\nPRIMEIRO ACESSO EM PARALELO (corrida na criação do banco)\n";

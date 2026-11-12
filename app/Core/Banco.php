@@ -110,7 +110,11 @@ final class Banco
             throw new \RuntimeException('DATABASE_URL inválida: esperado postgresql://usuario:senha@host/banco?sslmode=require');
         }
         parse_str($partes['query'] ?? '', $consulta);
-        $dsn = sprintf('pgsql:host=%s;port=%d;dbname=%s;sslmode=%s', $partes['host'], $partes['port'] ?? 5432, ltrim($partes['path'], '/'), $consulta['sslmode'] ?? 'require');
+        // A string que o Neon mostra por padrão é a do POOLER (host "...-pooler.<região>.aws.neon.tech", PgBouncer em modo
+        // transação), que não aceita a transação com bloqueio exclusivo que cria e migra o banco (testado). O sistema usa a conexão
+        // DIRETA, que é o mesmo endereço sem "-pooler": a troca é feita aqui para ninguém depender de qual string colou.
+        $host = (string) preg_replace('/-pooler(?=\.)/', '', $partes['host']);
+        $dsn = sprintf('pgsql:host=%s;port=%d;dbname=%s;sslmode=%s', $host, $partes['port'] ?? 5432, ltrim($partes['path'], '/'), $consulta['sslmode'] ?? 'require');
         return [$dsn, rawurldecode($partes['user'] ?? ''), rawurldecode($partes['pass'] ?? '')];
     }
 
