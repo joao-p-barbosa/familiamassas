@@ -7,7 +7,7 @@ services:
     plan: free
     region: virginia            # a mais próxima do Brasil entre as da Render
     healthCheckPath: /api/cardapio
-    autoDeploy: true            # cada push na main publica de novo
+    autoDeployTrigger: commit   # cada push na main publica de novo
     envVars:
       - key: APP_ENV
         value: production

@@ -10,7 +10,7 @@ A Vercel não roda PHP de forma oficial (só por um runtime da comunidade, `verc
 2. A Render lê o `render.yaml` do repositório e pede **duas senhas**: `SENHA_ADMIN_INICIAL` (proprietário) e `SENHA_ATENDENTE_INICIAL` (atendente). Escolha senhas com 8 ou mais caracteres. Elas **não** ficam no Git.
 3. Clique em **Apply** e espere a construção (alguns minutos na primeira vez).
 4. Abra o endereço que a Render mostra (algo como `https://familia-massas.onrender.com`): o cardápio é a Home e o painel é `/painel`. Entre com `admin` (ou `atendente`) e a senha que você digitou.
-5. Cada `git push` na `main` publica uma versão nova sozinho (`autoDeploy`).
+5. Cada `git push` na `main` publica uma versão nova sozinho (`autoDeployTrigger: commit`).
 
 ## O que o plano gratuito faz (e o que não faz)
 
