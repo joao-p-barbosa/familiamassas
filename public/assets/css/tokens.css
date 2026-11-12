@@ -1,0 +1,65 @@
+/*
+  Design tokens: os valores que NÃO mudam de tema (espaço, tipografia, movimento).
+  As cores, sombras e raios ficam em themes/*.css e trocam pelo atributo data-theme do <html>.
+  Regra do projeto: nenhum componente usa cor ou medida "solta"; sempre uma variável daqui ou do tema.
+*/
+
+@font-face {
+  font-family: "Young Serif";
+  src: url("/assets/fonts/young-serif.woff2") format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Hanken Grotesk";
+  src: url("/assets/fonts/hanken-grotesk.woff2") format("woff2");
+  font-weight: 400 800;
+  font-display: swap;
+}
+
+:root {
+  /* Par tipográfico: Young Serif só em títulos e no nome da loja; Hanken Grotesk em todo o resto. */
+  --fonte-titulo: "Young Serif", Georgia, "Times New Roman", serif;
+  --fonte-texto: "Hanken Grotesk", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+
+  /* Escala de texto (fixa, razão ~1,2). 1rem = 16px: campos nunca abaixo disso, senão o iPhone dá zoom. */
+  --texto-1: 0.75rem;    /* 12 */
+  --texto-2: 0.8125rem;  /* 13 */
+  --texto-3: 0.875rem;   /* 14 */
+  --texto-4: 1rem;       /* 16 */
+  --texto-5: 1.125rem;   /* 18 */
+  --texto-6: 1.3125rem;  /* 21 */
+  --texto-7: 1.625rem;   /* 26 */
+  --texto-8: 2rem;       /* 32 */
+  --texto-9: 2.5rem;     /* 40 */
+
+  /* Espaços (base 4px) */
+  --e-1: 0.25rem;
+  --e-2: 0.5rem;
+  --e-3: 0.75rem;
+  --e-4: 1rem;
+  --e-5: 1.25rem;
+  --e-6: 1.5rem;
+  --e-8: 2rem;
+  --e-10: 2.5rem;
+  --e-12: 3rem;
+  --e-16: 4rem;
+
+  /* Alvo mínimo de toque */
+  --toque: 2.75rem; /* 44px */
+
+  /* Movimento: saída rápida (ease-out forte) para o que entra/sai; curva de gaveta para folhas. */
+  --dur-1: 120ms;
+  --dur-2: 200ms;
+  --dur-3: 320ms;
+  --ease-saida: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-mov: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-gaveta: cubic-bezier(0.32, 0.72, 0, 1);
+
+  /* Camadas */
+  --z-fixo: 20;
+  --z-barra: 30;
+  --z-aviso: 60;
+
+  --largura-pagina: 80rem;
+}

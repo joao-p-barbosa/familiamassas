@@ -1,0 +1,57 @@
+/*
+  Tema Itália (padrão). Verde, branco e vermelho da bandeira como acentos com intenção:
+    verde    = ação principal, seleção e "deu certo";
+    vermelho = marca (nome da loja) e o que pede atenção (erro, cancelar, atraso);
+    branco   = o fundo.
+  Os tons originais (#009246, #CE2B37) foram escurecidos onde carregam texto, para dar contraste AA.
+  O original continua em --cor-marca-* para uso em áreas grandes sem texto pequeno.
+*/
+:root,
+[data-theme="italia"] {
+  color-scheme: light;
+
+  --cor-marca-verde: #009246;
+  --cor-marca-vermelho: #ce2b37;
+
+  --cor-fundo: #f1f2f1;
+  --cor-superficie: #ffffff;
+  --cor-superficie-2: #e6e9e5;
+  --cor-superficie-forte: #14261c;      /* barras escuras (carrinho, topo da cozinha) */
+  --cor-texto-forte: #f3f6f2;           /* texto sobre a superfície forte */
+
+  --cor-texto: #16211b;
+  --cor-texto-2: #4f5b54;
+  --cor-texto-desabilitado: #8a938d;
+
+  --cor-borda: #d6dad5;
+  --cor-borda-forte: #7d8780;
+
+  --cor-acento: #007a3a;                /* #009246 escurecido: texto branco em 5,4:1 */
+  --cor-acento-hover: #00652f;
+  --cor-acento-texto: #ffffff;
+  --cor-acento-suave: #dcefe2;
+  --cor-acento-tinta: #006b33;          /* o verde quando é texto sobre o fundo */
+
+  --cor-destaque: #c42632;              /* o vermelho da marca, 1 passo mais escuro */
+
+  --cor-sucesso: #006b33;
+  --cor-sucesso-suave: #dcefe2;
+  --cor-alerta: #7a4f00;
+  --cor-alerta-suave: #ffecc2;
+  --cor-perigo: #b3202b;
+  --cor-perigo-suave: #fbe2e3;
+  --cor-perigo-fundo: #b3202b;          /* botão de perigo */
+  --cor-info: #1d4f7c;
+  --cor-info-suave: #dfecf7;
+
+  --cor-foco: #16211b;
+  --cor-veu: rgb(14 24 18 / 0.5);
+
+  --sombra-1: 0 1px 2px rgb(20 38 28 / 0.07);
+  --sombra-2: 0 2px 4px rgb(20 38 28 / 0.06), 0 8px 20px -6px rgb(20 38 28 / 0.14);
+  --sombra-3: 0 4px 8px rgb(20 38 28 / 0.08), 0 24px 48px -12px rgb(20 38 28 / 0.28);
+
+  --raio-1: 0.5rem;
+  --raio-2: 0.875rem;
+  --raio-3: 1.375rem;
+}

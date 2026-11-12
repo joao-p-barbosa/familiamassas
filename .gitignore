@@ -1,0 +1,20 @@
+# Segredos: nunca vão para o Git
+.env
+
+# Banco local, sessões e fotos enviadas pelo painel
+data/*.sqlite
+data/*.sqlite-wal
+data/*.sqlite-shm
+data/sessoes/
+public/uploads/*
+# ...mas o .htaccess que bloqueia scripts na pasta de fotos precisa ir junto
+!public/uploads/.htaccess
+
+# Ferramentas de teste e revisão
+.playwright-mcp/
+.impeccable/review/
+
+# Sistema
+Thumbs.db
+desktop.ini
+.DS_Store

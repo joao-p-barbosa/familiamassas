@@ -1,0 +1,5 @@
+# Quebra de linha padrão Linux (a hospedagem roda em Linux); o .bat fica no formato do Windows.
+* text=auto eol=lf
+*.bat text eol=crlf
+*.woff2 binary
+*.sqlite binary

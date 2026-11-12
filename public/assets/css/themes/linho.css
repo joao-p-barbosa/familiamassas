@@ -1,0 +1,49 @@
+/* Tema Linho: off-white quente, tinta marrom-escura como acento. Neutro: a cor fica só nos estados. */
+[data-theme="linho"] {
+  color-scheme: light;
+
+  --cor-marca-verde: #4a6b3a;
+  --cor-marca-vermelho: #9c3b2a;
+
+  --cor-fundo: #f1ece2;
+  --cor-superficie: #fbf8f2;
+  --cor-superficie-2: #e6dece;
+  --cor-superficie-forte: #2b2520;
+  --cor-texto-forte: #f6f1e8;
+
+  --cor-texto: #27211c;
+  --cor-texto-2: #5e554b;
+  --cor-texto-desabilitado: #978c80;
+
+  --cor-borda: #d9cfbe;
+  --cor-borda-forte: #85796b;
+
+  --cor-acento: #33291f;
+  --cor-acento-hover: #1f1812;
+  --cor-acento-texto: #fbf8f2;
+  --cor-acento-suave: #e7dcc9;
+  --cor-acento-tinta: #33291f;
+
+  --cor-destaque: #9c3b2a;
+
+  --cor-sucesso: #3d5f2c;
+  --cor-sucesso-suave: #dfe8d2;
+  --cor-alerta: #744a00;
+  --cor-alerta-suave: #f8e4b8;
+  --cor-perigo: #a02a20;
+  --cor-perigo-suave: #f5ddd6;
+  --cor-perigo-fundo: #a02a20;
+  --cor-info: #2f4f6b;
+  --cor-info-suave: #dde6ec;
+
+  --cor-foco: #27211c;
+  --cor-veu: rgb(39 33 28 / 0.5);
+
+  --sombra-1: 0 1px 2px rgb(60 45 25 / 0.08);
+  --sombra-2: 0 2px 4px rgb(60 45 25 / 0.07), 0 8px 20px -6px rgb(60 45 25 / 0.16);
+  --sombra-3: 0 4px 8px rgb(60 45 25 / 0.09), 0 24px 48px -12px rgb(60 45 25 / 0.3);
+
+  --raio-1: 0.625rem;
+  --raio-2: 1rem;
+  --raio-3: 1.5rem;
+}

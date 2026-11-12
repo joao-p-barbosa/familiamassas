@@ -1,0 +1,112 @@
+/*
+  Comanda da cozinha (impressora térmica de 58 ou 80 mm).
+  Tudo fica dentro de .comanda, então o mesmo arquivo serve a impressão (num iframe oculto) e a prévia na tela.
+  Só preto e branco, letra grande e sem sombra: térmica não imprime cinza bem.
+*/
+.comanda {
+  --largura: 72mm; /* área útil do papel de 80 mm */
+  width: var(--largura);
+  margin: 0;
+  padding: 2mm 1mm 6mm;
+  background: #ffffff;
+  color: #000000;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 12pt;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+.comanda--58 {
+  --largura: 48mm; /* área útil do papel de 58 mm */
+  font-size: 10.5pt;
+}
+.comanda * {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+.comanda__loja {
+  font-size: 0.85em;
+  text-align: center;
+}
+.comanda__numero {
+  margin-top: 1mm;
+  font-size: 2.6em;
+  font-weight: 900;
+  line-height: 1;
+  text-align: center;
+}
+.comanda__tipo {
+  margin-top: 2mm;
+  padding: 1.5mm;
+  border: 0.6mm solid #000000;
+  font-size: 1.35em;
+  font-weight: 900;
+  text-align: center;
+  text-transform: uppercase;
+}
+.comanda__meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 2mm;
+  margin-top: 2mm;
+  font-size: 0.85em;
+}
+.comanda__bloco {
+  margin-top: 2mm;
+  padding-top: 2mm;
+  border-top: 0.4mm dashed #000000;
+}
+.comanda__cliente {
+  font-weight: 700;
+}
+.comanda__item + .comanda__item {
+  margin-top: 3mm;
+}
+.comanda__item-nome {
+  display: flex;
+  justify-content: space-between;
+  gap: 2mm;
+  font-size: 1.15em;
+  font-weight: 900;
+}
+.comanda__montagem {
+  margin-top: 0.5mm;
+  padding-left: 3mm;
+  list-style: none;
+}
+.comanda__montagem b {
+  font-weight: 900;
+}
+.comanda__obs {
+  margin-top: 1.5mm;
+  padding: 1mm 1.5mm;
+  background: #000000;
+  color: #ffffff;
+  font-weight: 900;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+.comanda__total {
+  display: flex;
+  justify-content: space-between;
+  font-size: 1.15em;
+  font-weight: 900;
+}
+.comanda__via {
+  margin-top: 3mm;
+  font-size: 0.8em;
+  text-align: center;
+}
+
+/* Prévia na tela (Configurações): papel com sombra, centralizado. */
+.comanda-previa {
+  display: grid;
+  justify-content: center;
+  padding: var(--e-5);
+  border-radius: var(--raio-2);
+  background: var(--cor-superficie-2);
+  overflow-x: auto;
+}
+.comanda-previa .comanda {
+  box-shadow: var(--sombra-2);
+}
