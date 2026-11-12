@@ -17,7 +17,7 @@ A Vercel não roda PHP de forma oficial (só por um runtime da comunidade, `verc
 | Limite | Efeito |
 |---|---|
 | Dorme depois de 15 min sem acesso | O primeiro acesso depois disso demora cerca de 1 minuto para acordar. |
-| Disco temporário | O banco, as sessões e as fotos **somem** quando o serviço reinicia, dorme ou recebe uma versão nova. O banco volta com os dados de exemplo e as senhas das variáveis. |
+| Disco temporário | **Sem o Neon**, o banco, as sessões e as fotos somem quando o serviço reinicia, dorme ou recebe uma versão nova (o banco volta com os dados de exemplo e as senhas das variáveis). **Com o Neon** (seção abaixo) nada disso se perde. |
 
 Sem o Neon (abaixo), o plano gratuito serve para **demonstração e portfólio**. A alternativa ao Neon é um disco persistente, que a Render só oferece em plano pago:
 

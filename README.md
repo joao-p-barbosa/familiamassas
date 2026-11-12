@@ -20,7 +20,7 @@ SQLite no computador (nada a instalar além do PHP). Na hospedagem, **Postgres n
 
 [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/joao-p-barbosa/familiamassas)
 
-Docker (PHP + Apache) com HTTPS. No plano gratuito o disco é temporário (demonstração); para guardar pedidos de verdade, use disco persistente. Passo a passo, limites e variáveis em `docs/DEPLOY.md`. A Vercel não roda este sistema (PHP + SQLite em arquivo).
+Docker (PHP + Apache) com HTTPS. O disco do plano gratuito é temporário, mas com o banco no Neon (acima) os dados, as sessões e as fotos persistem mesmo assim (testado reiniciando o serviço). Passo a passo, limites e variáveis em `docs/DEPLOY.md`. A Vercel não roda este sistema (PHP + SQLite em arquivo).
 
 ## Testes
 
