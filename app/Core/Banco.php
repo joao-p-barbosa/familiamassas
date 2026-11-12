@@ -45,20 +45,53 @@ final class Banco
             mkdir(dirname($arquivo), 0775, true);
         }
         $pdo = new PDO('sqlite:' . $arquivo, null, null, $opcoes);
+        $pdo->exec('PRAGMA busy_timeout = 8000');   // primeiro de tudo: quem chega junto espera a vez em vez de falhar
         $pdo->exec('PRAGMA foreign_keys = ON');
         $pdo->exec('PRAGMA journal_mode = WAL');   // leitura e escrita ao mesmo tempo sem travar
-        $pdo->exec('PRAGMA busy_timeout = 4000');
         self::$pdo = $pdo;
 
-        $temTabelas = (int) $pdo->query("SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'pedidos'")->fetchColumn() > 0;
-        if (!$temTabelas) {
-            $pdo->exec((string) file_get_contents(RAIZ . '/data/schema.sqlite.sql'));
-            (require RAIZ . '/data/seed.php')($pdo);
-            $pdo->exec('PRAGMA user_version = ' . self::VERSAO_DO_ESQUEMA);
-        } else {
-            self::migrar($pdo, $arquivo);
-        }
+        self::prepararEsquema($pdo, $arquivo);
         return $pdo;
+    }
+
+    private static function temTabela(PDO $pdo, string $nome): bool
+    {
+        $consulta = $pdo->prepare("SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?");
+        $consulta->execute([$nome]);
+        return (int) $consulta->fetchColumn() > 0;
+    }
+
+    /**
+     * Deixa o banco no esquema atual: cria as tabelas e os dados de exemplo (banco novo) ou aplica as migrações (banco antigo).
+     * Na hospedagem o servidor atende várias requisições ao mesmo tempo e as primeiras chegam juntas: o trabalho acontece sob
+     * um bloqueio exclusivo, pedido ANTES de olhar o estado do banco. Quem esperou encontra tudo pronto e não repete nada.
+     */
+    private static function prepararEsquema(PDO $pdo, string $arquivo): void
+    {
+        // O caso de quase toda requisição: o banco já está na versão certa. Nada a fazer e nada a trancar.
+        if (self::temTabela($pdo, 'pedidos') && (int) $pdo->query('PRAGMA user_version')->fetchColumn() === self::VERSAO_DO_ESQUEMA) {
+            return;
+        }
+
+        $pdo->exec('BEGIN IMMEDIATE');
+        try {
+            if (!self::temTabela($pdo, 'pedidos')) {
+                $pdo->exec((string) file_get_contents(RAIZ . '/data/schema.sqlite.sql'));
+                (require RAIZ . '/data/seed.php')($pdo);
+                $pdo->exec('PRAGMA user_version = ' . self::VERSAO_DO_ESQUEMA);
+                $pdo->exec('COMMIT');
+                return;
+            }
+            $pdo->exec('COMMIT');
+        } catch (\Throwable $e) {
+            try {
+                $pdo->exec('ROLLBACK');
+            } catch (\Throwable) {
+                // a transação já tinha acabado
+            }
+            throw $e;
+        }
+        self::migrar($pdo, $arquivo);
     }
 
     /**
@@ -104,13 +137,21 @@ final class Banco
 
         $aplicadas = [];
         foreach ($pendentes as $numero => $caminho) {
-            $pdo->beginTransaction();
+            $pdo->exec('BEGIN IMMEDIATE');   // uma requisição de cada vez; as outras esperam e veem a versão já atualizada
             try {
+                if ((int) $pdo->query('PRAGMA user_version')->fetchColumn() >= $numero) {
+                    $pdo->exec('ROLLBACK');   // outra requisição aplicou esta migração enquanto esta esperava
+                    continue;
+                }
                 (require $caminho)($pdo);
                 $pdo->exec('PRAGMA user_version = ' . $numero);
-                $pdo->commit();
+                $pdo->exec('COMMIT');
             } catch (\Throwable $e) {
-                $pdo->rollBack();
+                try {
+                    $pdo->exec('ROLLBACK');
+                } catch (\Throwable) {
+                    // a transação já tinha acabado
+                }
                 throw new \RuntimeException("A atualização do banco para a versão {$numero} falhou e foi desfeita: " . $e->getMessage(), 0, $e);
             }
             $aplicadas[] = $numero;

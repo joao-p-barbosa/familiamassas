@@ -355,6 +355,47 @@ conferir('Terça 12:00', $loja->estado($em('2026-11-10 12:00')), ['aberta' => fa
 conferir('Fechada à mão vence o horário', $loja->estado($em('2026-11-11 12:00'))['aberta'], false);
 conferir('Loja fechada recusa pedido', codigoDoErro(fn () => $pedidos->criar($base)), '409 loja_fechada');
 
+echo "\nPRIMEIRO ACESSO EM PARALELO (corrida na criação do banco)\n";
+// Na hospedagem, o Apache atende várias requisições ao mesmo tempo, e as primeiras chegam juntas (a Render ainda manda a
+// verificação de saúde). Aqui 8 processos PHP abrem o MESMO banco novo ao mesmo tempo: o esquema e os dados de exemplo
+// precisam ser criados uma vez só, e nenhum deles pode falhar.
+/** Abre o banco $arquivo em vários processos PHP ao mesmo tempo, como o Apache faz. Devolve o que cada um respondeu ("ok" ou o erro). */
+$abrirEmParalelo = static function (string $arquivo, int $quantos = 8): array {
+    $codigo = 'require ' . var_export(dirname(__DIR__) . '/app/bootstrap.php', true) . ';'
+        . ' App\\Core\\Env::definir("DB_DRIVER", "sqlite"); App\\Core\\Env::definir("APP_ENV", "dev");'
+        . ' App\\Core\\Env::definir("DB_SQLITE_PATH", ' . var_export($arquivo, true) . ');'
+        . ' try { $v = (int) App\\Core\\Banco::conexao()->query("PRAGMA user_version")->fetchColumn(); echo $v === App\\Core\\Banco::VERSAO_DO_ESQUEMA ? "ok" : "versao " . $v; }'
+        . ' catch (Throwable $e) { echo "ERRO: " . $e->getMessage(); }';
+    $filhos = [];
+    for ($i = 0; $i < $quantos; $i++) {
+        $filhos[] = [proc_open([PHP_BINARY, '-d', 'extension=pdo_sqlite', '-r', $codigo], [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $canais), $canais];
+    }
+    $respostas = [];
+    foreach ($filhos as [$processo, $canais]) {
+        $respostas[] = trim((string) stream_get_contents($canais[1]));
+        fclose($canais[1]);
+        stream_get_contents($canais[2]);
+        fclose($canais[2]);
+        proc_close($processo);
+    }
+    return $respostas;
+};
+$pastaCorrida = sys_get_temp_dir() . '/familiamassas-corrida-' . bin2hex(random_bytes(4));
+mkdir($pastaCorrida);
+$arquivoCorrida = $pastaCorrida . '/novo.sqlite';
+$resultados = $abrirEmParalelo($arquivoCorrida);
+conferir('Os 8 acessos simultâneos ao banco novo funcionam (nenhum 500)', array_count_values($resultados), ['ok' => 8]);
+$bancoCorrida = new PDO('sqlite:' . $arquivoCorrida, null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+conferir('Os dados de exemplo foram criados uma vez só (2 usuários) e o banco já está na versão atual', [
+    (int) $bancoCorrida->query('SELECT COUNT(*) FROM usuarios')->fetchColumn(),
+    (int) $bancoCorrida->query('PRAGMA user_version')->fetchColumn(),
+], [2, App\Core\Banco::VERSAO_DO_ESQUEMA]);
+$bancoCorrida = null;
+foreach (glob($pastaCorrida . '/*') ?: [] as $restante) {
+    @unlink($restante);
+}
+@rmdir($pastaCorrida);
+
 echo "\nPRODUÇÃO (Render): ambiente, IP atrás do proxy e senhas iniciais\n";
 putenv('FM_TESTE_AMBIENTE=do-processo');
 conferir('Sem .env, vale a variável de ambiente do processo', Env::get('FM_TESTE_AMBIENTE'), 'do-processo');
@@ -443,6 +484,24 @@ conferir('Todo pedido do salão ficou ligado a um atendimento; o do cardápio n�
     (int) $antigo->query("SELECT COUNT(*) FROM pedidos WHERE origem <> 'balcao' AND atendimento_id IS NOT NULL")->fetchColumn(),
 ], [0, 0]);
 conferir('Nenhuma ligação ficou quebrada', $antigo->query('PRAGMA foreign_key_check')->fetchAll(), []);
+
+// Banco antigo aberto por 8 processos ao mesmo tempo (o primeiro acesso depois de publicar uma versão nova): a migração roda uma vez só.
+$arquivoAntigo2 = $pastaMigracao . '/antigo-paralelo.sqlite';
+$antigo2 = new PDO('sqlite:' . $arquivoAntigo2, null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC]);
+$antigo2->exec((string) file_get_contents(__DIR__ . '/fixtures/schema-v1.sqlite.sql'));
+$antigo2->exec('PRAGMA user_version = 1');
+$antigo2->exec("INSERT INTO usuarios (nome, login, senha_hash, perfil, ativo, criado_em) VALUES ('Atendimento', 'atendente', 'x', 'atendente', 1, '{$agoraAntigo}')");
+$antigo2->exec("INSERT INTO pedidos (codigo, cliente_nome, cliente_telefone, tipo, pagamento, subtotal_centavos, total_centavos, status, origem, criado_por, status_atualizado_em, atualizado_em, criado_em)
+                SELECT 'P' || n, 'Cliente', '', 'viagem', 'caixa', 1690, 1690, 'novo', 'balcao', 1, '{$agoraAntigo}', '{$agoraAntigo}', '{$agoraAntigo}' FROM (SELECT 1 AS n UNION SELECT 2 UNION SELECT 3)");
+$antigo2 = null;
+$respostasAntigo = $abrirEmParalelo($arquivoAntigo2);
+conferir('Os 8 acessos simultâneos a um banco antigo funcionam (a migração roda uma vez só)', array_count_values($respostasAntigo), ['ok' => 8]);
+$antigo2 = new PDO('sqlite:' . $arquivoAntigo2, null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+conferir('Sem duplicar: um atendimento por pedido antigo do salão, e o banco na versão atual', [
+    (int) $antigo2->query('SELECT COUNT(*) FROM atendimentos')->fetchColumn(),
+    (int) $antigo2->query('PRAGMA user_version')->fetchColumn(),
+], [3, App\Core\Banco::VERSAO_DO_ESQUEMA]);
+$antigo2 = null;
 
 $muitoAntigo = new PDO('sqlite::memory:', null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
 $muitoAntigo->exec('CREATE TABLE pedidos (id INTEGER PRIMARY KEY)');
