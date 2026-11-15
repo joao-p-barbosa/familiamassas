@@ -1565,21 +1565,67 @@ a.balao__acao {
 
 /* ---------- Assistente com IA ---------- */
 .assistente {
-  max-width: 56rem;
+  max-width: 50rem;
 }
-.assistente__estado {
+.assistente__topo p {
+  margin: var(--e-2) 0 0;
+}
+.assistente-colunas {
+  display: grid;
+  gap: var(--e-4);
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  margin-bottom: var(--e-4);
+}
+/* Escolha por cartões com exemplo (humor e tamanho): o dono vê como o assistente vai falar. */
+.cartoes-escolha {
+  display: grid;
+  gap: var(--e-2);
+  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+  min-width: 0;
+  margin: 0 0 var(--e-4);
+  padding: 0;
+  border: 0;
+}
+.cartoes-escolha legend {
   margin-bottom: var(--e-2);
+}
+.cartao-escolha {
+  position: relative;
+  display: grid;
+  gap: 0.2rem;
+  padding: var(--e-3);
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio-2);
+  background: var(--cor-superficie);
+  cursor: pointer;
+}
+.cartao-escolha input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.cartao-escolha span {
+  font-size: var(--texto-3);
+  color: var(--cor-texto-2);
+}
+.cartao-escolha:has(:checked) {
+  border-color: var(--cor-acento);
+  box-shadow: inset 0 0 0 1px var(--cor-acento);
+}
+.cartao-escolha:has(:focus-visible) {
+  outline: 2px solid var(--cor-foco);
+  outline-offset: 2px;
 }
 .item-edicao-lista {
   display: grid;
   gap: var(--e-3);
-  margin: 0;
+  margin: 0 0 var(--e-3);
   padding: 0;
   list-style: none;
 }
 .item-edicao {
   display: grid;
-  gap: var(--e-3);
+  gap: var(--e-2);
   padding: var(--e-3) var(--e-4);
   border: 1px solid var(--cor-borda);
   border-radius: var(--raio-2);
@@ -1591,91 +1637,36 @@ a.balao__acao {
   justify-content: space-between;
   gap: var(--e-3);
 }
-.modelos-sugeridos {
+.teste-form {
   display: grid;
-  gap: var(--e-2);
-}
-.modelo-opcao {
-  display: grid;
-  gap: 0.15rem;
-  padding: var(--e-3);
-  border: 1px solid var(--cor-borda);
-  border-radius: var(--raio-2);
-  background: var(--cor-superficie);
-  color: var(--cor-texto);
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-.modelo-opcao span {
-  font-size: var(--texto-3);
-  color: var(--cor-texto-2);
-}
-.modelo-opcao[aria-pressed="true"] {
-  border-color: var(--cor-acento);
-  box-shadow: inset 0 0 0 1px var(--cor-acento);
-}
-.modelo-opcao:focus-visible {
-  outline: 2px solid var(--cor-foco);
-  outline-offset: 2px;
+  gap: var(--e-3);
 }
 .chips-exemplo {
   display: flex;
   flex-wrap: wrap;
   gap: var(--e-2);
 }
-.teste-modelos {
-  display: grid;
+.teste-linha {
+  display: flex;
   gap: var(--e-2);
+}
+.teste-linha .entrada {
+  flex: 1;
   min-width: 0;
-  padding: 0;
-  border: 0;
 }
-.teste-grade {
-  display: grid;
-  gap: var(--e-3);
-  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
-}
-.teste-cartao {
-  display: grid;
-  align-content: start;
-  gap: var(--e-3);
-  padding: var(--e-4);
-  border: 1px solid var(--cor-borda);
-  border-radius: var(--raio-2);
-  background: var(--cor-superficie);
-}
-.teste-cartao__texto {
-  margin: 0;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-.prompt-visto {
-  max-height: 26rem;
-  margin: var(--e-2) 0 0;
-  padding: var(--e-3);
-  overflow: auto;
-  border: 1px solid var(--cor-borda);
+/* A resposta do teste aparece como uma conversa: cliente à esquerda, assistente à direita. */
+.balao-teste {
+  max-width: 85%;
+  padding: var(--e-2) var(--e-3);
   border-radius: var(--raio-2);
   background: var(--cor-superficie-2);
-  font-size: var(--texto-3);
+}
+.balao-teste p {
+  margin: 0.2rem 0 0;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
-/* Nas abas com campos largos (listas, modelos, teste) a grade de duas colunas atrapalha: uma coluna só. */
-#painel-conhecimento .bloco__grade,
-#painel-modelo .bloco__grade,
-#painel-teste .bloco__grade {
-  grid-template-columns: minmax(0, 1fr);
-}
-.credito-recarga {
-  display: grid;
-  align-items: end;
-  gap: var(--e-3);
-  grid-template-columns: minmax(0, 1fr);
-}
-@container (min-width: 36rem) {
-  .credito-recarga {
-    grid-template-columns: 9rem minmax(0, 1fr) auto;
-  }
+.balao-teste--loja {
+  margin: var(--e-2) 0 0 auto;
+  background: var(--cor-acento-suave);
 }

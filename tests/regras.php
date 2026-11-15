@@ -778,9 +778,11 @@ $botIa->receber($mensagemIa($foneIa, 'ia.2', 'quero pedir'));
 $segunda = $pedidosIa[1]['corpo']['messages'] ?? [];
 $mensagemDaFerramenta = array_values(array_filter($segunda, static fn (array $m): bool => $m['role'] === 'tool'))[0]['content'] ?? '';
 $historicoEnviado = array_column(array_filter($pedidosIa[0]['corpo']['messages'] ?? [], static fn (array $m): bool => $m['role'] !== 'system'), 'content', null);
-conferir('Ferramenta de link: o modelo pede, o sistema gera o link com o token do cliente e o modelo fecha a resposta (2 chamadas)', [
-    count($pedidosIa), str_contains($mensagemDaFerramenta, 'https://exemplo.test/?t='), ($ultimaWa()['text']['body'] ?? null),
-], [2, true, 'Aqui está o link!']);
+$textoFinalDoLink = (string) ($ultimaWa()['text']['body'] ?? '');
+conferir('Ferramenta de link: o modelo pede e recebe só um marcador (nunca o endereço comprido); o sistema põe o link real, com o token do cliente, ao fim da mensagem (2 chamadas)', [
+    count($pedidosIa), str_contains($mensagemDaFerramenta, '{{LINK_DO_CARDAPIO}}'), str_contains($mensagemDaFerramenta, 'https://exemplo.test/?t='),
+    str_starts_with($textoFinalDoLink, 'Aqui está o link!'), str_contains($textoFinalDoLink, 'https://exemplo.test/?t='),
+], [2, true, false, true, true]);
 conferir('A conversa anterior vai junto (o que o cliente e o assistente já disseram) e sem repetir a mensagem de agora', [
     in_array('quanto custa o picadinho?', $historicoEnviado, true), in_array('O picadinho entra no prato montado, tá? Quer que eu mande o link?', $historicoEnviado, true),
     count(array_keys($historicoEnviado, 'quero pedir', true)),
@@ -793,6 +795,19 @@ $filaIa = [$ferramentaIa('falar_com_atendente'), $textoIa('Já chamei uma pessoa
 $botIa->receber($mensagemIa($foneIa, 'ia.3', 'quero falar com alguém'));
 conferir('Ferramenta de atendente: a conversa passa para o atendimento humano', $conversasWa->emAtendimentoHumano($foneIa), true);
 $conversasWa->voltarAoBot($foneIa);
+
+// O link nunca passa pela mão do modelo, e a chamada de ferramenta escrita como texto não vai ao cliente (achados em produção com modelos baratos).
+$filaIa = [$ferramentaIa('enviar_link_do_cardapio'), $textoIa('Pronto! Monte aqui: {{LINK_DO_CARDAPIO}} e bom apetite.')];
+$comMarcador = $assistenteIa->responder('5511977770099', 'quero pedir', null, ['historico' => [], 'origem' => 'teste', 'simulacao' => true]);
+conferir('O modelo escreve o marcador: o texto sai com o link real, uma vez só e sem sobra do marcador', [
+    $comMarcador['texto'], substr_count($comMarcador['texto'], 'https://exemplo.test/?t=teste'), str_contains($comMarcador['texto'], '{{'),
+], ['Pronto! Monte aqui: https://exemplo.test/?t=teste e bom apetite.', 1, false]);
+$filaIa = [$textoIa('Veja o cardápio: {{LINK_DO_CARDAPIO}}')];
+$semFerramenta = $assistenteIa->responder('5511977770099', 'quero pedir', null, ['historico' => [], 'origem' => 'teste', 'simulacao' => true]);
+conferir('Marcador inventado, sem a ferramenta por trás: some (nunca vai "{{...}}" para o cliente)', [$semFerramenta['texto'], str_contains($semFerramenta['texto'], '{{')], ['Veja o cardápio:', false]);
+$filaIa = [$textoIa("Vou te mandar o link. <function=enviar_link_do_cardapio>{}</function>\nQualquer dúvida é só falar.")];
+$vazou = $assistenteIa->responder('5511977770099', 'quero pedir', null, ['historico' => [], 'origem' => 'teste', 'simulacao' => true]);
+conferir('Chamada de ferramenta vazada como texto (<function=...>) é retirada da resposta ao cliente', [str_contains($vazou['texto'], 'function'), str_contains($vazou['texto'], 'Qualquer dúvida é só falar.')], [false, true]);
 
 // Os botões e o menu numérico não passam pela IA.
 $pedidosIa = [];

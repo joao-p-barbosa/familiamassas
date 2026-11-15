@@ -119,8 +119,8 @@ function atualizarFaixaIA(ia) {
   const semCredito = ia.estado === 'sem_credito';
   faixa.className = `faixa-ia ${semCredito ? 'faixa-ia--acabou' : 'faixa-ia--baixo'}`;
   faixa.innerHTML = `<p class="faixa-ia__texto">${semCredito
-    ? '<strong>O assistente está sem crédito.</strong> O bot responde só com o menu de 3 opções até entrar uma recarga.'
-    : `<strong>Crédito do assistente baixo: ${dolar(ia.saldo_usd)}.</strong> Combine uma recarga antes de acabar.`}</p><a href="/painel/assistente">Ver crédito</a>`;
+    ? '<strong>O assistente está sem crédito.</strong> Ele parou de responder até entrar uma recarga. Fale com o suporte.'
+    : `<strong>Crédito do assistente baixo: ${dolar(ia.saldo_usd)}.</strong> Fale com o suporte para recarregar antes de acabar.`}</p>`;
   faixa.hidden = false;
 }
 

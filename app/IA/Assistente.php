@@ -107,6 +107,7 @@ final class Assistente
             [['role' => 'user', 'content' => mb_substr($texto, 0, 1000)]],
         );
 
+        $this->ferramentas->reiniciar();
         $tokensIn = $tokensOut = $ms = 0;
         $custo = 0.0;
         $usadas = [];
@@ -137,6 +138,9 @@ final class Assistente
                 $usadas[] = $chamada['nome'];
                 $mensagens[] = ['role' => 'tool', 'tool_call_id' => $chamada['id'], 'content' => $this->ferramentas->executar($chamada['nome'], $telefone, $simulacao)];
             }
+        }
+        if ($erro === null) {
+            $final = $this->ferramentas->substituirMarcadores($final);
         }
         if ($erro === null && $final === '') {
             $erro = 'O modelo não devolveu texto.';
@@ -175,6 +179,8 @@ final class Assistente
     private static function limpar(string $texto): string
     {
         $texto = (string) preg_replace('#<think(?:ing)?>.*?</think(?:ing)?>#si', '', $texto);
+        // Modelos pequenos às vezes escrevem a chamada de ferramenta como texto (<function=...>{}</function>): isso nunca vai ao cliente.
+        $texto = (string) preg_replace(['#<function=[^>]*>.*?</function>#si', '#<tool_call>.*?</tool_call>#si', '#<\|python_tag\|>[^\n]*#i'], '', $texto);
         $texto = (string) preg_replace('/\*\*(.+?)\*\*/s', '*$1*', $texto);
         $texto = (string) preg_replace('/^#{1,6}\s*/m', '', $texto);
         return mb_substr(trim($texto), 0, 1500);

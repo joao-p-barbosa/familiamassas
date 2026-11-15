@@ -16,12 +16,20 @@ use App\WhatsApp\WhatsApp;
  * Nenhuma recebe argumento: o telefone sai da conversa, nunca do modelo, então uma mensagem maliciosa do cliente não consegue
  * consultar o pedido de outra pessoa nem mexer em outra conversa. Todas só devolvem texto para o modelo usar na resposta.
  * No modo teste (`$simulacao`), nada é gravado: o teste do painel não muda conversa nenhuma.
+ *
+ * Os links NÃO passam pela mão do modelo: ele recebe um marcador curto ({{LINK_DO_CARDAPIO}}, {{LINK_DO_PEDIDO}}) e o sistema troca pelo
+ * endereço real depois. Modelos pequenos estragavam o endereço comprido (testado em produção: "?t.software"); o marcador não estraga.
  */
 final class Ferramentas
 {
     public const LINK = 'enviar_link_do_cardapio';
     public const PEDIDO = 'status_do_pedido';
     public const ATENDENTE = 'falar_com_atendente';
+    public const MARCA_CARDAPIO = '{{LINK_DO_CARDAPIO}}';
+    public const MARCA_PEDIDO = '{{LINK_DO_PEDIDO}}';
+
+    /** @var array<string,string> marcador => endereço real, do que as ferramentas geraram nesta resposta */
+    private array $links = [];
 
     public function __construct(
         private readonly LojaService $loja = new LojaService(),
@@ -53,6 +61,33 @@ final class Ferramentas
         ];
     }
 
+    /** Começa uma resposta nova: esquece os links da anterior. */
+    public function reiniciar(): void
+    {
+        $this->links = [];
+    }
+
+    /**
+     * Troca os marcadores pelos endereços reais. Marcador sem ferramenta por trás some (o modelo inventou); link gerado que o modelo
+     * esqueceu de escrever vai no fim da mensagem, para o cliente nunca ficar sem ele.
+     */
+    public function substituirMarcadores(string $texto): string
+    {
+        foreach ([self::MARCA_CARDAPIO, self::MARCA_PEDIDO] as $marca) {
+            $texto = str_replace($marca, $this->links[$marca] ?? '', $texto);
+        }
+        foreach ($this->links as $url) {
+            if (!str_contains($texto, $url)) {
+                $texto = rtrim($texto) . "
+
+" . $url;
+            }
+        }
+        return trim((string) preg_replace('/[ 	]+
+/', "
+", $texto));
+    }
+
     public function executar(string $nome, string $telefone, bool $simulacao = false): string
     {
         return match ($nome) {
@@ -71,7 +106,8 @@ final class Ferramentas
         }
         $token = $simulacao ? 'teste' : (new TokenWhatsApp())->gerar($telefone);
         $horas = intdiv(TokenWhatsApp::VALIDADE_SEGUNDOS, 3600);
-        return 'Link do cardápio (vale por ' . $horas . ' horas): ' . WhatsApp::urlDoSite() . '/?t=' . $token . ' . Escreva o endereço exatamente assim na resposta.';
+        $this->links[self::MARCA_CARDAPIO] = WhatsApp::urlDoSite() . '/?t=' . $token;
+        return 'Link do cardápio gerado (vale por ' . $horas . ' horas). Na resposta ao cliente escreva exatamente o marcador ' . self::MARCA_CARDAPIO . ' no lugar do endereço: o sistema troca pelo endereço real.';
     }
 
     private function pedido(string $telefone, bool $simulacao): string
@@ -80,7 +116,8 @@ final class Ferramentas
         if ($pedido === null) {
             return $simulacao ? 'Modo de teste: não há pedido neste número. Diga ao cliente que não encontrou pedido em andamento.' : 'O cliente não tem pedido em andamento. Pergunte se ele quer fazer um.';
         }
-        return "Pedido #{$pedido['id']}: " . PedidoService::ROTULOS[$pedido['status']] . '. Acompanhamento: ' . WhatsApp::urlDoSite() . '/pedido/' . $pedido['codigo'];
+        $this->links[self::MARCA_PEDIDO] = WhatsApp::urlDoSite() . '/pedido/' . $pedido['codigo'];
+        return "Pedido #{$pedido['id']}: " . PedidoService::ROTULOS[$pedido['status']] . '. Para o cliente acompanhar, escreva exatamente o marcador ' . self::MARCA_PEDIDO . ' no lugar do endereço.';
     }
 
     private function atendente(string $telefone, bool $simulacao): string
