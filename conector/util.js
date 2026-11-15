@@ -17,10 +17,18 @@ function textoDe(mensagem) {
     || m.templateButtonReplyMessage?.selectedDisplayText || '').trim();
 }
 
+/** A localização que o cliente mandou (pin ou localização em tempo real), ou null. */
+function localDe(mensagem) {
+  const l = mensagem?.locationMessage ?? mensagem?.liveLocationMessage;
+  const lat = Number(l?.degreesLatitude);
+  const lng = Number(l?.degreesLongitude);
+  return l && Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : null;
+}
+
 /** messageTimestamp pode vir como número ou como Long. Devolve segundos desde 1970 (0 se não souber). */
 function segundosDe(ts) {
   const n = typeof ts === 'object' && ts !== null ? (ts.toNumber?.() ?? 0) : Number(ts);
   return Number.isFinite(n) ? n : 0;
 }
 
-module.exports = { telefoneDe, textoDe, segundosDe };
+module.exports = { telefoneDe, textoDe, localDe, segundosDe };

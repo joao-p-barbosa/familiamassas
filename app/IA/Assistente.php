@@ -87,7 +87,8 @@ final class Assistente
 
     /**
      * Responde uma mensagem do cliente.
-     * @param array{modelo?:string, origem?:string, simulacao?:bool, historico?:list<array{role:string, content:string}>} $opcoes
+     * @param array{modelo?:string, origem?:string, simulacao?:bool, historico?:list<array{role:string, content:string}>, contexto?:string} $opcoes
+     *   contexto: instrução da situação (ex.: o cliente está no meio de um pedido pelo fluxo), somada ao fim do prompt
      *   simulacao: o teste do painel (as ferramentas não gravam nada e o histórico vem de `historico`)
      * @return array{ok:bool, texto:string, modelo:string, tokens_in:int, tokens_out:int, custo_usd:float, ms:int, ferramentas:list<string>, erro:?string}
      */
@@ -102,7 +103,7 @@ final class Assistente
         $primeira = array_filter($historico, static fn (array $m): bool => $m['role'] === 'assistant') === [];
 
         $mensagens = array_merge(
-            [['role' => 'system', 'content' => $this->prompt($c, $primeira, $nome)]],
+            [['role' => 'system', 'content' => $this->prompt($c, $primeira, $nome) . (isset($opcoes['contexto']) ? "\n\nSITUAÇÃO AGORA\n" . $opcoes['contexto'] : '')]],
             $historico,
             [['role' => 'user', 'content' => mb_substr($texto, 0, 1000)]],
         );

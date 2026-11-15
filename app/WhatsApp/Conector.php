@@ -12,7 +12,8 @@ use App\Core\Relogio;
  * ao WhatsApp da loja e conversa com este sistema por HTTP. Aqui está a parte do PHP:
  *   * o estado do Node (sinal de vida a cada 30 s; 2 min sem sinal ou estado "desconectado" = queda);
  *   * a retenção da fila de avisos: queda de 2 min ou mais retém a fila, e o proprietário escolhe enviar ou descartar (D68);
- *   * o menu por número ("1", "2", "3"), já que o WhatsApp comum não tem os botões da Cloud API (D67).
+ *   * a localização (pin) que o cliente manda no pedido pelo chat (D74). Os números "1", "2", "3" não são mais botões:
+ *     são respostas aos passos do pedido (FluxoPedido).
  */
 final class Conector
 {
@@ -127,9 +128,9 @@ final class Conector
     }
 
     /**
-     * Uma mensagem do Node no formato que o bot entende. "1", "2" e "3" respondem ao menu numerado (D67).
-     * @param array<string,mixed> $m {id, telefone, texto, nome?, em?: segundos desde 1970}
-     * @return array{wamid:string, telefone:string, tipo:string, texto:string, botao:?string, nome:?string}|null
+     * Uma mensagem do Node no formato que o bot entende.
+     * @param array<string,mixed> $m {id, telefone, texto, nome?, em?: segundos desde 1970, local?: {lat, lng}}
+     * @return array{wamid:string, telefone:string, tipo:string, texto:string, botao:?string, nome:?string, local:?array{lat:float, lng:float}}|null
      */
     public static function normalizar(array $m): ?array
     {
@@ -140,11 +141,22 @@ final class Conector
         }
         $texto = mb_substr(trim((string) ($m['texto'] ?? '')), 0, 1000);
         $nome = mb_substr(trim((string) ($m['nome'] ?? '')), 0, 60);
-        $botao = in_array($texto, ['1', '2', '3'], true) ? array_keys(WhatsApp::BOTOES)[(int) $texto - 1] : null;
+        $local = self::local($m['local'] ?? null);
         return [
-            'wamid' => 'qr.' . mb_substr($id, 0, 150), 'telefone' => $telefone, 'tipo' => $botao !== null ? 'interactive' : 'text',
-            'texto' => $botao !== null ? WhatsApp::BOTOES[$botao] : $texto, 'botao' => $botao, 'nome' => $nome !== '' ? $nome : null,
+            'wamid' => 'qr.' . mb_substr($id, 0, 150), 'telefone' => $telefone, 'tipo' => $local !== null ? 'location' : 'text',
+            'texto' => $texto, 'botao' => null, 'nome' => $nome !== '' ? $nome : null, 'local' => $local,
         ];
+    }
+
+    /** Latitude e longitude válidas, ou null. @return array{lat:float, lng:float}|null */
+    public static function local(mixed $local): ?array
+    {
+        if (!is_array($local) || !is_numeric($local['lat'] ?? null) || !is_numeric($local['lng'] ?? null)) {
+            return null;
+        }
+        $lat = (float) $local['lat'];
+        $lng = (float) $local['lng'];
+        return abs($lat) <= 90 && abs($lng) <= 180 && ($lat !== 0.0 || $lng !== 0.0) ? ['lat' => $lat, 'lng' => $lng] : null;
     }
 
     /**
@@ -159,7 +171,7 @@ final class Conector
         $limite = time() - self::MENSAGEM_VELHA_MINUTOS * 60;
         foreach (array_slice($mensagens, 0, 50) as $m) {
             $normal = is_array($m) ? self::normalizar($m) : null;
-            if ($normal === null || $normal['texto'] === '') {
+            if ($normal === null || ($normal['texto'] === '' && $normal['local'] === null)) {
                 $r['ignoradas']++;
             } elseif (isset($m['em']) && (int) $m['em'] > 0 && (int) $m['em'] < $limite) {
                 $r['antigas']++;

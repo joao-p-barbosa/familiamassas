@@ -2,7 +2,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const http = require('node:http');
-const { telefoneDe, textoDe, segundosDe } = require('./util');
+const { telefoneDe, textoDe, localDe, segundosDe } = require('./util');
 const { criarServidor } = require('./servidor');
 
 test('telefoneDe: conversa individual, LID com senderPn, e o que o bot ignora', () => {
@@ -22,6 +22,8 @@ test('textoDe e segundosDe', () => {
   assert.equal(segundosDe(1700000000), 1700000000);
   assert.equal(segundosDe({ toNumber: () => 42 }), 42);
   assert.equal(segundosDe(undefined), 0);
+  assert.deepEqual(localDe({ locationMessage: { degreesLatitude: -22.9, degreesLongitude: -43.2 } }), { lat: -22.9, lng: -43.2 });
+  assert.equal(localDe({ conversation: 'oi' }), null);
 });
 
 /** Sobe o servidor numa porta livre e devolve uma função que faz POST /enviar. */

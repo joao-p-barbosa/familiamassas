@@ -10,7 +10,7 @@ const pino = require('pino');
 const QRCode = require('qrcode');
 const { default: makeWASocket, DisconnectReason, fetchLatestBaileysVersion, useMultiFileAuthState, Browsers } = require('@whiskeysockets/baileys');
 const { criarServidor } = require('./servidor');
-const { telefoneDe, textoDe, segundosDe } = require('./util');
+const { telefoneDe, textoDe, localDe, segundosDe } = require('./util');
 
 const SEGREDO = process.env.CONECTOR_SEGREDO ?? '';
 const SITE = (process.env.CONECTOR_SITE_URL || `http://127.0.0.1:${process.env.PORT || 10000}`).replace(/\/$/, '');
@@ -125,7 +125,8 @@ async function conectar() {
       if (m.key.fromMe || !m.message) continue;
       const telefone = telefoneDe(m.key);
       const texto = textoDe(m.message);
-      if (telefone && texto) lote.push({ id: m.key.id, telefone, texto, nome: m.pushName ?? null, em: segundosDe(m.messageTimestamp) });
+      const local = localDe(m.message);   // o pin da entrega, no pedido pelo chat
+      if (telefone && (texto || local)) lote.push({ id: m.key.id, telefone, texto, local, nome: m.pushName ?? null, em: segundosDe(m.messageTimestamp) });
     }
     if (lote.length > 0) await postar('/api/conector/mensagens', { mensagens: lote }, 60_000);   // a resposta da IA pode levar alguns segundos
   });

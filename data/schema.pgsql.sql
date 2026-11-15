@@ -277,6 +277,14 @@ CREATE TABLE ia_recargas (
   nota        TEXT NOT NULL DEFAULT ''
 );
 
+-- Pedido pelo WhatsApp passo a passo (D74): o pedido em andamento de cada cliente no chat.
+CREATE TABLE whatsapp_sessoes (
+  telefone      TEXT PRIMARY KEY,
+  etapa         TEXT NOT NULL,
+  dados         TEXT NOT NULL,                 -- JSON com o que o cliente já escolheu
+  atualizado_em TEXT NOT NULL
+);
+
 -- Só no Postgres -----------------------------------------------------------------------------------------------------
 CREATE TABLE esquema_versao (
   id     INTEGER PRIMARY KEY CHECK (id = 1),   -- uma linha só

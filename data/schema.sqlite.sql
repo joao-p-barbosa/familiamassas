@@ -273,3 +273,11 @@ CREATE TABLE ia_recargas (
   valor_micro INTEGER NOT NULL CHECK (valor_micro > 0),
   nota        TEXT NOT NULL DEFAULT ''
 );
+
+-- Pedido pelo WhatsApp passo a passo (D74): o pedido em andamento de cada cliente no chat.
+CREATE TABLE whatsapp_sessoes (
+  telefone      TEXT PRIMARY KEY,
+  etapa         TEXT NOT NULL,
+  dados         TEXT NOT NULL,                 -- JSON com o que o cliente já escolheu
+  atualizado_em TEXT NOT NULL
+);

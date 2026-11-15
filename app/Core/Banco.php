@@ -19,7 +19,7 @@ final class Banco
      * 1 = esquema da rodada de 12/11 (manhã) · 2 = atendimentos do salão e proteínas separadas.
      * Migração nova deve funcionar nos dois bancos (o PDO que ela recebe diz qual é: ATTR_DRIVER_NAME).
      */
-    public const VERSAO_DO_ESQUEMA = 5;
+    public const VERSAO_DO_ESQUEMA = 6;
 
     /** Chave do bloqueio do Postgres que serializa a criação e a migração do banco (pg_advisory_xact_lock). */
     private const TRAVA_DO_ESQUEMA = 726451;

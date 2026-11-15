@@ -92,7 +92,8 @@ final class Webhook
         } elseif ($tipo === 'button') {   // resposta rápida de um template
             $texto = (string) ($m['button']['text'] ?? '');
         }
+        $local = $tipo === 'location' ? Conector::local(['lat' => $m['location']['latitude'] ?? null, 'lng' => $m['location']['longitude'] ?? null]) : null;
         $nome = $nomes[$telefone] ?? null;
-        return ['wamid' => $wamid, 'telefone' => $telefone, 'tipo' => $tipo, 'texto' => $texto, 'botao' => $botao, 'nome' => $nome !== '' ? $nome : null];
+        return ['wamid' => $wamid, 'telefone' => $telefone, 'tipo' => $tipo, 'texto' => $texto, 'botao' => $botao, 'nome' => $nome !== '' ? $nome : null, 'local' => $local];
     }
 }

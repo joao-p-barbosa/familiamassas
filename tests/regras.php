@@ -577,13 +577,17 @@ Env::definir('CONECTOR_SEGREDO', 'segredo-do-conector-123');
 conferir('O canal QR troca o simulador pelo conector', [App\WhatsApp\WhatsApp::simulado(), App\WhatsApp\Conector::ativo()], [false, true]);
 
 // Menu por número: o WhatsApp comum não tem botões.
-conferir('"1", "2" e "3" respondem ao menu; texto livre continua texto', [
+conferir('Números não viram mais botões: "1" é resposta ao passo do pedido; texto livre continua texto', [
     App\WhatsApp\Conector::normalizar(['id' => 'a1', 'telefone' => '+55 (11) 98765-4321', 'texto' => '1'])['botao'] ?? null,
     App\WhatsApp\Conector::normalizar(['id' => 'a2', 'telefone' => '5511987654321', 'texto' => ' 2 '])['botao'] ?? null,
     App\WhatsApp\Conector::normalizar(['id' => 'a3', 'telefone' => '5511987654321', 'texto' => '3'])['botao'] ?? null,
     App\WhatsApp\Conector::normalizar(['id' => 'a4', 'telefone' => '5511987654321', 'texto' => '4'])['botao'] ?? 'nenhum',
     App\WhatsApp\Conector::normalizar(['id' => 'a5', 'telefone' => '5511987654321', 'texto' => 'oi, tudo bem?'])['tipo'] ?? null,
-], ['pedir', 'acompanhar', 'atendente', 'nenhum', 'text']);
+], [null, null, null, 'nenhum', 'text']);
+conferir('Localização (pin) chega com latitude e longitude; coordenada fora do planeta é ignorada', [
+    App\WhatsApp\Conector::normalizar(['id' => 'l1', 'telefone' => '5511987654321', 'texto' => '', 'local' => ['lat' => -22.9, 'lng' => -43.2]])['local'],
+    App\WhatsApp\Conector::normalizar(['id' => 'l2', 'telefone' => '5511987654321', 'texto' => '', 'local' => ['lat' => 200, 'lng' => 10]])['local'],
+], [['lat' => -22.9, 'lng' => -43.2], null]);
 conferir('Mensagem sem id, sem telefone ou com telefone longo demais é ignorada', [
     App\WhatsApp\Conector::normalizar(['telefone' => '5511987654321', 'texto' => 'oi']), App\WhatsApp\Conector::normalizar(['id' => 'x', 'texto' => 'oi']),
     App\WhatsApp\Conector::normalizar(['id' => 'x', 'telefone' => '1234567890123456', 'texto' => 'oi']),
@@ -667,10 +671,13 @@ $resultadoQr = $conector->receber([
     ['id' => 'm.velha', 'telefone' => '5511933334444', 'texto' => 'oi', 'em' => time() - 20 * 60],
     ['id' => 'm.vazia', 'telefone' => '5511933334444', 'texto' => '   ', 'em' => time()],
 ], new App\WhatsApp\Bot());
-conferir('Mensagem nova é respondida; repetida não; a que chegou com mais de 10 min de atraso não; vazia é ignorada', [$resultadoQr, count($falsoWhats->enviadas) - $antes], [['respondidas' => 1, 'repetidas' => 1, 'antigas' => 1, 'ignoradas' => 1], 1]);
-conferir('A resposta do bot sai com o menu numerado', str_contains(App\WhatsApp\Conector::texto($ultimaWa()), "1 - Fazer pedido\n2 - Acompanhar pedido\n3 - Falar com atendente"), true);
-$conector->receber([['id' => 'm.botao', 'telefone' => '5511911112222', 'texto' => '1', 'em' => time()]], new App\WhatsApp\Bot());
-conferir('Responder "1" ao menu leva ao link do cardápio', $ultimaWa()['interactive']['type'] ?? null, 'cta_url');
+conferir('Mensagem nova passa pelo bot; repetida não; atrasada não; vazia é ignorada. E um "oi" sem palavra-chave fica sem resposta (no canal QR quem cumprimenta é o WhatsApp Business)', [$resultadoQr, count($falsoWhats->enviadas) - $antes], [['respondidas' => 1, 'repetidas' => 1, 'antigas' => 1, 'ignoradas' => 1], 0]);
+$antes = count($falsoWhats->enviadas);
+$conector->receber([['id' => 'm.um', 'telefone' => '5511911112222', 'texto' => '1', 'em' => time()]], new App\WhatsApp\Bot());
+conferir('Fora de um pedido, "1" também fica sem resposta (não existe mais o menu de 3 opções no canal QR)', count($falsoWhats->enviadas) - $antes, 0);
+$conector->receber([['id' => 'm.cardapio', 'telefone' => '5511911112222', 'texto' => 'Cardápio', 'em' => time()]], new App\WhatsApp\Bot());
+conferir('"Cardápio" abre o cardápio pelo chat, também no canal QR', str_contains($ultimaWa()['text']['body'] ?? '', 'Pratos da casa'), true);
+$pdoQr->exec('DELETE FROM whatsapp_sessoes');
 
 // O envio ao Node: com o conector fora do ar, a falha é "tentar de novo" (e não um erro definitivo).
 Env::definir('CONECTOR_URL', 'http://127.0.0.1:9');
@@ -978,6 +985,122 @@ App\WhatsApp\WhatsApp::usarMensageiro(null);
 ini_set('error_log', $logAntesWa);
 @unlink(sys_get_temp_dir() . '/familiamassas-whatsapp-teste.log');
 
+echo "\nPEDIDO PELO WHATSAPP PASSO A PASSO (D74)\n";
+$pdoFx = App\Core\Banco::conexao();
+$pdoFx->exec('DELETE FROM whatsapp_sessoes');
+Env::definir('APP_URL', 'https://exemplo.test');
+App\WhatsApp\WhatsApp::usarMensageiro($falsoWhats);
+ini_set('error_log', sys_get_temp_dir() . '/familiamassas-whatsapp-teste.log');
+(new ConfigRepository())->salvar(['funcionamento' => 'aberta']);
+$botFx = new App\WhatsApp\Bot();
+$foneFx = '5511966660001';
+$nFx = 0;
+$diz = static function (string $texto, ?array $local = null, string $fone = '5511966660001') use ($botFx, &$nFx): string {
+    $nFx++;
+    return $botFx->receber(['wamid' => "fx.{$nFx}", 'telefone' => $fone, 'tipo' => $local ? 'location' : 'text', 'texto' => $texto, 'botao' => null, 'nome' => 'Ana Souza', 'local' => $local]);
+};
+$tela = static fn (): string => (string) ($ultimaWa()['text']['body'] ?? '');
+// O número da opção que tem este texto na última mensagem (o teste não depende da ordem do cardápio).
+$opcao = static function (string $nome) use ($tela): string {
+    return preg_match('/^(\d+)\. [^\n]*' . preg_quote($nome, '/') . '/mu', $tela(), $m) === 1 ? $m[1] : 'não achei ' . $nome;
+};
+$taxaFx = (new ConfigRepository())->inteiro('taxa_entrega_centavos');
+
+conferir('"CARDÁPIO" (com acento e maiúscula) abre o cardápio: pratos da casa, monte a sua massa, bebidas e sobremesas', [
+    $diz('CARDÁPIO!'), str_contains($tela(), 'Carbonara da casa'), str_contains($tela(), 'Monte a sua massa'), str_contains($tela(), 'Bebidas e sobremesas'),
+], ['menu', true, true, true]);
+conferir('Prato da casa: escolhe o prato e o tamanho, com o preço de cada tamanho', [$diz($opcao('Carbonara da casa')), str_contains($tela(), 'Inteiro')], ['prato_tamanho', true]);
+conferir('Tamanho escolhido: pergunta a quantidade', $diz($opcao('Inteiro')), 'quantidade');
+conferir('Quantidade 2: anota com o preço do servidor (2 × R$ 39,90)', [$diz('2'), str_contains($tela(), '2× Carbonara da casa (Inteiro) — R$ 79,80')], ['mais', true]);
+$diz('1');
+conferir('Monte a sua massa: tamanho, massa e molho, com os acréscimos', [
+    $diz($opcao('Monte a sua massa')), $diz($opcao('Meio')), str_contains($tela(), 'Nhoque (+R$ 4,00)'), $diz($opcao('Nhoque')), $diz($opcao('Pesto')),
+], ['monte_tamanho', 'monte_massa', true, 'monte_molho', 'monte_grupo']);
+$proteinas = $opcao('Picadinho de frango') . ', ' . $opcao('Camarão');
+conferir('Ingredientes por grupo: vários de uma vez, 0 para nenhum, e o resumo de quantos inclusos já foram', [
+    $diz($proteinas), $diz('0'), str_contains($tela(), 'Você já escolheu 2 de 3 inclusos'), $diz($opcao('Parmesão')),
+], ['monte_grupo', 'monte_grupo', true, 'quantidade']);
+conferir('A massa montada entra com o preço calculado pelo servidor (Meio R$ 24,90 + nhoque R$ 4 + pesto R$ 4; 3 ingredientes dentro dos inclusos)', [
+    $diz('1'), str_contains($tela(), '1× Monte a sua massa (Meio): Nhoque, molho Pesto'), str_contains($tela(), 'R$ 32,90'), str_contains($tela(), '3 itens, R$ 112,70'),
+], ['mais', true, true, true]);
+conferir('Opção que não existe: o bot avisa e repete a pergunta, sem sair do passo', [$diz('99'), str_contains($tela(), 'Essa opção não existe'), str_contains($tela(), 'Fechar o pedido')], ['invalido', true, true]);
+conferir('Fechar: entrega ou retirada, e o nome (com o atalho do nome do WhatsApp)', [$diz('2'), $diz($opcao('Entrega')), str_contains($tela(), 'responda 1 para usar *Ana*'), $diz('1')], ['tipo', 'nome', true, 'local']);
+conferir('Entrega: o pin da localização e depois o endereço escrito', [$diz('', ['lat' => -22.95, 'lng' => -43.21]), str_contains($tela(), 'Recebi a localização'), $diz('Rua das Flores, 120, Vila Nova, portão azul')], ['endereco', true, 'pagamento']);
+$totalFx = 7980 + 3290 + $taxaFx;
+conferir('Dinheiro: troco menor que o total é recusado; troco maior leva ao resumo com o total e o endereço', [
+    $diz('3'), $diz('50'), str_contains($tela(), 'maior que o total'), $diz('R$ 200'),
+    str_contains($tela(), 'Total: R$ ' . number_format($totalFx / 100, 2, ',', '.')), str_contains($tela(), 'Rua das Flores, 120, Vila Nova, portão azul'), str_contains($tela(), 'troco para R$ 200,00'),
+], ['troco', 'troco', true, 'resumo', true, true, true]);
+conferir('Confirmar: o pedido é criado', $diz('1'), 'pedido_criado');
+$pedidoFx = $pdoFx->query('SELECT * FROM pedidos ORDER BY id DESC LIMIT 1')->fetch();
+$itensFx = $pdoFx->query('SELECT nome, quantidade, preco_unit_centavos FROM itens_pedido WHERE pedido_id = ' . (int) $pedidoFx['id'] . ' ORDER BY id')->fetchAll();
+conferir('O pedido entra no Kanban com origem WhatsApp, o telefone da conversa, entrega com o pin e o endereço, dinheiro e troco', [
+    $pedidoFx['origem'], $pedidoFx['cliente_telefone'], $pedidoFx['cliente_nome'], $pedidoFx['tipo'], $pedidoFx['status'], (float) $pedidoFx['entrega_lat'],
+    $pedidoFx['endereco_rua'], $pedidoFx['endereco_numero'], $pedidoFx['endereco_bairro'], $pedidoFx['endereco_complemento'], $pedidoFx['pagamento'], (int) $pedidoFx['troco_para_centavos'], (int) $pedidoFx['total_centavos'],
+], ['whatsapp', $foneFx, 'Ana', 'entrega', 'novo', -22.95, 'Rua das Flores', '120', 'Vila Nova', 'portão azul', 'dinheiro', 20000, $totalFx]);
+conferir('Os itens do pedido: 2 carbonaras inteiras e a massa montada, com o preço do servidor', [count($itensFx), $itensFx[0]['quantidade'], (int) $itensFx[0]['preco_unit_centavos'], (int) $itensFx[1]['preco_unit_centavos']], [2, 2, 3990, 3290]);
+conferir('O cliente recebe na hora o "Recebemos seu pedido" (o mesmo aviso de status do cardápio digital) e o pedido em andamento some', [
+    str_contains($tela(), "Recebemos seu pedido #{$pedidoFx['id']}"), $pdoFx->query("SELECT COUNT(*) FROM whatsapp_sessoes WHERE telefone = '{$foneFx}'")->fetchColumn(), count(array_filter((new App\Repositories\PedidoRepository())->paraPainel(null), static fn (array $p): bool => (int) $p['id'] === (int) $pedidoFx['id'])),
+], [true, 0, 1]);
+
+// Um pedido de retirada, só com bebida.
+$foneFx2 = '5511966660002';
+$diz('cardapio', null, $foneFx2);
+$diz($opcao('Bebidas e sobremesas'), null, $foneFx2);
+$diz($opcao('Água mineral'), null, $foneFx2);
+$diz('3', null, $foneFx2);
+$diz('2', null, $foneFx2);
+$diz($opcao('Retirada'), null, $foneFx2);
+$diz('Bia', null, $foneFx2);
+conferir('Retirada: depois do nome vai direto ao pagamento (sem endereço) e ao resumo', [$diz('1', null, $foneFx2), str_contains($tela(), 'Retirada no balcão, em nome de Bia'), str_contains($tela(), 'Total: R$ 12,00')], ['resumo', true, true]);
+conferir('Retirada confirmada: pedido sem endereço e sem taxa', [$diz('1', null, $foneFx2), ...array_values($pdoFx->query('SELECT tipo, endereco_rua, taxa_entrega_centavos, total_centavos FROM pedidos ORDER BY id DESC LIMIT 1')->fetch())],
+    ['pedido_criado', 'retirada', null, 0, 1200]);
+
+// Cancelar, voltar ao cardápio e expirar.
+$diz('cardapio', null, '5511966660003');
+$diz($opcao('Carbonara da casa'), null, '5511966660003');
+conferir('"cardápio" no meio do pedido volta ao cardápio; "cancelar" encerra e o bot volta ao silêncio', [
+    $diz('Cardápio', null, '5511966660003'), $diz('cancelar', null, '5511966660003'), str_contains($tela(), 'Pedido cancelado'), (new App\WhatsApp\FluxoPedido())->ativo('5511966660003'),
+], ['menu', 'cancelado', true, false]);
+$diz('cardapio', null, '5511966660004');
+$pdoFx->prepare('UPDATE whatsapp_sessoes SET atualizado_em = ? WHERE telefone = ?')->execute([gmdate('Y-m-d H:i:s', time() - 31 * 60), '5511966660004']);
+conferir('Pedido parado há mais de 30 minutos some sozinho', (new App\WhatsApp\FluxoPedido())->ativo('5511966660004'), false);
+$diz('cardapio', null, '5511966660005');
+conferir('"atendente" no meio do pedido passa para uma pessoa', [$diz('atendente', null, '5511966660005'), $conversasWa->emAtendimentoHumano('5511966660005')], ['atendente', true]);
+(new ConfigRepository())->salvar(['funcionamento' => 'fechada']);
+conferir('Loja fechada: "Cardápio" avisa o horário e não abre pedido', [$diz('cardapio', null, '5511966660006'), str_contains($tela(), 'Agora estamos fechados'), (new App\WhatsApp\FluxoPedido())->ativo('5511966660006')], ['fechada', true, false]);
+(new ConfigRepository())->salvar(['funcionamento' => 'aberta']);
+
+// Dúvida no meio do pedido: a IA responde e o passo se repete.
+Env::definir('OPENROUTER_API_KEY', $chaveIa);
+$repoIa->salvarConfig(['ia_ativo' => '1']);
+$pedidosIa = [];
+$filaIa = [$textoIa('Temos sim: a massa sem glúten custa R$ 5 a mais.')];
+$botFxIa = new App\WhatsApp\Bot(assistente: $assistenteIa);
+$botFxIa->receber(['wamid' => 'fx.ia.1', 'telefone' => '5511966660007', 'tipo' => 'text', 'texto' => 'cardapio', 'botao' => null, 'nome' => null]);
+$enviadasAntes = count($falsoWhats->enviadas);
+$resultadoIa = $botFxIa->receber(['wamid' => 'fx.ia.2', 'telefone' => '5511966660007', 'tipo' => 'text', 'texto' => 'tem opção sem glúten?', 'botao' => null, 'nome' => null]);
+$doisUltimos = array_slice($falsoWhats->enviadas, -2);
+conferir('Dúvida no meio do pedido: a IA responde e o bot repete a pergunta do passo (o pedido continua)', [
+    $resultadoIa, count($falsoWhats->enviadas) - $enviadasAntes, $doisUltimos[0]['text']['body'] ?? null, str_contains($doisUltimos[1]['text']['body'] ?? '', 'Pratos da casa'),
+    (new App\WhatsApp\FluxoPedido())->ativo('5511966660007'),
+], ['ia', 2, 'Temos sim: a massa sem glúten custa R$ 5 a mais.', true, true]);
+conferir('A IA recebe a situação: está no meio de um pedido e não deve mandar link', [
+    str_contains((string) ($pedidosIa[0]['corpo']['messages'][0]['content'] ?? ''), 'SITUAÇÃO AGORA'), str_contains((string) ($pedidosIa[0]['corpo']['messages'][0]['content'] ?? ''), 'Não mande link do cardápio'),
+], [true, true]);
+$pedidosIa = [];
+$botFxIa->receber(['wamid' => 'fx.ia.3', 'telefone' => '5511966660007', 'tipo' => 'text', 'texto' => '42', 'botao' => null, 'nome' => null]);
+conferir('Número errado não gasta IA: só repete a pergunta', count($pedidosIa), 0);
+
+$pdoFx->exec('DELETE FROM whatsapp_sessoes');
+$pdoFx->exec('DELETE FROM ia_uso');
+$repoIa->salvarConfig(['ia_ativo' => '0']);
+Env::definir('OPENROUTER_API_KEY', '');
+Env::definir('APP_URL', '');
+App\WhatsApp\WhatsApp::usarMensageiro(null);
+ini_set('error_log', $logAntesWa);
+@unlink(sys_get_temp_dir() . '/familiamassas-whatsapp-teste.log');
+
 echo "\nTOKEN DO WHATSAPP\n";
 $tokens = new TokenWhatsApp();
 $agora = 1_800_000_000;
@@ -1188,7 +1311,7 @@ foreach ([['A1', 'Mesa 5', 'local', '5', 'pix', 'concluido', 'balcao'], ['A2', '
 }
 
 $aplicadas = App\Core\Banco::migrar($antigo, $arquivoAntigo);
-conferir('Banco da versão 1 recebe as migrações 002 a 005', $aplicadas, [2, 3, 4, 5]);
+conferir('Banco da versão 1 recebe as migrações 002 a 006', $aplicadas, [2, 3, 4, 5, 6]);
 conferir('A versão do banco passa a ser a atual', (int) $antigo->query('PRAGMA user_version')->fetchColumn(), App\Core\Banco::VERSAO_DO_ESQUEMA);
 conferir('Uma cópia do banco antigo foi guardada antes de mexer', count(glob($pastaMigracao . '/backups/antigo-antes-da-v2-*.sqlite') ?: []), 1);
 conferir('Rodar de novo não faz nada', App\Core\Banco::migrar($antigo, $arquivoAntigo), []);

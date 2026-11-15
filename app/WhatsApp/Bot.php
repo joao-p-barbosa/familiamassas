@@ -16,8 +16,9 @@ use App\Services\TokenWhatsApp;
  *   [Acompanhar pedido]   → status do pedido em andamento deste telefone
  *   [Falar com atendente] → modo humano: o bot fica em silêncio por algumas horas (configuração whatsapp_humano_horas)
  * Montar o prato fica no cardápio web (a API aceita no máximo 3 botões e listas de 10 linhas).
- * Texto livre: com o assistente com IA ligado e disponível (D70), ele responde; sem ele, ou se falhar, vale o menu acima.
- * Os botões e os números 1, 2 e 3 nunca passam pela IA: são respostas fixas, sem custo.
+ * Pedido pelo chat (D74): "Cardápio" abre o passo a passo (FluxoPedido); "acompanhar" e "atendente" também valem como palavras.
+ * No canal QR code o bot fica em SILÊNCIO fora dessas palavras: quem cumprimenta é a saudação do WhatsApp Business do dono.
+ * Nos outros canais, o texto livre recebe a IA (se ligada, D70) ou o menu acima.
  */
 final class Bot
 {
@@ -28,12 +29,18 @@ final class Bot
         private readonly PedidoRepository $pedidos = new PedidoRepository(),
         private readonly TokenWhatsApp $token = new TokenWhatsApp(),
         private readonly Assistente $assistente = new Assistente(),
-    ) {}
+        ?FluxoPedido $fluxo = null,
+    ) {
+        $this->fluxo = $fluxo ?? new FluxoPedido($this->assistente);
+    }
+
+    private readonly FluxoPedido $fluxo;
 
     /**
      * Uma mensagem do cliente.
      * @param array{wamid:string, telefone:string, tipo:string, texto:string, botao:?string, nome:?string} $m
-     * @return string o que o bot fez: repetida | humano | boas_vindas | pedir | acompanhar | atendente | ia
+     * @return string o que o bot fez: repetida | humano | boas_vindas | pedir | acompanhar | atendente | ia | silencio | fechada
+     *   ou, no pedido pelo chat, o passo em que o cliente está (menu, quantidade, resumo...) e pedido_criado | cancelado | invalido
      */
     public function receber(array $m): string
     {
@@ -48,12 +55,30 @@ final class Bot
         if ($this->conversas->emAtendimentoHumano($m['telefone'])) {
             return 'humano';   // alguém da equipe está conversando: o bot não interrompe
         }
-        return match ($m['botao']) {
-            'pedir' => $this->pedir($m['telefone']),
-            'acompanhar' => $this->acompanhar($m['telefone']),
-            'atendente' => $this->atendente($m['telefone']),
-            default => $this->livre($m),
-        };
+        if ($m['botao'] !== null) {   // botões da Cloud API
+            return match ($m['botao']) {
+                'pedir' => $this->pedir($m['telefone']),
+                'acompanhar' => $this->acompanhar($m['telefone']),
+                'atendente' => $this->atendente($m['telefone']),
+                default => $this->livre($m),
+            };
+        }
+        if ($this->fluxo->ativo($m['telefone'])) {   // no meio de um pedido pelo chat
+            $resultado = $this->fluxo->receber($m);
+            return $resultado === 'atendente' ? $this->atendente($m['telefone']) : $resultado;
+        }
+        $chave = FluxoPedido::chave($m['texto']);
+        if (in_array($chave, FluxoPedido::PALAVRAS, true)) {
+            return $this->fluxo->iniciar($m['telefone'], $m['nome']);
+        }
+        if ($chave === 'acompanhar') {
+            return $this->acompanhar($m['telefone']);
+        }
+        if ($chave === 'atendente') {
+            return $this->atendente($m['telefone']);
+        }
+        // Canal QR: silêncio. A saudação (com o link e "digite Cardápio") é do WhatsApp Business do dono, e o bot não gasta nada.
+        return Conector::ativo() ? 'silencio' : $this->livre($m);
     }
 
     /** Texto livre: a IA responde quando está ligada e disponível. Qualquer falha cai no menu de 3 opções (o cliente nunca fica sem resposta). */
@@ -105,6 +130,10 @@ final class Bot
     private function acompanhar(string $telefone): string
     {
         $pedido = $this->pedidos->ultimoAbertoDoTelefone($telefone);
+        if ($pedido === null && Conector::ativo()) {
+            WhatsApp::enviar($telefone, WhatsApp::texto('Você não tem pedido em andamento. Para pedir por aqui, digite *Cardápio*.'), 'acompanhar_sem_pedido');
+            return 'acompanhar';
+        }
         if ($pedido === null) {
             WhatsApp::enviar($telefone, WhatsApp::botoes('Você não tem pedido em andamento. Quer fazer um?', [
                 'pedir' => WhatsApp::BOTOES['pedir'], 'atendente' => WhatsApp::BOTOES['atendente'],

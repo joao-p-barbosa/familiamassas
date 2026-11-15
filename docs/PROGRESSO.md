@@ -13,6 +13,7 @@
 | 4 · Bot WhatsApp | ✅ Feito e testado no **modo simulado** e com o webhook por HTTP (assinatura, verificação, evento repetido). ⚠️ Falta ligar na Meta de verdade (conta, número, token e template aprovado). Decisões D57 a D62. |
 | 4b · WhatsApp por QR code | ✅ Feito e testado em desenvolvimento: conector Node (Baileys) conectado de verdade ao WhatsApp, QR no painel, aviso de queda e fila retida (D66 a D69). ⚠️ Falta parear com o número dedicado da loja, o primeiro deploy com o Node na Render e a Etapa 4c (assistente com IA, D70). |
 | 4c · Assistente com IA | ✅ Feito e testado com um OpenRouter de mentira: tela Assistente (humor, conhecimento, fluxos, modelo e custo, teste lado a lado), o bot responde texto livre pela IA e volta ao menu em qualquer falha (D70 e D71). Crédito do cliente: recargas registradas na tela, saldo, faixa de "crédito baixo" e de "sem crédito" (D72). ⚠️ Falta testar com a chave real do OpenRouter e com o Haiku 5.5 de verdade. |
+| 4d · Pedido pelo WhatsApp | ✅ Feito e testado (24 testes do fluxo e um pedido completo no simulador do painel, que chegou ao Kanban): "Cardápio" abre o passo a passo, do prato à confirmação, com pin de localização e IA só para dúvidas no meio do pedido (D74). ⚠️ Falta o teste real com um segundo celular e a saudação do WhatsApp Business configurada pelo dono. |
 | 5 · Edição do cardápio | ✅ Feito (adiantado, faz parte da "página de gestão"). |
 | 6 · Revisão final e piloto | ⏳ Não começou. |
 
