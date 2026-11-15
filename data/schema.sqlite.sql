@@ -231,3 +231,45 @@ CREATE TABLE whatsapp_conector (
   qr           TEXT,                           -- imagem do QR (data URL) enquanto aguarda o pareamento
   fila_retida  INTEGER NOT NULL DEFAULT 0      -- 1 = a queda passou de 2 min: a fila espera o proprietário decidir
 );
+
+-- Assistente com IA (D70): perguntas e respostas, fluxos em texto e o uso (custo real por resposta, em micro-dólares).
+CREATE TABLE assistente_faq (
+  id       INTEGER PRIMARY KEY AUTOINCREMENT,
+  pergunta TEXT NOT NULL,
+  resposta TEXT NOT NULL,
+  ativo    INTEGER NOT NULL DEFAULT 1,
+  ordem    INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE assistente_fluxos (
+  id     INTEGER PRIMARY KEY AUTOINCREMENT,
+  titulo TEXT NOT NULL,
+  quando TEXT NOT NULL,
+  passos TEXT NOT NULL,
+  ativo  INTEGER NOT NULL DEFAULT 1,
+  ordem  INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE ia_uso (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  criado_em     TEXT NOT NULL,
+  origem        TEXT NOT NULL,                 -- whatsapp | teste
+  telefone      TEXT,
+  modelo        TEXT NOT NULL,
+  tokens_in     INTEGER NOT NULL DEFAULT 0,
+  tokens_out    INTEGER NOT NULL DEFAULT 0,
+  custo_micro   INTEGER NOT NULL DEFAULT 0,    -- custo devolvido pelo OpenRouter, em milionésimos de dólar
+  duracao_ms    INTEGER NOT NULL DEFAULT 0,
+  ferramentas   TEXT,
+  erro          TEXT
+);
+CREATE INDEX idx_ia_uso_criado ON ia_uso (criado_em);
+CREATE INDEX idx_ia_uso_telefone ON ia_uso (telefone, criado_em);
+
+-- Crédito do cliente no assistente (D72): cada recarga que o cliente pagou, em micro-dólares.
+CREATE TABLE ia_recargas (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  criado_em   TEXT NOT NULL,
+  valor_micro INTEGER NOT NULL CHECK (valor_micro > 0),
+  nota        TEXT NOT NULL DEFAULT ''
+);

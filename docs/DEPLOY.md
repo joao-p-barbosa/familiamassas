@@ -88,6 +88,17 @@ Alternativa à Cloud API: sem conta Meta, com um número dedicado à loja. **Nã
 
 **Limites:** o Node usa até ~160 MB dentro da máquina de 512 MB; se o serviço reiniciar por falta de memória, suba o plano. O Baileys 6.7.24 é a versão estável; a imagem busca a dependência `libsignal` no GitHub no momento do build, com a versão fixada no `conector/package-lock.json` (mantenha o arquivo no repositório).
 
+## Ligar o assistente com IA (Etapa 4c)
+
+1. Crie a chave em https://openrouter.ai/keys e compre créditos (o cartão fica na conta do OpenRouter; o sistema nunca guarda cartão).
+2. Na Render → **Environment**, crie `OPENROUTER_API_KEY` com a chave. Salve e deixe o serviço reiniciar.
+3. Painel → **Assistente**: ligue, escolha o modelo (padrão `anthropic/claude-haiku-5.5`) e salve. Use a aba **Teste** para comparar modelos antes de decidir.
+4. Defina o **teto mensal** na aba Modelo e custo. Ao atingi-lo, o bot volta ao menu de 3 opções.
+5. **Crédito do cliente (D72):** a cada recarga que o cliente pagar a você, registre o valor na seção "Crédito do cliente" da mesma aba. O sistema desconta o gasto, avisa o proprietário quando o saldo ficar baixo e, se acabar, o bot volta ao menu de 3 opções. A recarga **não muda a chave**.
+6. A compra do crédito de verdade é na **sua** conta do OpenRouter, em openrouter.ai/settings/credits (taxa de 5,5% com mínimo de US$ 0,80: compre de US$ 15 a 25 de cada vez). O crédito pode expirar um ano depois da compra.
+
+A chave só existe na variável de ambiente: a tela mostra apenas se ela está configurada. Modelos gratuitos (`:free`) são só para teste: limite de 20 por minuto e 50 por dia, e quase sempre exigem desligar a opção de privacidade.
+
 ## Cuidados
 
 - O repositório é **público**: nunca coloque senha, token ou `.env` nele.

@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\WhatsApp;
 
+use App\IA\Assistente;
 use App\Repositories\ConfigRepository;
 use App\Repositories\PedidoRepository;
 use App\Services\LojaService;
@@ -15,6 +16,8 @@ use App\Services\TokenWhatsApp;
  *   [Acompanhar pedido]   → status do pedido em andamento deste telefone
  *   [Falar com atendente] → modo humano: o bot fica em silêncio por algumas horas (configuração whatsapp_humano_horas)
  * Montar o prato fica no cardápio web (a API aceita no máximo 3 botões e listas de 10 linhas).
+ * Texto livre: com o assistente com IA ligado e disponível (D70), ele responde; sem ele, ou se falhar, vale o menu acima.
+ * Os botões e os números 1, 2 e 3 nunca passam pela IA: são respostas fixas, sem custo.
  */
 final class Bot
 {
@@ -24,12 +27,13 @@ final class Bot
         private readonly ConfigRepository $config = new ConfigRepository(),
         private readonly PedidoRepository $pedidos = new PedidoRepository(),
         private readonly TokenWhatsApp $token = new TokenWhatsApp(),
+        private readonly Assistente $assistente = new Assistente(),
     ) {}
 
     /**
      * Uma mensagem do cliente.
      * @param array{wamid:string, telefone:string, tipo:string, texto:string, botao:?string, nome:?string} $m
-     * @return string o que o bot fez: repetida | humano | boas_vindas | pedir | acompanhar | atendente
+     * @return string o que o bot fez: repetida | humano | boas_vindas | pedir | acompanhar | atendente | ia
      */
     public function receber(array $m): string
     {
@@ -48,8 +52,26 @@ final class Bot
             'pedir' => $this->pedir($m['telefone']),
             'acompanhar' => $this->acompanhar($m['telefone']),
             'atendente' => $this->atendente($m['telefone']),
-            default => $this->boasVindas($m['telefone'], $m['nome']),
+            default => $this->livre($m),
         };
+    }
+
+    /** Texto livre: a IA responde quando está ligada e disponível. Qualquer falha cai no menu de 3 opções (o cliente nunca fica sem resposta). */
+    private function livre(array $m): string
+    {
+        if ($m['texto'] !== '' && $this->assistente->indisponivel($m['telefone']) === null) {
+            try {
+                $r = $this->assistente->responder($m['telefone'], $m['texto'], $m['nome']);
+            } catch (\Throwable $e) {
+                $r = ['ok' => false, 'erro' => $e->getMessage(), 'texto' => ''];
+            }
+            if ($r['ok']) {
+                WhatsApp::enviar($m['telefone'], WhatsApp::texto($r['texto']), 'ia');
+                return 'ia';
+            }
+            error_log('[ia] sem resposta da IA, voltando ao menu: ' . $r['erro']);
+        }
+        return $this->boasVindas($m['telefone'], $m['nome']);
     }
 
     private function boasVindas(string $telefone, ?string $nome): string

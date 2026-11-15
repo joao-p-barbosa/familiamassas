@@ -20,6 +20,7 @@ const MODULOS = {
   usuarios: () => import('./usuarios.js'),
   configuracoes: () => import('./configuracoes.js'),
   whatsapp: () => import('./whatsapp.js'),
+  assistente: () => import('./assistente.js'),
 };
 
 const abertas = new Map();   // nome → { raiz, modulo }: cada tela fica no DOM (escondida) depois de aberta

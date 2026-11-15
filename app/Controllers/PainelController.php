@@ -26,6 +26,7 @@ final class PainelController
         'usuarios'      => ['titulo' => 'Usuários',                'grupo' => 'Loja',     'perfis' => ['admin']],
         'configuracoes' => ['titulo' => 'Configurações',           'grupo' => 'Loja',     'perfis' => ['admin']],
         'whatsapp'      => ['titulo' => 'WhatsApp',                'grupo' => 'Loja',     'perfis' => ['admin']],
+        'assistente'    => ['titulo' => 'Assistente',              'grupo' => 'Loja',     'perfis' => ['admin']],
     ];
 
     /** Telas que saíram do painel: quem tinha o endereço salvo cai no quadro de pedidos. */

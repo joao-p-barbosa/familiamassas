@@ -10,6 +10,7 @@ use App\Core\Resposta;
 use App\Core\Sessao;
 use App\Repositories\PedidoRepository;
 use App\Services\PedidoService;
+use App\IA\Assistente;
 use App\WhatsApp\Conector;
 
 // API do quadro de pedidos (a produção) e da impressão. Proprietário (admin) e atendente usam as mesmas rotas.
@@ -39,7 +40,9 @@ final class AdminPedidoController
         WhatsAppController::processarFila(3);
         // Canal QR: o painel mostra a faixa de "WhatsApp desconectado" (e toca o som) em qualquer tela, com este mesmo polling.
         $whatsapp = Conector::ativo() ? (new Conector())->paraOPainel() : null;
-        Resposta::json(['agora' => $agora, 'pedidos' => $lista, 'fechamento' => $fechamento, 'whatsapp' => $whatsapp]);
+        // Crédito do assistente com IA acabando ou acabado: só o proprietário vê (D72).
+        $ia = $usuario['perfil'] === 'admin' ? (new Assistente())->alertaParaOPainel() : null;
+        Resposta::json(['agora' => $agora, 'pedidos' => $lista, 'fechamento' => $fechamento, 'whatsapp' => $whatsapp, 'ia' => $ia]);
     }
 
     public function detalhe(Requisicao $req): void

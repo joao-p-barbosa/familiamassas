@@ -12,6 +12,7 @@
 | 3 · Painel: login, Kanban, impressão | ✅ Feito (impressão testada só em simulação; falta a impressora real). O modo cozinha foi retirado na rodada de melhorias. |
 | 4 · Bot WhatsApp | ✅ Feito e testado no **modo simulado** e com o webhook por HTTP (assinatura, verificação, evento repetido). ⚠️ Falta ligar na Meta de verdade (conta, número, token e template aprovado). Decisões D57 a D62. |
 | 4b · WhatsApp por QR code | ✅ Feito e testado em desenvolvimento: conector Node (Baileys) conectado de verdade ao WhatsApp, QR no painel, aviso de queda e fila retida (D66 a D69). ⚠️ Falta parear com o número dedicado da loja, o primeiro deploy com o Node na Render e a Etapa 4c (assistente com IA, D70). |
+| 4c · Assistente com IA | ✅ Feito e testado com um OpenRouter de mentira: tela Assistente (humor, conhecimento, fluxos, modelo e custo, teste lado a lado), o bot responde texto livre pela IA e volta ao menu em qualquer falha (D70 e D71). Crédito do cliente: recargas registradas na tela, saldo, faixa de "crédito baixo" e de "sem crédito" (D72). ⚠️ Falta testar com a chave real do OpenRouter e com o Haiku 5.5 de verdade. |
 | 5 · Edição do cardápio | ✅ Feito (adiantado, faz parte da "página de gestão"). |
 | 6 · Revisão final e piloto | ⏳ Não começou. |
 
@@ -193,3 +194,19 @@ Testados no navegador (celular e desktop) e com testes automáticos. `⚠️` = 
 - ✅ Rotas do conector sem o segredo certo respondem `404`; o Node sem o segredo responde `403`.
 - ⚠️ **Não testado:** pareamento com um celular de verdade, envio e recebimento reais, reconexão depois de queda real, a imagem Docker (`Dockerfile` com Node) e o conjunto no Postgres (Neon): a suíte com o argumento `pg` não foi executada nesta rodada (faltava `TEST_DATABASE_URL`).
 - ⚠️ Contatos que o WhatsApp identifica por "LID" dependem do campo `senderPn` do Baileys 6.7.24; sem ele a mensagem é ignorada.
+
+## Etapa 4c: Assistente com IA (2026-11-15)
+
+**Como testar (no computador):**
+1. Crie a chave em https://openrouter.ai/keys, ponha créditos (alguns dólares bastam) e coloque `OPENROUTER_API_KEY=...` no `.env`.
+2. Painel → **Assistente**. Ligue o assistente, escolha o tom na aba **Humor** e salve.
+3. Aba **Teste**: faça a mesma pergunta a 2 ou 3 modelos ("Quanto custa o prato pequeno?", "Vocês abrem no domingo?", "Quero falar com uma pessoa"). Compare a resposta, o custo e o tempo.
+4. No WhatsApp (ou no simulador da tela WhatsApp), mande uma pergunta livre: a IA responde. Mande "1", "2" ou "3": continua o menu fixo.
+5. Aba **Modelo e custo**: o gasto do mês, o saldo do OpenRouter e o teto. Baixe o teto para um valor mínimo e veja o bot voltar ao menu.
+
+**Checklist**
+- ✅ 291 testes de regras no SQLite (50 novos: prompt, ferramentas, custo, teto, limite por cliente, queda para o menu, teste do painel, saldo da chave e o crédito do cliente: recargas, saldo, alerta, "sem crédito" por saldo zero e por 402, e a volta sozinha).
+- ✅ Tela conferida no navegador contra um OpenRouter de mentira: salvar humor, perguntas e fluxo; comparar 3 modelos em paralelo (um deles com erro de crédito, mostrado em português); saldo; passar para atendente pelo bot e o bot ficar em silêncio.
+- ✅ Faixa de crédito conferida no navegador (amarela "baixo" e vermelha "sem crédito", que se limpa sozinha quando uma chamada volta a funcionar), com o texto legível nos 4 temas pelo teste de contraste.
+- ⚠️ **Não testado:** uma chamada real ao OpenRouter e ao Haiku 5.5 (formato das respostas, `usage.cost`, `reasoning` e `provider.data_collection` seguem a documentação, mas só uma chave real confirma); a migração 004 no Postgres (o SQL é o mesmo, com `IDENTITY` no lugar de `AUTOINCREMENT`); a qualidade das respostas em português de cada modelo.
+- ⚠️ A resposta da IA leva alguns segundos. No canal QR o conector espera até 60 s; na Cloud API da Meta, que exige resposta em poucos segundos, a Meta pode reenviar o evento (o `wamid` repetido é ignorado, então não responde duas vezes).

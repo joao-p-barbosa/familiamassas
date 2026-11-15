@@ -103,6 +103,18 @@ Toda escrita exige o cabeçalho `X-CSRF-Token` (o valor está na `<meta name="cs
 | `GET /api/admin/whatsapp` | admin | Quais credenciais estão preenchidas (nunca os valores), HTTPS, contadores de 24 h. |
 | `POST /api/admin/whatsapp/link` | admin | `{telefone}` → `{url, validade_minutos}`: o mesmo link que o bot vai mandar. |
 
+### Assistente com IA (Etapa 4c, só proprietário)
+
+| Rota | O que faz |
+|---|---|
+| `GET /api/admin/assistente` | Tudo para a tela: `config` (chaves `ia_*`, com os interruptores como booleanos), `faqs`, `fluxos`, `chave_configurada`, `indisponivel` (`null`, `desligada`, `sem_chave`, `sem_credito` ou `teto`), `credito` (`{ativa, saldo_usd, recargas_usd, gasto_usd, desde, alerta_usd, recargas: [{id, em, valor_usd, nota}]}`), `modelos` sugeridos, `tons`, `tamanhos` e `uso` (gasto do mês e de hoje, respostas, falhas, por modelo e as 15 últimas). A chave da API nunca é devolvida. |
+| `PUT /api/admin/assistente` | `{config, faqs: [{pergunta, resposta, ativo}], fluxos: [{titulo, quando, passos, ativo}]}`: salva tudo de uma vez (as duas listas são trocadas inteiras, numa transação). Erros em `422` com `campos` (`ia_modelo`, `ia_teto_usd`, `faqs.N`, `fluxos.N`...). Devolve o mesmo que o `GET`. |
+| `GET /api/admin/assistente/saldo` | Saldo e uso da chave no OpenRouter (`GET /api/v1/key`): `{ok, limite, restante, uso_total, uso_mes, uso_hoje, gratuito, gratis_hoje}`. Faz uma chamada de rede, por isso é separada. |
+| `GET /api/admin/assistente/prompt` | O texto exato que o modelo recebe como instrução, com `caracteres` e `tokens_aprox`. |
+| `POST /api/admin/assistente/testar` | `{pergunta, modelo, historico?}` → uma pergunta a UM modelo, sem tocar em conversa nenhuma: `{ok, texto, modelo, tokens_in, tokens_out, custo_usd, ms, ferramentas, erro}`. Sem chave → `409 sem_chave`; teto atingido → `409 teto`. A tela chama uma vez por modelo, em paralelo. |
+| `POST /api/admin/assistente/recargas` | `{valor_usd, nota?}` → registra uma recarga paga pelo cliente (D72). Valor de US$ 0,01 a US$ 10.000 (aceita vírgula); fora disso `422` com `campos.valor_usd`. Liga o controle de crédito e limpa a marca de "sem crédito". Devolve o mesmo que `GET /api/admin/assistente`. |
+| `DELETE /api/admin/assistente/recargas/{id}` | Tira uma recarga lançada por engano. Devolve o mesmo que o `GET`. |
+
 ## Serviços de terceiros usados pelo navegador (só no mapa da entrega)
 
 O mapa do fechamento do pedido de entrega fala **direto do navegador** com o OpenStreetMap, sem chave de acesso (D38):
@@ -148,7 +160,7 @@ Painel (proprietário):
 | `POST /api/admin/whatsapp/fila/liberar` | "Enviar pendentes": a fila retida volta a andar (avisos com mais de 30 min são descartados ao enviar). Devolve o `conector`. |
 | `POST /api/admin/whatsapp/fila/descartar` | "Descartar": apaga os avisos esperando e libera a fila. Devolve o `conector` mais `descartados`. |
 
-`GET /api/admin/pedidos` ganha o campo `whatsapp` (`null` fora do canal QR, ou `{estado, desde, fila_retida, pendentes, alarme}`): é o que alimenta a faixa de queda em qualquer tela. O `alarme` só liga depois de 2 min fora do ar.
+`GET /api/admin/pedidos` ganha o campo `whatsapp` (`null` fora do canal QR, ou `{estado, desde, fila_retida, pendentes, alarme}`): é o que alimenta a faixa de queda em qualquer tela. O `alarme` só liga depois de 2 min fora do ar. O proprietário recebe também `ia` (`null` ou `{estado: "saldo_baixo"|"sem_credito", saldo_usd}`), que alimenta a faixa de crédito do assistente (D72).
 
 O PHP fala com o Node em `POST http://127.0.0.1:3001/enviar` (`{telefone, texto}`, mesmo cabeçalho de segredo): `202 {id}` quando aceita na fila, `503` com o WhatsApp desconectado, `429` com a fila cheia (50), `403` sem o segredo.
 

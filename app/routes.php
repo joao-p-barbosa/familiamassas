@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Controllers\AdminCardapioController;
+use App\Controllers\AdminAssistenteController;
 use App\Controllers\AdminAtendimentoController;
 use App\Controllers\AdminConfigController;
 use App\Controllers\AdminPedidoController;
@@ -18,6 +19,7 @@ return static function (Roteador $r): void {
     $pedidos = new AdminPedidoController();
     $atendimentos = new AdminAtendimentoController();
     $config = new AdminConfigController();
+    $assistente = new AdminAssistenteController();
     $cardapio = static fn (): AdminCardapioController => new AdminCardapioController();
     $whatsapp = new WhatsAppController();
 
@@ -65,6 +67,14 @@ return static function (Roteador $r): void {
 
     $r->get('/api/admin/configuracoes', $config->ler(...));
     $r->put('/api/admin/configuracoes', $config->salvar(...));
+    // Assistente com IA (D70)
+    $r->get('/api/admin/assistente', $assistente->ler(...));
+    $r->put('/api/admin/assistente', $assistente->salvar(...));
+    $r->get('/api/admin/assistente/saldo', $assistente->saldo(...));
+    $r->get('/api/admin/assistente/prompt', $assistente->prompt(...));
+    $r->post('/api/admin/assistente/testar', $assistente->testar(...));
+    $r->post('/api/admin/assistente/recargas', $assistente->recarregar(...));
+    $r->delete('/api/admin/assistente/recargas/{id}', $assistente->apagarRecarga(...));
     $r->post('/api/admin/whatsapp/link', $config->linkDeTeste(...));
 
     // Usuários do painel (só o proprietário)

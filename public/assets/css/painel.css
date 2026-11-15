@@ -240,6 +240,38 @@
   font-size: var(--texto-5);
 }
 
+/* Faixa do crédito do assistente com IA: abaixo da faixa do WhatsApp, só para o proprietário. */
+.faixa-ia {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-barra);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--e-2) var(--e-4);
+  padding: var(--e-3) var(--e-4);
+  border-bottom: 1px solid var(--cor-borda-forte);
+}
+.faixa-ia[hidden] {
+  display: none;
+}
+.faixa-ia--baixo {
+  background: var(--cor-alerta-suave);
+  color: var(--cor-texto);
+}
+.faixa-ia--acabou {
+  background: var(--cor-perigo-suave);
+  color: var(--cor-texto);
+}
+.faixa-ia__texto {
+  flex: 1 1 18rem;
+  margin: 0;
+}
+.faixa-ia a {
+  color: inherit;
+  font-weight: 600;
+}
+
 /* Faixa de aviso do WhatsApp por QR code: fica colada no topo, em qualquer tela do painel. */
 .faixa-whatsapp {
   position: sticky;
@@ -1529,4 +1561,121 @@ a.balao__acao {
 .escolha-perfil:disabled .escolha-perfil__opcao {
   cursor: not-allowed;
   opacity: 0.7;
+}
+
+/* ---------- Assistente com IA ---------- */
+.assistente {
+  max-width: 56rem;
+}
+.assistente__estado {
+  margin-bottom: var(--e-2);
+}
+.item-edicao-lista {
+  display: grid;
+  gap: var(--e-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.item-edicao {
+  display: grid;
+  gap: var(--e-3);
+  padding: var(--e-3) var(--e-4);
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio-2);
+  background: var(--cor-superficie-2);
+}
+.item-edicao__topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--e-3);
+}
+.modelos-sugeridos {
+  display: grid;
+  gap: var(--e-2);
+}
+.modelo-opcao {
+  display: grid;
+  gap: 0.15rem;
+  padding: var(--e-3);
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio-2);
+  background: var(--cor-superficie);
+  color: var(--cor-texto);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.modelo-opcao span {
+  font-size: var(--texto-3);
+  color: var(--cor-texto-2);
+}
+.modelo-opcao[aria-pressed="true"] {
+  border-color: var(--cor-acento);
+  box-shadow: inset 0 0 0 1px var(--cor-acento);
+}
+.modelo-opcao:focus-visible {
+  outline: 2px solid var(--cor-foco);
+  outline-offset: 2px;
+}
+.chips-exemplo {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e-2);
+}
+.teste-modelos {
+  display: grid;
+  gap: var(--e-2);
+  min-width: 0;
+  padding: 0;
+  border: 0;
+}
+.teste-grade {
+  display: grid;
+  gap: var(--e-3);
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+}
+.teste-cartao {
+  display: grid;
+  align-content: start;
+  gap: var(--e-3);
+  padding: var(--e-4);
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio-2);
+  background: var(--cor-superficie);
+}
+.teste-cartao__texto {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.prompt-visto {
+  max-height: 26rem;
+  margin: var(--e-2) 0 0;
+  padding: var(--e-3);
+  overflow: auto;
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio-2);
+  background: var(--cor-superficie-2);
+  font-size: var(--texto-3);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+/* Nas abas com campos largos (listas, modelos, teste) a grade de duas colunas atrapalha: uma coluna só. */
+#painel-conhecimento .bloco__grade,
+#painel-modelo .bloco__grade,
+#painel-teste .bloco__grade {
+  grid-template-columns: minmax(0, 1fr);
+}
+.credito-recarga {
+  display: grid;
+  align-items: end;
+  gap: var(--e-3);
+  grid-template-columns: minmax(0, 1fr);
+}
+@container (min-width: 36rem) {
+  .credito-recarga {
+    grid-template-columns: 9rem minmax(0, 1fr) auto;
+  }
 }

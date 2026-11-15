@@ -5,7 +5,7 @@
  * O servidor entrega esta mesma casca para qualquer endereço /painel/{tela} que o perfil possa abrir (link direto e F5 funcionam).
  * O menu segue o conceito do Cantinho de Sabores: cartão à esquerda que recolhe para só ícones no desktop (a escolha
  * fica num cookie, lido aqui para a página já nascer no estado certo) e vira gaveta no celular.
- * @var string $tela          a tela do endereço aberto (pedidos | atendimento | cardapio | usuarios | configuracoes | whatsapp)
+ * @var string $tela          a tela do endereço aberto (pedidos | atendimento | cardapio | usuarios | configuracoes | whatsapp | assistente)
  * @var string $telaDoMenu     o item do menu que fica marcado
  * @var string $titulo
  * @var array<string, array{titulo:string, grupo:string}> $menu  telas que este perfil pode abrir, na ordem do menu
@@ -25,6 +25,7 @@ $icones = [
     'cardapio'      => '<path d="M5 4.5h11a3 3 0 0 1 3 3V20H8a3 3 0 0 1-3-3V4.5Z"/><path d="M5 17a3 3 0 0 1 3-3h11M9 8.5h6"/>',
     'configuracoes' => '<path d="M4 7h9m4 0h3M4 17h3m4 0h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>',
     'whatsapp'      => '<path d="M20 12a8 8 0 0 1-11.8 7L4 20l1.1-3.9A8 8 0 1 1 20 12Z"/>',
+    'assistente'    => '<path d="M12 3.5v3M8 6.5h8a3.5 3.5 0 0 1 3.5 3.5v5a3.5 3.5 0 0 1-3.5 3.5H8A3.5 3.5 0 0 1 4.5 15v-5A3.5 3.5 0 0 1 8 6.5Z"/><circle cx="9.2" cy="12" r="1"/><circle cx="14.8" cy="12" r="1"/><path d="M9.5 15.5h5"/>',
     'atendimento'   => '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/>',
     'usuarios'      => '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14.2a6.5 6.5 0 0 1 3.5 5.8"/>',
     'recolher'      => '<path d="M11 6 5 12l6 6M19 6l-6 6 6 6"/>',
@@ -99,6 +100,8 @@ $inicio = \App\Controllers\PainelController::telaInicial($usuario['perfil']);
 
   <!-- Canal QR do WhatsApp caiu (ou voltou com avisos esperando): faixa em qualquer tela. Quem a preenche é servicos.js. -->
   <div class="faixa-whatsapp" id="faixa-whatsapp" role="alert" hidden></div>
+  <!-- Crédito do assistente com IA acabando ou acabado (só proprietário). Quem a preenche é servicos.js. -->
+  <div class="faixa-ia" id="faixa-ia" role="status" hidden></div>
 
   <!-- Aqui o roteador mantém uma "tela" por módulo (a atual visível, as já abertas escondidas). -->
   <main class="painel-conteudo" id="conteudo" tabindex="-1">

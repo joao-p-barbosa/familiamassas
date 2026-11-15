@@ -36,6 +36,7 @@ final class WhatsAppController
      */
     public function receber(Requisicao $req): void
     {
+        ignore_user_abort(true);   // a resposta da IA leva alguns segundos: terminar o trabalho mesmo se a Meta desistir de esperar
         $corpo = $req->corpoCru();
         if (!Webhook::assinaturaValida($corpo, $req->cabecalho('X-Hub-Signature-256'), Env::get('WHATSAPP_APP_SECRET'))) {
             throw new ErroHttp(401, 'assinatura_invalida', 'Assinatura do webhook inválida.');
@@ -80,6 +81,7 @@ final class WhatsAppController
     /** POST /api/conector/mensagens  {"mensagens": [{id, telefone, texto, nome?, em?}]}: o que os clientes escreveram. */
     public function conectorMensagens(Requisicao $req): void
     {
+        ignore_user_abort(true);   // idem: o conector não deve ver a resposta da IA se perder por causa do tempo
         self::exigirConector($req);
         $lista = $req->json()['mensagens'] ?? [];
         Resposta::json(['ok' => true] + (new Conector())->receber(is_array($lista) ? $lista : [], new Bot()));

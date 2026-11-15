@@ -31,13 +31,13 @@ let tentativas = 0;
 let auth = null;
 
 // ---------- Site ----------
-async function postar(caminho, corpo) {
+async function postar(caminho, corpo, limiteMs = 8000) {
   try {
     const r = await fetch(SITE + caminho, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Conector-Segredo': SEGREDO },
       body: JSON.stringify(corpo),
-      signal: AbortSignal.timeout(8000),
+      signal: AbortSignal.timeout(limiteMs),
     });
     if (!r.ok) console.error(`[conector] site respondeu ${r.status} em ${caminho}`);
     return r.ok;
@@ -127,7 +127,7 @@ async function conectar() {
       const texto = textoDe(m.message);
       if (telefone && texto) lote.push({ id: m.key.id, telefone, texto, nome: m.pushName ?? null, em: segundosDe(m.messageTimestamp) });
     }
-    if (lote.length > 0) await postar('/api/conector/mensagens', { mensagens: lote });
+    if (lote.length > 0) await postar('/api/conector/mensagens', { mensagens: lote }, 60_000);   // a resposta da IA pode levar alguns segundos
   });
 }
 

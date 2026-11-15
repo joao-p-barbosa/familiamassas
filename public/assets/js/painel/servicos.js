@@ -34,6 +34,7 @@ let statusAnterior = null; // id → status, para perceber quem ficou pronto ago
 export const fonte = criarFonte({
   antesDeMudar: () => ouvintes.antes.forEach((f) => f()),
   aoWhatsApp: (w) => atualizarFaixaWhatsApp(w),
+  aoIA: (ia) => atualizarFaixaIA(ia),
   aoMudar: (motivo) => {
     ouvintes.mudou.forEach((f) => f(motivo));
     if (motivo === 'conexao') return;
@@ -96,6 +97,30 @@ function atualizarFaixaWhatsApp(w) {
       : ' O proprietário decide se envia ou descarta.';
   }
   faixa.innerHTML = `<p class="faixa-whatsapp__texto">${texto}</p>${acoes}`;
+  faixa.hidden = false;
+}
+
+// ---------- Faixa do crédito do assistente com IA (D72) ----------
+// Só o proprietário recebe o dado. "Saldo baixo" é um aviso; "sem crédito" quer dizer que o bot está só no menu de 3 opções.
+let faixaIAAtual = '';
+const dolar = (v) => `US$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+function atualizarFaixaIA(ia) {
+  const faixa = $('#faixa-ia');
+  if (!faixa) return;
+  if (!ia) {
+    faixa.hidden = true;
+    faixaIAAtual = '';
+    return;
+  }
+  const assinatura = JSON.stringify(ia);
+  if (assinatura === faixaIAAtual) return;
+  faixaIAAtual = assinatura;
+  const semCredito = ia.estado === 'sem_credito';
+  faixa.className = `faixa-ia ${semCredito ? 'faixa-ia--acabou' : 'faixa-ia--baixo'}`;
+  faixa.innerHTML = `<p class="faixa-ia__texto">${semCredito
+    ? '<strong>O assistente está sem crédito.</strong> O bot responde só com o menu de 3 opções até entrar uma recarga.'
+    : `<strong>Crédito do assistente baixo: ${dolar(ia.saldo_usd)}.</strong> Combine uma recarga antes de acabar.`}</p><a href="/painel/assistente">Ver crédito</a>`;
   faixa.hidden = false;
 }
 
