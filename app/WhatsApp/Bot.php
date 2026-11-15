@@ -68,7 +68,7 @@ final class Bot
             return $resultado === 'atendente' ? $this->atendente($m['telefone']) : $resultado;
         }
         $chave = FluxoPedido::chave($m['texto']);
-        if (in_array($chave, FluxoPedido::PALAVRAS, true)) {
+        if (in_array($chave, $this->fluxo->palavras(), true)) {
             return $this->fluxo->iniciar($m['telefone'], $m['nome']);
         }
         if ($chave === 'acompanhar') {

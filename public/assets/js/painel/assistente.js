@@ -141,6 +141,10 @@ function desenhar() {
         <label class="interruptor"><input type="checkbox" name="ia_ativo" ${c.ia_ativo ? 'checked' : ''}><span class="interruptor__trilho"></span><span><strong>Assistente ligado</strong></span></label>
         <p id="estado-ia" role="status">${estadoHtml()}</p>
       </section>
+      <section class="bloco">
+        <h2 class="bloco__titulo">Pedido pelo WhatsApp</h2>
+        ${campo('whatsapp_palavras_cardapio', 'Palavra que o cliente digita para pedir pelo chat', c.whatsapp_palavras_cardapio, { max: 100, ajuda: 'Use a mesma palavra na saudação do WhatsApp Business ("Se preferir pedir por aqui, digite Cardápio"). Para aceitar mais de uma, separe por vírgula: Cardápio, Pedir.' })}
+      </section>
       <div class="abas" role="tablist" aria-label="Seções do assistente">
         ${ABAS.map((a) => `<button type="button" class="chip" role="tab" id="aba-${a.id}" data-aba="${a.id}" aria-selected="${a.id === aba}" aria-controls="painel-${a.id}">${a.titulo}</button>`).join('')}
       </div>
@@ -170,7 +174,7 @@ function coletar() {
   const config = {
     ...dados.config,
     ia_ativo: f.elements.ia_ativo.checked,
-    ia_nome: v('ia_nome'), ia_saudacao: v('ia_saudacao'), ia_tom_texto: v('ia_tom_texto'), ia_texto_livre: v('ia_texto_livre'),
+    whatsapp_palavras_cardapio: v('whatsapp_palavras_cardapio'), ia_nome: v('ia_nome'), ia_saudacao: v('ia_saudacao'), ia_tom_texto: v('ia_tom_texto'), ia_texto_livre: v('ia_texto_livre'),
     ia_tom: f.querySelector('input[name="ia_tom"]:checked')?.value ?? dados.config.ia_tom,
     ia_tamanho: f.querySelector('input[name="ia_tamanho"]:checked')?.value ?? dados.config.ia_tamanho,
   };

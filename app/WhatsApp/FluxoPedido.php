@@ -15,7 +15,7 @@ use App\Services\PrecoService;
 use App\Services\TokenWhatsApp;
 
 /**
- * Pedido pelo WhatsApp passo a passo (D74). Começa quando o cliente digita "Cardápio" e segue o mesmo caminho do cardápio
+ * Pedido pelo WhatsApp passo a passo (D74). Começa quando o cliente digita a palavra configurada (padrão "Cardápio") e segue o mesmo caminho do cardápio
  * digital: pratos da casa, "Monte a sua massa" (tamanho, massa, molho e os grupos de ingredientes), bebidas e sobremesas,
  * entrega ou retirada, nome, localização e endereço, pagamento, resumo e confirmação. Tudo por número, porque o WhatsApp
  * comum não tem botões.
@@ -30,8 +30,8 @@ use App\Services\TokenWhatsApp;
  */
 final class FluxoPedido
 {
-    /** Palavras que abrem o cardápio (comparadas sem acento e sem maiúscula). */
-    public const PALAVRAS = ['cardapio', 'menu'];
+    /** Palavras que o bot usa para outras coisas e não podem abrir o cardápio. */
+    public const RESERVADAS = ['cancelar', 'atendente', 'acompanhar'];
     public const VALIDADE_SEGUNDOS = 1800;   // 30 min parado: o pedido em andamento some e o bot volta ao silêncio
     private const ROTULO_PAGAMENTO = ['pix' => 'Pix', 'cartao' => 'Cartão', 'dinheiro' => 'Dinheiro'];
     private const DESCRICAO_DO_PASSO = [
@@ -55,6 +55,17 @@ final class FluxoPedido
     {
         $t = strtr(mb_strtolower(trim($texto)), ['á' => 'a', 'à' => 'a', 'â' => 'a', 'ã' => 'a', 'é' => 'e', 'ê' => 'e', 'í' => 'i', 'ó' => 'o', 'ô' => 'o', 'õ' => 'o', 'ú' => 'u', 'ü' => 'u', 'ç' => 'c']);
         return trim((string) preg_replace('/\s+/', ' ', (string) preg_replace('/[^a-z0-9 ]+/', ' ', $t)));
+    }
+
+    /**
+     * As palavras que abrem o cardápio, configuradas pelo dono na tela Assistente (separadas por vírgula; padrão "Cardápio").
+     * Comparadas sem acento, sem maiúscula e sem pontuação. @return list<string>
+     */
+    public function palavras(): array
+    {
+        $palavras = array_map(self::chave(...), explode(',', $this->config->get('whatsapp_palavras_cardapio', 'Cardápio')));
+        $palavras = array_values(array_diff(array_filter($palavras, static fn (string $p): bool => $p !== ''), self::RESERVADAS));
+        return $palavras !== [] ? $palavras : ['cardapio'];
     }
 
     public function ativo(string $telefone): bool
@@ -98,7 +109,7 @@ final class FluxoPedido
             $this->encerrar($telefone);
             return 'atendente';   // o Bot passa a conversa para uma pessoa
         }
-        if (in_array($chave, self::PALAVRAS, true)) {   // volta ao cardápio sem perder o que já está no pedido
+        if (in_array($chave, $this->palavras(), true)) {   // volta ao cardápio sem perder o que já está no pedido
             $s['etapa'] = 'menu';
             $this->perguntar($telefone, $s);
             return 'menu';

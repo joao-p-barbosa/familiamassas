@@ -1071,6 +1071,16 @@ conferir('"atendente" no meio do pedido passa para uma pessoa', [$diz('atendente
 conferir('Loja fechada: "Cardápio" avisa o horário e não abre pedido', [$diz('cardapio', null, '5511966660006'), str_contains($tela(), 'Agora estamos fechados'), (new App\WhatsApp\FluxoPedido())->ativo('5511966660006')], ['fechada', true, false]);
 (new ConfigRepository())->salvar(['funcionamento' => 'aberta']);
 
+// A palavra que abre o cardápio é do dono (tela Assistente).
+(new ConfigRepository())->salvar(['whatsapp_palavras_cardapio' => 'Quero pedir, Fome, cancelar']);
+conferir('Palavras configuradas pelo dono abrem o cardápio (sem acento e maiúscula); as reservadas do bot são ignoradas', [
+    (new App\WhatsApp\FluxoPedido())->palavras(), $diz('QUERO PEDIR!', null, '5511966660008'), $diz('cardápio', null, '5511966660009'),
+], [['quero pedir', 'fome'], 'menu', 'boas_vindas']);
+(new ConfigRepository())->salvar(['whatsapp_palavras_cardapio' => '']);
+conferir('Sem palavra configurada vale "cardapio"', (new App\WhatsApp\FluxoPedido())->palavras(), ['cardapio']);
+(new ConfigRepository())->salvar(['whatsapp_palavras_cardapio' => 'Cardápio']);
+$pdoFx->exec('DELETE FROM whatsapp_sessoes');
+
 // Dúvida no meio do pedido: a IA responde e o passo se repete.
 Env::definir('OPENROUTER_API_KEY', $chaveIa);
 $repoIa->salvarConfig(['ia_ativo' => '1']);

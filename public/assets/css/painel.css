@@ -1567,6 +1567,11 @@ a.balao__acao {
 .assistente {
   max-width: 50rem;
 }
+/* As abas também são .config (max-width 46rem): dentro do assistente elas ocupam a largura toda, e todos os blocos
+   das 3 abas, o topo e a barra de salvar ficam do mesmo tamanho. */
+.assistente .config {
+  max-width: none;
+}
 .assistente__topo p {
   margin: var(--e-2) 0 0;
 }
