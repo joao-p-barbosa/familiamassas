@@ -13,6 +13,7 @@ use App\Core\Sessao;
 use App\Services\PedidoService;
 use App\WhatsApp\Avisos;
 use App\WhatsApp\Bot;
+use App\WhatsApp\Conector;
 use App\WhatsApp\Conversas;
 use App\WhatsApp\Webhook;
 use App\WhatsApp\WhatsApp;
@@ -55,6 +56,53 @@ final class WhatsAppController
         Resposta::json(['enviados' => (new Avisos())->processar(20)]);
     }
 
+    /** O Node (conector do canal QR) se identifica com o segredo; qualquer outra coisa recebe 404, como se a rota não existisse. */
+    private static function exigirConector(Requisicao $req): void
+    {
+        if (!Conector::ativo() || !Conector::segredoValido($req->cabecalho('X-Conector-Segredo'))) {
+            throw ErroHttp::naoEncontrado();
+        }
+    }
+
+    /** POST /api/conector/sinal  {"estado": conectado|aguardando_qr|desconectado, "qr"?: data URL}: o sinal de vida do Node (a cada 30 s). */
+    public function conectorSinal(Requisicao $req): void
+    {
+        self::exigirConector($req);
+        $dados = $req->json();
+        $estado = (string) ($dados['estado'] ?? '');
+        if (!in_array($estado, Conector::ESTADOS, true)) {
+            throw ErroHttp::validacao(['estado' => 'Estado desconhecido.']);
+        }
+        (new Conector())->registrarSinal($estado, isset($dados['qr']) ? (string) $dados['qr'] : null);
+        Resposta::json(['ok' => true]);
+    }
+
+    /** POST /api/conector/mensagens  {"mensagens": [{id, telefone, texto, nome?, em?}]}: o que os clientes escreveram. */
+    public function conectorMensagens(Requisicao $req): void
+    {
+        self::exigirConector($req);
+        $lista = $req->json()['mensagens'] ?? [];
+        Resposta::json(['ok' => true] + (new Conector())->receber(is_array($lista) ? $lista : [], new Bot()));
+    }
+
+    /** POST /api/admin/whatsapp/fila/liberar: "Enviar pendentes" depois de uma queda. */
+    public function liberarFila(Requisicao $req): void
+    {
+        Sessao::exigir($req, ['admin'], true);
+        (new Conector())->liberarFila();
+        self::processarFila(5);
+        Resposta::json((new Conector())->situacao());
+    }
+
+    /** POST /api/admin/whatsapp/fila/descartar: "Descartar" os avisos que ficaram esperando durante a queda. */
+    public function descartarFila(Requisicao $req): void
+    {
+        Sessao::exigir($req, ['admin'], true);
+        $conector = new Conector();
+        $apagados = $conector->descartarFila();
+        Resposta::json($conector->situacao() + ['descartados' => $apagados]);
+    }
+
     /** A fila nunca derruba quem a chamou (o painel e o webhook seguem funcionando mesmo com a Meta fora do ar). */
     public static function processarFila(int $limite): void
     {
@@ -82,8 +130,11 @@ final class WhatsAppController
             $chaves[] = ['chave' => $chave, 'rotulo' => $rotulo, 'preenchida' => Env::get($chave) !== ''];
         }
         $conversas = new Conversas();
+        $conectorSituacao = Conector::ativo() ? (new Conector())->situacao() : null;
         Resposta::json([
-            'configurado' => !in_array(false, array_column($chaves, 'preenchida'), true),
+            'canal' => Conector::ativo() ? 'qr' : 'cloud',
+            'conector' => Conector::ativo() ? $conectorSituacao : null,
+            'configurado' => Conector::ativo() ? ($conectorSituacao['estado'] === 'conectado') : !in_array(false, array_column($chaves, 'preenchida'), true),
             'simulado' => WhatsApp::simulado(),
             'chaves' => $chaves,
             'https' => $req->https(),
@@ -148,7 +199,7 @@ final class WhatsAppController
         if ($texto === '') {
             throw ErroHttp::validacao(['texto' => 'Escreva a resposta.']);
         }
-        if (!(new Conversas())->janelaAberta($telefone)) {
+        if (!Conector::ativo() && !(new Conversas())->janelaAberta($telefone)) {   // o canal QR não tem janela de 24 h
             throw new ErroHttp(409, 'janela_fechada', 'Já passaram 24 horas da última mensagem do cliente: o WhatsApp só deixa responder quando ele escrever de novo.');
         }
         $resultado = WhatsApp::enviar($telefone, WhatsApp::texto($texto), 'equipe');
@@ -177,7 +228,7 @@ final class WhatsAppController
             'telefone' => $telefone,
             'modo' => $humano ? 'humano' : 'bot',
             'humano_ate' => $humano ? Relogio::iso($conversa['humano_ate'] ?? null) : null,
-            'janela_aberta' => $conversas->janelaAberta($telefone),
+            'janela_aberta' => Conector::ativo() || $conversas->janelaAberta($telefone),
             'mensagens' => $conversas->mensagens($telefone, 60),
         ];
     }

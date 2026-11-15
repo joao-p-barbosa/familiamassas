@@ -79,6 +79,10 @@ return static function (Roteador $r): void {
     $r->get('/webhook/whatsapp.php', $whatsapp->verificar(...));
     $r->post('/webhook/whatsapp.php', $whatsapp->receber(...));
     $r->get('/cron/whatsapp', $whatsapp->cron(...));
+    $r->post('/api/conector/sinal', $whatsapp->conectorSinal(...));          // canal QR: só o Node (segredo no cabeçalho)
+    $r->post('/api/conector/mensagens', $whatsapp->conectorMensagens(...));
+    $r->post('/api/admin/whatsapp/fila/liberar', $whatsapp->liberarFila(...));
+    $r->post('/api/admin/whatsapp/fila/descartar', $whatsapp->descartarFila(...));
     $r->get('/api/admin/whatsapp', $whatsapp->situacao(...));
     $r->post('/api/admin/whatsapp/simular', $whatsapp->simular(...));
     $r->get('/api/admin/whatsapp/conversa', $whatsapp->conversa(...));

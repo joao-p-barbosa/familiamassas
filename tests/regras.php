@@ -556,6 +556,137 @@ Env::definir('APP_URL', '');
 ini_set('error_log', $logAntesWa);
 @unlink(sys_get_temp_dir() . '/familiamassas-whatsapp-teste.log');
 
+echo "\nWHATSAPP POR QR CODE: conector, queda, fila retida e menu por número (D66 a D69)\n";
+$pdoQr = App\Core\Banco::conexao();
+$pdoQr->exec('DELETE FROM whatsapp_conector');
+$pdoQr->exec('DELETE FROM whatsapp_envios_pendentes');
+Env::definir('WHATSAPP_CANAL', 'qr');
+Env::definir('CONECTOR_SEGREDO', 'segredo-do-conector-123');
+Env::definir('APP_URL', 'https://exemplo.test');
+App\WhatsApp\WhatsApp::usarMensageiro($falsoWhats);
+ini_set('error_log', sys_get_temp_dir() . '/familiamassas-whatsapp-teste.log');
+$conector = new App\WhatsApp\Conector();
+$qrValido = 'data:image/png;base64,iVBORw0KGgo=';
+
+conferir('Segredo do conector: o certo passa; errado ou vazio não', [
+    App\WhatsApp\Conector::segredoValido('segredo-do-conector-123'), App\WhatsApp\Conector::segredoValido('outro'), App\WhatsApp\Conector::segredoValido(''),
+], [true, false, false]);
+Env::definir('CONECTOR_SEGREDO', 'curto');
+conferir('Segredo configurado com menos de 16 caracteres não é aceito (nem igual a ele mesmo)', App\WhatsApp\Conector::segredoValido('curto'), false);
+Env::definir('CONECTOR_SEGREDO', 'segredo-do-conector-123');
+conferir('O canal QR troca o simulador pelo conector', [App\WhatsApp\WhatsApp::simulado(), App\WhatsApp\Conector::ativo()], [false, true]);
+
+// Menu por número: o WhatsApp comum não tem botões.
+conferir('"1", "2" e "3" respondem ao menu; texto livre continua texto', [
+    App\WhatsApp\Conector::normalizar(['id' => 'a1', 'telefone' => '+55 (11) 98765-4321', 'texto' => '1'])['botao'] ?? null,
+    App\WhatsApp\Conector::normalizar(['id' => 'a2', 'telefone' => '5511987654321', 'texto' => ' 2 '])['botao'] ?? null,
+    App\WhatsApp\Conector::normalizar(['id' => 'a3', 'telefone' => '5511987654321', 'texto' => '3'])['botao'] ?? null,
+    App\WhatsApp\Conector::normalizar(['id' => 'a4', 'telefone' => '5511987654321', 'texto' => '4'])['botao'] ?? 'nenhum',
+    App\WhatsApp\Conector::normalizar(['id' => 'a5', 'telefone' => '5511987654321', 'texto' => 'oi, tudo bem?'])['tipo'] ?? null,
+], ['pedir', 'acompanhar', 'atendente', 'nenhum', 'text']);
+conferir('Mensagem sem id, sem telefone ou com telefone longo demais é ignorada', [
+    App\WhatsApp\Conector::normalizar(['telefone' => '5511987654321', 'texto' => 'oi']), App\WhatsApp\Conector::normalizar(['id' => 'x', 'texto' => 'oi']),
+    App\WhatsApp\Conector::normalizar(['id' => 'x', 'telefone' => '1234567890123456', 'texto' => 'oi']),
+], [null, null, null]);
+conferir('O telefone chega só com dígitos e o wamid ganha o prefixo qr.', [
+    App\WhatsApp\Conector::normalizar(['id' => 'a1', 'telefone' => '+55 (11) 98765-4321', 'texto' => 'oi'])['telefone'],
+    App\WhatsApp\Conector::normalizar(['id' => 'a1', 'telefone' => '5511987654321', 'texto' => 'oi'])['wamid'],
+], ['5511987654321', 'qr.a1']);
+
+// A mensagem no formato da Cloud API vira texto simples.
+$textoDosBotoes = App\WhatsApp\Conector::texto(App\WhatsApp\WhatsApp::botoes('Como podemos ajudar?', ['pedir' => 'Fazer pedido', 'atendente' => 'Falar com atendente']));
+conferir('Botões viram menu numerado pela posição fixa (o 3 continua sendo "Falar com atendente")', $textoDosBotoes, "Como podemos ajudar?\n\nResponda com o número:\n1 - Fazer pedido\n3 - Falar com atendente");
+conferir('O botão de link vira o endereço no texto', App\WhatsApp\Conector::texto(App\WhatsApp\WhatsApp::link('Monte o seu prato.', 'Abrir cardápio', 'https://exemplo.test/?t=abc')), "Monte o seu prato.\n\nAbrir cardápio: https://exemplo.test/?t=abc");
+
+// Estado do conector.
+$situacao = $conector->situacao();
+conferir('Sem nenhum sinal do conector: "sem_sinal", sem alarme e a fila não anda', [$situacao['estado'], $situacao['alarme'], $conector->liberada()], ['sem_sinal', false, false]);
+$conector->registrarSinal('conectado', null);
+$situacao = $conector->situacao();
+conferir('Sinal "conectado": a fila pode andar e não há alarme', [$situacao['estado'], $situacao['alarme'], $situacao['fila_retida'], $conector->liberada()], ['conectado', false, false, true]);
+$conector->registrarSinal('aguardando_qr', $qrValido);
+conferir('Aguardando o QR: o QR chega ao painel; o alarme só vem depois de 2 min', [$conector->situacao()['qr'], $conector->situacao()['alarme']], [$qrValido, false]);
+$conector->registrarSinal('aguardando_qr', 'https://malicioso.test/qr.png');
+conferir('QR que não é uma imagem PNG em data URL é descartado', $conector->situacao()['qr'], null);
+$desdeEstado = $pdoQr->query('SELECT estado_desde FROM whatsapp_conector WHERE id = 1')->fetchColumn();
+$conector->registrarSinal('aguardando_qr', $qrValido);
+conferir('Repetir o mesmo estado não reinicia o "desde" (a contagem dos 2 min segue)', $pdoQr->query('SELECT estado_desde FROM whatsapp_conector WHERE id = 1')->fetchColumn(), $desdeEstado);
+
+// Queda longa: alarme e fila retida.
+$conector->registrarSinal('desconectado', null);
+$pdoQr->prepare('UPDATE whatsapp_conector SET estado_desde = ? WHERE id = 1')->execute([gmdate('Y-m-d H:i:s', time() - 60)]);
+conferir('Queda de 1 min (um deploy): sem alarme, fila não retida, mas nada sai', [$conector->situacao()['alarme'], $conector->situacao()['fila_retida'], $conector->liberada()], [false, false, false]);
+$pdoQr->prepare('UPDATE whatsapp_conector SET estado_desde = ? WHERE id = 1')->execute([gmdate('Y-m-d H:i:s', time() - 180)]);
+$situacao = $conector->situacao();
+conferir('Queda de 3 min: alarme ligado e fila retida', [$situacao['estado'], $situacao['alarme'], $situacao['fila_retida']], ['desconectado', true, true]);
+$pdoQr->exec("UPDATE whatsapp_conector SET estado = 'conectado', estado_desde = '" . gmdate('Y-m-d H:i:s', time() - 400) . "', visto_em = '" . gmdate('Y-m-d H:i:s', time() - 400) . "'");
+conferir('Conector que parou de avisar há mais de 2 min vira "sem_sinal" (com alarme), mesmo dizendo "conectado"', [$conector->situacao()['estado'], $conector->situacao()['alarme'], $conector->liberada()], ['sem_sinal', true, false]);
+
+// A fila de avisos.
+$pedidoDoAviso = (int) $pdoQr->query('SELECT id FROM pedidos ORDER BY id LIMIT 1')->fetchColumn();
+$foneQr = '5511987654321';
+$novoAviso = static function (string $criadoEm) use ($pdoQr, $pedidoDoAviso, $foneQr): void {
+    $pdoQr->prepare("INSERT INTO whatsapp_envios_pendentes (telefone, pedido_id, tipo, tentativas, proxima_tentativa_em, criado_em) VALUES (?, ?, 'novo', 0, ?, ?)")
+        ->execute([$foneQr, $pedidoDoAviso, gmdate('Y-m-d H:i:s', time() - 5), $criadoEm]);
+};
+$novoAviso(gmdate('Y-m-d H:i:s', time() - 120));
+$novoAviso(gmdate('Y-m-d H:i:s', time() - 40 * 60));
+$antes = count($falsoWhats->enviadas);
+$enviados = $avisosWa->processar(10);
+conferir('Com o WhatsApp caído e a fila retida, nada sai e nenhuma tentativa é gasta', [$enviados, count($falsoWhats->enviadas) - $antes, (int) $pdoQr->query('SELECT SUM(tentativas) FROM whatsapp_envios_pendentes')->fetchColumn(), (int) $pdoQr->query('SELECT COUNT(*) FROM whatsapp_envios_pendentes')->fetchColumn()], [0, 0, 0, 2]);
+$conector->registrarSinal('conectado', null);
+$situacao = $conector->situacao();
+conferir('O conector volta com avisos esperando: a fila continua retida até o proprietário decidir', [$situacao['estado'], $situacao['fila_retida'], $situacao['pendentes'], $conector->liberada()], ['conectado', true, 2, false]);
+$conversasWa->fecharJanela($foneQr);
+$conector->liberarFila();
+$antes = count($falsoWhats->enviadas);
+$enviados = $avisosWa->processar(10);
+conferir('"Enviar pendentes": sai o aviso recente, como texto livre (no canal QR não há template); o de 40 min é descartado', [
+    $enviados, count($falsoWhats->enviadas) - $antes, $ultimaWa()['type'] ?? null, (int) $pdoQr->query('SELECT COUNT(*) FROM whatsapp_envios_pendentes')->fetchColumn(),
+], [1, 1, 'text', 0]);
+
+$conector->registrarSinal('desconectado', null);
+$pdoQr->prepare('UPDATE whatsapp_conector SET estado_desde = ? WHERE id = 1')->execute([gmdate('Y-m-d H:i:s', time() - 300)]);
+$novoAviso(gmdate('Y-m-d H:i:s', time() - 120));
+$novoAviso(gmdate('Y-m-d H:i:s', time() - 100));
+$conector->situacao();   // marca a retenção
+$conector->registrarSinal('conectado', null);
+conferir('Depois de outra queda: dois avisos esperando e a fila retida', [$conector->situacao()['pendentes'], $conector->situacao()['fila_retida']], [2, true]);
+conferir('"Descartar": apaga os avisos, libera a fila e nada é enviado', [$conector->descartarFila(), $conector->situacao()['pendentes'], $conector->situacao()['fila_retida'], $conector->liberada()], [2, 0, false, true]);
+$conector->registrarSinal('desconectado', null);
+$pdoQr->prepare('UPDATE whatsapp_conector SET estado_desde = ? WHERE id = 1')->execute([gmdate('Y-m-d H:i:s', time() - 300)]);
+$conector->situacao();
+$conector->registrarSinal('conectado', null);
+conferir('Queda que acabou com a fila vazia libera sozinha (não há o que decidir)', [$conector->situacao()['fila_retida'], $conector->liberada()], [false, true]);
+
+// Mensagens recebidas pelo conector.
+$antes = count($falsoWhats->enviadas);
+$resultadoQr = $conector->receber([
+    ['id' => 'm.nova', 'telefone' => '5511911112222', 'texto' => 'oi', 'nome' => 'Joana', 'em' => time()],
+    ['id' => 'm.nova', 'telefone' => '5511911112222', 'texto' => 'oi', 'nome' => 'Joana', 'em' => time()],
+    ['id' => 'm.velha', 'telefone' => '5511933334444', 'texto' => 'oi', 'em' => time() - 20 * 60],
+    ['id' => 'm.vazia', 'telefone' => '5511933334444', 'texto' => '   ', 'em' => time()],
+], new App\WhatsApp\Bot());
+conferir('Mensagem nova é respondida; repetida não; a que chegou com mais de 10 min de atraso não; vazia é ignorada', [$resultadoQr, count($falsoWhats->enviadas) - $antes], [['respondidas' => 1, 'repetidas' => 1, 'antigas' => 1, 'ignoradas' => 1], 1]);
+conferir('A resposta do bot sai com o menu numerado', str_contains(App\WhatsApp\Conector::texto($ultimaWa()), "1 - Fazer pedido\n2 - Acompanhar pedido\n3 - Falar com atendente"), true);
+$conector->receber([['id' => 'm.botao', 'telefone' => '5511911112222', 'texto' => '1', 'em' => time()]], new App\WhatsApp\Bot());
+conferir('Responder "1" ao menu leva ao link do cardápio', $ultimaWa()['interactive']['type'] ?? null, 'cta_url');
+
+// O envio ao Node: com o conector fora do ar, a falha é "tentar de novo" (e não um erro definitivo).
+Env::definir('CONECTOR_URL', 'http://127.0.0.1:9');
+$falhaDeEnvio = (new App\WhatsApp\MensageiroConector())->enviar($foneQr, App\WhatsApp\WhatsApp::texto('oi'));
+conferir('Conector fora do ar: o envio falha como transitório (a fila tenta de novo)', [$falhaDeEnvio['ok'], $falhaDeEnvio['transitorio']], [false, true]);
+Env::definir('CONECTOR_URL', '');
+
+$pdoQr->exec('DELETE FROM whatsapp_conector');
+$pdoQr->exec('DELETE FROM whatsapp_envios_pendentes');
+Env::definir('WHATSAPP_CANAL', '');
+Env::definir('CONECTOR_SEGREDO', '');
+Env::definir('APP_URL', '');
+App\WhatsApp\WhatsApp::usarMensageiro(null);
+ini_set('error_log', $logAntesWa);
+@unlink(sys_get_temp_dir() . '/familiamassas-whatsapp-teste.log');
+
 echo "\nTOKEN DO WHATSAPP\n";
 $tokens = new TokenWhatsApp();
 $agora = 1_800_000_000;
@@ -766,7 +897,7 @@ foreach ([['A1', 'Mesa 5', 'local', '5', 'pix', 'concluido', 'balcao'], ['A2', '
 }
 
 $aplicadas = App\Core\Banco::migrar($antigo, $arquivoAntigo);
-conferir('Banco da versão 1 recebe a migração 002', $aplicadas, [2]);
+conferir('Banco da versão 1 recebe as migrações 002 e 003', $aplicadas, [2, 3]);
 conferir('A versão do banco passa a ser a atual', (int) $antigo->query('PRAGMA user_version')->fetchColumn(), App\Core\Banco::VERSAO_DO_ESQUEMA);
 conferir('Uma cópia do banco antigo foi guardada antes de mexer', count(glob($pastaMigracao . '/backups/antigo-antes-da-v2-*.sqlite') ?: []), 1);
 conferir('Rodar de novo não faz nada', App\Core\Banco::migrar($antigo, $arquivoAntigo), []);

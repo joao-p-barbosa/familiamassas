@@ -11,6 +11,7 @@
 | 2 · Cardápio + checkout | ✅ Feito. |
 | 3 · Painel: login, Kanban, impressão | ✅ Feito (impressão testada só em simulação; falta a impressora real). O modo cozinha foi retirado na rodada de melhorias. |
 | 4 · Bot WhatsApp | ✅ Feito e testado no **modo simulado** e com o webhook por HTTP (assinatura, verificação, evento repetido). ⚠️ Falta ligar na Meta de verdade (conta, número, token e template aprovado). Decisões D57 a D62. |
+| 4b · WhatsApp por QR code | ✅ Feito e testado em desenvolvimento: conector Node (Baileys) conectado de verdade ao WhatsApp, QR no painel, aviso de queda e fila retida (D66 a D69). ⚠️ Falta parear com o número dedicado da loja, o primeiro deploy com o Node na Render e a Etapa 4c (assistente com IA, D70). |
 | 5 · Edição do cardápio | ✅ Feito (adiantado, faz parte da "página de gestão"). |
 | 6 · Revisão final e piloto | ⏳ Não começou. |
 
@@ -174,3 +175,21 @@ Testados no navegador (celular e desktop) e com testes automáticos. `⚠️` = 
 
 - **Etapa 4, ligar na Meta:** criar a conta no Meta Business, o app, o número e o template `atualizacao_pedido`; pôr as 4 credenciais na Render; cadastrar o webhook (passo a passo em `docs/DEPLOY.md`). O código está pronto e testado no modo simulado.
 - Etapa 6: revisão final, script SQL do Postgres (Neon), plano de produção e piloto.
+
+## Etapa 4b: WhatsApp por QR code (2026-11-15)
+
+**Como testar (no computador):**
+1. `cd conector && npm install` (uma vez) e `npm test` (testes do conector, sem WhatsApp).
+2. No `.env` (ou nas variáveis do processo): `WHATSAPP_CANAL=qr` e `CONECTOR_SEGREDO=<16+ caracteres>`.
+3. Suba o site (`iniciar.bat`) e, em outro terminal, `cd conector && set PORT=8090 && set CONECTOR_SEGREDO=<o mesmo> && node index.js`.
+4. Painel → WhatsApp: aparece o **QR code**. No celular com o número dedicado: WhatsApp → Aparelhos conectados → Conectar um aparelho.
+5. Mande "oi" de outro número: o bot responde com o menu numerado. "1" devolve o link do cardápio.
+6. Derrube o conector (Ctrl+C): em 2 min a faixa vermelha aparece em qualquer tela. Faça um pedido com origem WhatsApp, mude o status e religue o conector: a faixa pede **Enviar pendentes** ou **Descartar**.
+
+**Checklist**
+- ✅ 241 testes de regras no SQLite (26 novos: segredo, menu numerado, estados, retenção da fila, descarte, mensagem atrasada).
+- ✅ 4 testes do conector Node (`npm test`): validação, segredo, fila de envio e descarte na queda.
+- ✅ O conector real chegou aos servidores do WhatsApp e gerou o QR; o painel mostra o QR e a faixa (os dois estados, e o diálogo de descartar), conferidos no navegador.
+- ✅ Rotas do conector sem o segredo certo respondem `404`; o Node sem o segredo responde `403`.
+- ⚠️ **Não testado:** pareamento com um celular de verdade, envio e recebimento reais, reconexão depois de queda real, a imagem Docker (`Dockerfile` com Node) e o conjunto no Postgres (Neon): a suíte com o argumento `pg` não foi executada nesta rodada (faltava `TEST_DATABASE_URL`).
+- ⚠️ Contatos que o WhatsApp identifica por "LID" dependem do campo `senderPn` do Baileys 6.7.24; sem ele a mensagem é ignorada.

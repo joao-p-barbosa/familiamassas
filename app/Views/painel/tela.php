@@ -97,6 +97,9 @@ $inicio = \App\Controllers\PainelController::telaInicial($usuario['perfil']);
     <span class="marca barra-topo__marca"><?= e($nomeLoja) ?></span>
   </header>
 
+  <!-- Canal QR do WhatsApp caiu (ou voltou com avisos esperando): faixa em qualquer tela. Quem a preenche é servicos.js. -->
+  <div class="faixa-whatsapp" id="faixa-whatsapp" role="alert" hidden></div>
+
   <!-- Aqui o roteador mantém uma "tela" por módulo (a atual visível, as já abertas escondidas). -->
   <main class="painel-conteudo" id="conteudo" tabindex="-1">
     <div class="tela-carregando" id="tela-carregando">

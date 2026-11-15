@@ -5,11 +5,14 @@
 //   * o aviso "pedido de <cliente> pronto para servir" para a atendente, onde quer que ela esteja.
 // As telas só "escutam" o fluxo (ouvir) e desenham o que quiserem.
 import { avisar } from '../shared/avisos.js';
+import { api } from '../shared/api.js';
+import { $, esc } from '../shared/dom.js';
+import { hora, plural } from '../shared/formato.js';
 import { criarFonte } from './pedidos-vivos.js';
 import { imprimirAutomatico, estacao } from './impressao.js';
 import { tocarAlerta } from './som.js';
 import { iniciarDetalhe, atualizarDetalhe } from './detalhe.js';
-import { usuario } from './casca.js';
+import { usuario, ehAdmin, confirmar, mostrarErro } from './casca.js';
 
 const ouvintes = { antes: new Set(), mudou: new Set() };
 
@@ -30,6 +33,7 @@ let statusAnterior = null; // id → status, para perceber quem ficou pronto ago
 
 export const fonte = criarFonte({
   antesDeMudar: () => ouvintes.antes.forEach((f) => f()),
+  aoWhatsApp: (w) => atualizarFaixaWhatsApp(w),
   aoMudar: (motivo) => {
     ouvintes.mudou.forEach((f) => f(motivo));
     if (motivo === 'conexao') return;
@@ -48,6 +52,73 @@ export const fonte = criarFonte({
     document.title = `(${novos.length}) Pedidos novos`;
     setTimeout(() => { if (document.title.startsWith('(')) document.title = antes; }, 8000);
   },
+});
+
+// ---------- Faixa do WhatsApp por QR code ----------
+// A faixa aparece com o WhatsApp caído (ou sem sinal do conector) e quando ele volta com avisos esperando (a decisão é do
+// proprietário). O som toca ao cair e se repete a cada 2 min enquanto durar. A situação vem junto com a consulta de pedidos.
+const REPETE_SOM_MS = 2 * 60 * 1000;
+let somDaQueda = 0;
+let faixaAtual = '';
+
+function atualizarFaixaWhatsApp(w) {
+  const faixa = $('#faixa-whatsapp');
+  if (!faixa) return;
+  const caido = !!w && w.alarme;   // o servidor só marca alarme depois de 2 min fora do ar
+  const esperando = !!w && w.pendentes > 0 && w.fila_retida;
+  if (!caido && !esperando) {
+    somDaQueda = 0;
+    faixa.hidden = true;
+    faixaAtual = '';
+    return;
+  }
+  if (caido && Date.now() - somDaQueda > REPETE_SOM_MS) {
+    somDaQueda = Date.now();
+    tocarAlerta();
+  }
+  const assinatura = JSON.stringify(w);
+  if (assinatura === faixaAtual) return;
+  faixaAtual = assinatura;
+  const fila = w.pendentes > 0 ? ` ${plural(w.pendentes, 'aviso está esperando', 'avisos estão esperando')} para sair.` : '';
+  let texto;
+  let acoes = '';
+  if (caido) {
+    const desde = w.desde ? ` desde ${hora(w.desde)}` : '';
+    texto = w.estado === 'aguardando_qr'
+      ? '<strong>WhatsApp aguardando o QR code.</strong> O bot e os avisos de pedido estão parados.'
+      : `<strong>WhatsApp desconectado${esc(desde)}.</strong> O bot e os avisos de pedido estão parados.`;
+    texto += esc(fila);
+    if (ehAdmin) acoes = '<a href="/painel/whatsapp">Reconectar</a>';
+  } else {
+    texto = `<strong>O WhatsApp voltou.</strong>${esc(fila)} Avisos com mais de 30 minutos são descartados ao enviar.`;
+    acoes = ehAdmin
+      ? '<span class="faixa-whatsapp__acoes"><button type="button" class="botao botao--p" data-fila="liberar">Enviar pendentes</button><button type="button" class="botao botao--p" data-fila="descartar">Descartar</button></span>'
+      : ' O proprietário decide se envia ou descarta.';
+  }
+  faixa.innerHTML = `<p class="faixa-whatsapp__texto">${texto}</p>${acoes}`;
+  faixa.hidden = false;
+}
+
+// "Enviar pendentes" e "Descartar": valem na faixa e na tela WhatsApp (os dois desenham o mesmo botão com data-fila).
+document.addEventListener('click', async (e) => {
+  const botao = e.target instanceof Element ? e.target.closest('[data-fila]') : null;
+  if (!botao) return;
+  const acao = botao.dataset.fila;
+  if (acao === 'descartar' && !(await confirmar({
+    titulo: 'Descartar os avisos que ficaram esperando?',
+    texto: 'Os clientes não vão receber esses avisos de status. Isso não dá para desfazer.',
+    confirmar: 'Descartar',
+    perigo: true,
+  }))) return;
+  try {
+    const r = await api(`/api/admin/whatsapp/fila/${acao}`, { metodo: 'POST' });
+    avisar(acao === 'liberar' ? 'Enviando os avisos pendentes' : plural(r.descartados, 'aviso descartado', 'avisos descartados'));
+    faixaAtual = '';
+    fonte.sincronizar();
+    document.dispatchEvent(new CustomEvent('whatsapp:fila'));
+  } catch (erro) {
+    mostrarErro(erro);
+  }
 });
 
 /** Pedido de um atendimento do salão que passou para "Pronto": a atendente é avisada para servir. */

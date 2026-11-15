@@ -240,6 +240,39 @@
   font-size: var(--texto-5);
 }
 
+/* Faixa de aviso do WhatsApp por QR code: fica colada no topo, em qualquer tela do painel. */
+.faixa-whatsapp {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-barra);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--e-2) var(--e-4);
+  padding: var(--e-3) var(--e-4);
+  background: var(--cor-perigo-fundo);
+  color: #ffffff;
+}
+.faixa-whatsapp[hidden] {
+  display: none;
+}
+.faixa-whatsapp__texto {
+  flex: 1 1 18rem;
+  margin: 0;
+}
+.faixa-whatsapp a {
+  color: inherit;
+  font-weight: 600;
+}
+.faixa-whatsapp__acoes {
+  display: flex;
+  gap: var(--e-2);
+}
+.faixa-whatsapp .botao {
+  background: #ffffff;
+  color: var(--cor-perigo-fundo);
+}
+
 @keyframes lateral-surge {
   from {
     opacity: 0;

@@ -28,4 +28,23 @@ else
   chown -R www-data:www-data "$APP/data" "$APP/public/uploads"
 fi
 
+# 3) Conector do WhatsApp por QR code (D66). Só sobe com WHATSAPP_CANAL=qr. Roda como www-data, ao lado do Apache, e é
+#    reiniciado se cair. O pareamento fica no banco (DATABASE_URL), então um deploy não pede o QR de novo.
+#    O limite de memória do Node deixa folga para o Apache e o PHP na máquina de 512 MB.
+if [ "${WHATSAPP_CANAL:-}" = "qr" ]; then
+  if [ -z "${CONECTOR_SEGREDO:-}" ]; then
+    echo "[entrypoint] WHATSAPP_CANAL=qr sem CONECTOR_SEGREDO: o conector NAO foi iniciado." >&2
+  else
+    export CONECTOR_SITE_URL="${CONECTOR_SITE_URL:-http://127.0.0.1:${PORTA}}"
+    export NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=160}"
+    (
+      while true; do
+        su -p -s /bin/sh www-data -c "cd $APP/conector && exec node index.js" || true
+        echo "[entrypoint] o conector encerrou; reiniciando em 5 s" >&2
+        sleep 5
+      done
+    ) &
+  fi
+fi
+
 exec apache2-foreground

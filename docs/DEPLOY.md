@@ -75,6 +75,19 @@ Sem as credenciais, o bot fica no **modo simulado**: nada sai para a Meta e a te
 
 Custo (base nov/2026, confira na tabela da Meta): conversas iniciadas pelo cliente e mensagens dentro da janela de 24 h são gratuitas; cada template fora da janela custa alguns centavos.
 
+## Ligar o WhatsApp por QR code (Etapa 4b)
+
+Alternativa à Cloud API: sem conta Meta, com um número dedicado à loja. **Não é oficial: o WhatsApp pode bloquear o número.** Use um chip só para isso, nunca o número pessoal. Decisões D66 a D69.
+
+1. **Plano `starter` da Render** (US$ 7/mês, 512 MB): o gratuito dorme e derrubaria a conexão. O `render.yaml` já está nele.
+2. Variáveis de ambiente do serviço: `WHATSAPP_CANAL` = `qr` e `CONECTOR_SEGREDO` (o blueprint sorteia; se criar à mão, 16+ caracteres). `DATABASE_URL` (Neon) já existe e é onde fica o pareamento.
+3. Faça o deploy. Nos logs aparecem `[conector] ouvindo em 127.0.0.1:3001` e `desconectado → aguardando_qr`.
+4. Abra **Painel → WhatsApp**: o QR code aparece. No celular do número dedicado: WhatsApp → Aparelhos conectados → Conectar um aparelho → aponte para o QR. Em segundos o estado vira **conectado**.
+5. O pareamento fica no Neon: um deploy novo reconecta sozinho. Se o celular desconectar o aparelho, o conector apaga o pareamento e mostra um QR novo.
+6. Se o WhatsApp cair por 2 min ou mais, a faixa vermelha aparece em todas as telas do painel (com som, se o botão "Som de pedido novo" estiver ligado). Na volta, escolha **Enviar pendentes** ou **Descartar**.
+
+**Limites:** o Node usa até ~160 MB dentro da máquina de 512 MB; se o serviço reiniciar por falta de memória, suba o plano. O Baileys 6.7.24 é a versão estável; a imagem busca a dependência `libsignal` no GitHub no momento do build, com a versão fixada no `conector/package-lock.json` (mantenha o arquivo no repositório).
+
 ## Cuidados
 
 - O repositório é **público**: nunca coloque senha, token ou `.env` nele.

@@ -10,6 +10,7 @@ use App\Core\Resposta;
 use App\Core\Sessao;
 use App\Repositories\PedidoRepository;
 use App\Services\PedidoService;
+use App\WhatsApp\Conector;
 
 // API do quadro de pedidos (a produção) e da impressão. Proprietário (admin) e atendente usam as mesmas rotas.
 final class AdminPedidoController
@@ -36,7 +37,9 @@ final class AdminPedidoController
         $lista = $pedidos->paraPainel($desdeBanco);
         // O painel consulta a cada poucos segundos durante o expediente: é o "relógio" da fila de avisos do WhatsApp.
         WhatsAppController::processarFila(3);
-        Resposta::json(['agora' => $agora, 'pedidos' => $lista, 'fechamento' => $fechamento]);
+        // Canal QR: o painel mostra a faixa de "WhatsApp desconectado" (e toca o som) em qualquer tela, com este mesmo polling.
+        $whatsapp = Conector::ativo() ? (new Conector())->paraOPainel() : null;
+        Resposta::json(['agora' => $agora, 'pedidos' => $lista, 'fechamento' => $fechamento, 'whatsapp' => $whatsapp]);
     }
 
     public function detalhe(Requisicao $req): void

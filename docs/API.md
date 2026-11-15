@@ -131,6 +131,27 @@ O OpenStreetMap exige saber de que site vem o pedido, então só essas chamadas 
 | `POST /api/admin/whatsapp/conversas/{telefone}/bot` | Encerra o atendimento humano (o bot volta a responder). |
 | `POST /api/admin/whatsapp/link` | `{telefone}` → `{url, validade_minutos}`: o mesmo link do botão "Fazer pedido". |
 
+### Canal QR code (Etapa 4b, `WHATSAPP_CANAL=qr`)
+
+Rotas do conector (só o Node usa). Cabeçalho `X-Conector-Segredo` igual a `CONECTOR_SEGREDO`; sem ele, ou com o canal desligado, `404`.
+
+| Rota | O que faz |
+|---|---|
+| `POST /api/conector/sinal` | `{estado: "conectado"\|"aguardando_qr"\|"desconectado", qr?: "data:image/png;base64,..."}`: sinal de vida a cada 30 s. O QR só é guardado em `aguardando_qr`. |
+| `POST /api/conector/mensagens` | `{mensagens: [{id, telefone, texto, nome?, em?}]}` (até 50; `em` em segundos desde 1970) → `{ok, respondidas, repetidas, antigas, ignoradas}`. Mensagem com mais de 10 min de atraso conta em `antigas` e não é respondida. |
+
+Painel (proprietário):
+
+| Rota | O que faz |
+|---|---|
+| `GET /api/admin/whatsapp` | Com o canal QR traz também `canal: "qr"` e `conector: {estado: "conectado"\|"aguardando_qr"\|"desconectado"\|"sem_sinal", desde, qr, fila_retida, pendentes, alarme}`. |
+| `POST /api/admin/whatsapp/fila/liberar` | "Enviar pendentes": a fila retida volta a andar (avisos com mais de 30 min são descartados ao enviar). Devolve o `conector`. |
+| `POST /api/admin/whatsapp/fila/descartar` | "Descartar": apaga os avisos esperando e libera a fila. Devolve o `conector` mais `descartados`. |
+
+`GET /api/admin/pedidos` ganha o campo `whatsapp` (`null` fora do canal QR, ou `{estado, desde, fila_retida, pendentes, alarme}`): é o que alimenta a faixa de queda em qualquer tela. O `alarme` só liga depois de 2 min fora do ar.
+
+O PHP fala com o Node em `POST http://127.0.0.1:3001/enviar` (`{telefone, texto}`, mesmo cabeçalho de segredo): `202 {id}` quando aceita na fila, `503` com o WhatsApp desconectado, `429` com a fila cheia (50), `403` sem o segredo.
+
 ### O que o bot envia (Cloud API: `POST https://graph.facebook.com/<versão>/<WHATSAPP_PHONE_NUMBER_ID>/messages`)
 - **Qualquer mensagem** (fora do atendimento humano) → texto de boas-vindas com o status da loja + 3 botões de resposta: `pedir`, `acompanhar`, `atendente`.
 - **`pedir`** → loja aberta: mensagem com botão de link (`cta_url`) para `<site>/?t=<token>`; loja fechada: texto com o horário, sem link.

@@ -221,7 +221,18 @@ CREATE TABLE whatsapp_envios_pendentes (
   tipo                 TEXT NOT NULL,
   tentativas           INTEGER NOT NULL DEFAULT 0,
   proxima_tentativa_em TEXT NOT NULL,
-  ultimo_erro          TEXT
+  ultimo_erro          TEXT,
+  criado_em            TEXT                    -- vazio nas linhas antigas; o canal QR descarta aviso velho (D68)
+);
+
+-- Estado do conector do WhatsApp por QR code (D66): uma linha só. O processo Node manda o sinal de vida.
+CREATE TABLE whatsapp_conector (
+  id           INTEGER PRIMARY KEY CHECK (id = 1),
+  estado       TEXT NOT NULL,                  -- conectado | aguardando_qr | desconectado
+  estado_desde TEXT NOT NULL,
+  visto_em     TEXT,                           -- último sinal de vida
+  qr           TEXT,                           -- imagem do QR (data URL) enquanto aguarda o pareamento
+  fila_retida  INTEGER NOT NULL DEFAULT 0      -- 1 = a queda passou de 2 min: a fila espera o proprietário decidir
 );
 
 -- Só no Postgres -----------------------------------------------------------------------------------------------------

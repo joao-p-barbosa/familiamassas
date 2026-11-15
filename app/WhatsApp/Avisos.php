@@ -41,14 +41,23 @@ final class Avisos
         if ($pedido['status'] === 'novo') {
             $this->conversas->definirUltimoPedido($pedido['cliente_telefone'], (int) $pedido['id']);
         }
-        Banco::conexao()->prepare('INSERT INTO whatsapp_envios_pendentes (telefone, pedido_id, tipo, tentativas, proxima_tentativa_em) VALUES (?, ?, ?, 0, ?)')
-            ->execute([$pedido['cliente_telefone'], (int) $pedido['id'], $pedido['status'], Relogio::agora()]);
+        Banco::conexao()->prepare('INSERT INTO whatsapp_envios_pendentes (telefone, pedido_id, tipo, tentativas, proxima_tentativa_em, criado_em) VALUES (?, ?, ?, 0, ?, ?)')
+            ->execute([$pedido['cliente_telefone'], (int) $pedido['id'], $pedido['status'], Relogio::agora(), Relogio::agora()]);
     }
 
     /** Envia os avisos que estão na hora. @return int quantos foram entregues à Meta (ou ao simulador) */
     public function processar(int $limite = 5): int
     {
         $pdo = Banco::conexao();
+        if (Conector::ativo()) {
+            // Canal QR (D68): com o WhatsApp caído, ou a fila retida depois de uma queda, nada sai e nenhuma tentativa é gasta.
+            if (!(new Conector())->liberada()) {
+                return 0;
+            }
+            // Aviso de status com mais de 30 min não vale mais ("seu pedido está pronto" velho só confunde).
+            $pdo->prepare('DELETE FROM whatsapp_envios_pendentes WHERE criado_em IS NOT NULL AND criado_em < ?')
+                ->execute([gmdate('Y-m-d H:i:s', time() - Conector::AVISO_VELHO_MINUTOS * 60)]);
+        }
         $agora = Relogio::agora();
         $consulta = $pdo->prepare('SELECT * FROM whatsapp_envios_pendentes WHERE proxima_tentativa_em <= ? ORDER BY id LIMIT ' . max(1, min(50, $limite)));
         $consulta->execute([$agora]);
@@ -80,7 +89,7 @@ final class Avisos
             return false;
         }
         $telefone = (string) $aviso['telefone'];
-        if ($this->conversas->janelaAberta($telefone)) {
+        if (Conector::ativo() || $this->conversas->janelaAberta($telefone)) {   // no canal QR não há janela de 24 h nem template
             $mensagem = WhatsApp::texto($this->texto($pedido, $aviso['tipo']));
         } elseif (($modelo = WhatsApp::modeloDeStatus()) !== null) {
             $mensagem = WhatsApp::modelo($modelo, [(string) $pedido['id'], PedidoService::ROTULOS[$aviso['tipo']]]);

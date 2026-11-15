@@ -21,3 +21,7 @@ desktop.ini
 
 # Cópias de segurança que o sistema faz antes de atualizar o banco
 data/backups/
+
+# Conector do WhatsApp por QR code: dependências e pareamento (o pareamento é uma credencial)
+conector/node_modules/
+conector/.auth/

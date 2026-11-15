@@ -3,7 +3,7 @@
 // Nenhum segredo chega aqui: a API só diz se cada credencial está preenchida.
 import { $, esc, delegar, guardado } from '../shared/dom.js';
 import { icone } from '../shared/icones.js';
-import { telefone as formatarTelefone, hora, dataHora } from '../shared/formato.js';
+import { telefone as formatarTelefone, hora, dataHora, plural } from '../shared/formato.js';
 import { api } from '../shared/api.js';
 import { avisar } from '../shared/avisos.js';
 import { recipienteDaTela, mostrarErro } from './casca.js';
@@ -62,8 +62,49 @@ function desenharConversa(alvo, conversa, opcoes) {
   lista.scrollTop = lista.scrollHeight;
 }
 
+// ---------- Canal QR code (conector Baileys) ----------
+const ROTULO_CONECTOR = { conectado: 'conectado', aguardando_qr: 'aguardando o QR code', desconectado: 'desconectado', sem_sinal: 'sem sinal do conector' };
+
+function conectorHtml(s) {
+  const c = s.conector;
+  const desde = c.desde ? ` desde ${hora(c.desde)}` : '';
+  const explicacao = {
+    conectado: 'O número da loja está conectado. O cliente que escreve recebe o menu por número: 1 Fazer pedido, 2 Acompanhar pedido, 3 Falar com atendente.',
+    aguardando_qr: 'No celular da loja: WhatsApp → Aparelhos conectados → Conectar um aparelho, e aponte a câmera para o QR code abaixo. O código troca sozinho a cada poucos segundos. Use um número dedicado à loja.',
+    desconectado: `O WhatsApp está desconectado${desde}. O conector tenta voltar sozinho; se o celular tiver desconectado o aparelho, aparece um QR code novo aqui.`,
+    sem_sinal: `O conector não dá sinal${desde}. Ele reinicia sozinho; se passar de alguns minutos, veja os logs do serviço na Render.`,
+  }[c.estado];
+  const fila = c.pendentes > 0 ? `
+    <p class="campo__ajuda">${plural(c.pendentes, 'aviso de pedido está esperando', 'avisos de pedido estão esperando')} para sair${c.fila_retida ? ' (retidos depois da queda)' : ''}. Avisos com mais de 30 minutos são descartados ao enviar.</p>
+    <div style="display: flex; gap: var(--e-2); flex-wrap: wrap;">
+      ${c.fila_retida ? '<button type="button" class="botao botao--p" data-fila="liberar">Enviar pendentes</button>' : ''}
+      <button type="button" class="botao botao--secundario botao--p" data-fila="descartar">Descartar</button>
+    </div>` : '';
+  return `
+    <section class="bloco" id="bloco-conector" data-assinatura="${esc(JSON.stringify(c))}">
+      <h2 class="bloco__titulo">WhatsApp por QR code <span class="selo ${c.estado === 'conectado' ? 'selo--sucesso' : 'selo--alerta'}">${ROTULO_CONECTOR[c.estado]}</span></h2>
+      <p class="bloco__nota">${icone('info', 16)}<span>${esc(explicacao)}</span></p>
+      ${c.estado === 'aguardando_qr' ? (c.qr
+        ? `<img src="${esc(c.qr)}" alt="QR code para conectar o WhatsApp da loja" width="280" height="280" style="background: #fff; padding: var(--e-2); border-radius: var(--raio-2);">`
+        : '<p class="campo__ajuda">Gerando o QR code…</p>') : ''}
+      ${fila}
+    </section>`;
+}
+
+async function atualizarConector() {
+  if (situacao?.canal !== 'qr') return;
+  try {
+    const nova = await api('/api/admin/whatsapp');
+    situacao = nova;
+    const bloco = $('#bloco-conector', conteudo);
+    if (bloco && bloco.dataset.assinatura !== JSON.stringify(nova.conector)) bloco.outerHTML = conectorHtml(nova);
+  } catch { /* tenta no próximo ciclo */ }
+}
+document.addEventListener('whatsapp:fila', atualizarConector);
+
 // ---------- Tela ----------
 function situacaoHtml(s) {
+  if (s.canal === 'qr') return conectorHtml(s);
   const item = (ok, texto) => `<li ${ok ? 'data-ok' : ''}><span class="checagem__marca">${icone(ok ? 'check' : 'menos', 14)}</span><span>${texto}</span></li>`;
   return `
     <section class="bloco">
@@ -342,6 +383,7 @@ export async function montar() {
     if (document.visibilityState !== 'visible') return;
     atualizarSimulador();
     atualizarAtendimento();
+    atualizarConector();
   }, ATUALIZAR_MS);
 }
 

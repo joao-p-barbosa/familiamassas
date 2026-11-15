@@ -21,14 +21,19 @@ final class WhatsApp
 
     public static function simulado(): bool
     {
-        return Env::get('WHATSAPP_SIMULAR') === '1' || Env::get('WHATSAPP_TOKEN') === '' || Env::get('WHATSAPP_PHONE_NUMBER_ID') === '';
+        if (Env::get('WHATSAPP_SIMULAR') === '1') {
+            return true;
+        }
+        return !Conector::ativo() && (Env::get('WHATSAPP_TOKEN') === '' || Env::get('WHATSAPP_PHONE_NUMBER_ID') === '');
     }
 
     public static function mensageiro(): Mensageiro
     {
-        return self::$mensageiro ??= self::simulado()
-            ? new MensageiroSimulado()
-            : new CloudApi(Env::get('WHATSAPP_TOKEN'), Env::get('WHATSAPP_PHONE_NUMBER_ID'), Env::get('WHATSAPP_API_VERSAO', 'v23.0'));
+        return self::$mensageiro ??= match (true) {
+            self::simulado() => new MensageiroSimulado(),
+            Conector::ativo() => new MensageiroConector(),
+            default => new CloudApi(Env::get('WHATSAPP_TOKEN'), Env::get('WHATSAPP_PHONE_NUMBER_ID'), Env::get('WHATSAPP_API_VERSAO', 'v23.0')),
+        };
     }
 
     /** Os testes trocam o mensageiro por um que só guarda o que seria enviado (null volta ao normal). */
