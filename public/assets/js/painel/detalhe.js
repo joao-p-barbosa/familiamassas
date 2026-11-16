@@ -79,6 +79,8 @@ function desenhar() {
       </div>
 
       ${p.ifood?.falhas ? `<p class="detalhe__obs">${icone('alerta', 18)}<span><strong>O iFood não recebeu uma etapa deste pedido.</strong> Confira no Gestor de Pedidos do iFood (o motivo está na tela iFood).</span></p>` : ''}
+      ${p.ifood?.alerta ? `<p class="detalhe__obs">${icone('alerta', 18)}<span><strong>Atenção no iFood:</strong> ${esc(p.ifood.alerta)}</span></p>` : ''}
+      ${p.ifood && !p.ifood.confirmado && p.status === 'novo' ? `<p class="detalhe__obs">${icone('relogio', 18)}<span>Este pedido ainda não foi confirmado no iFood.${p.ifood.simulado ? '' : ' Sem confirmação em 8 minutos, o iFood cancela o pedido sozinho.'}</span></p>` : ''}
       ${p.observacoes ? `<p class="detalhe__obs">${icone('alerta', 18)}<span><strong>Observação do pedido:</strong> ${esc(p.observacoes)}</span></p>` : ''}
 
       <section class="detalhe__bloco">
@@ -91,9 +93,11 @@ function desenhar() {
               ${item.observacoes ? `<p class="detalhe__obs detalhe__obs--item">${icone('alerta', 16)}<span>${esc(item.observacoes)}</span></p>` : ''}
             </li>`).join('')}
         </ul>
+        ${(p.ifood?.cupons ?? []).map((cupom) => `<p class="detalhe__obs detalhe__obs--item">${icone('info', 16)}<span>${esc(cupom)}</span></p>`).join('')}
         <dl class="totais">
           <div><dt>Subtotal</dt><dd class="numero">${reais(p.subtotal_centavos)}</dd></div>
           ${p.tipo === 'entrega' ? `<div><dt>Taxa de entrega</dt><dd class="numero">${reais(p.taxa_entrega_centavos)}</dd></div>` : ''}
+          ${p.ifood?.taxas_adicionais_centavos ? `<div><dt>Taxas adicionais</dt><dd class="numero">${reais(p.ifood.taxas_adicionais_centavos)}</dd></div>` : ''}
           <div class="totais__total"><dt>Total</dt><dd class="numero">${reais(p.total_centavos)}</dd></div>
         </dl>
       </section>
@@ -106,7 +110,8 @@ function desenhar() {
           ${p.tipo === 'entrega' ? `<div><dt>Endereço</dt><dd>${esc(p.endereco_rua)}, ${esc(p.endereco_numero)}${p.endereco_complemento ? ` · ${esc(p.endereco_complemento)}` : ''}<br>${esc(p.endereco_bairro)}${p.endereco_referencia ? `<br>Ref.: ${esc(p.endereco_referencia)}` : ''}${p.entrega_lat !== null && p.entrega_lng !== null ? `<br><a href="${esc(linkDoPonto(p.entrega_lat, p.entrega_lng))}" target="_blank" rel="noopener">${icone('mapa', 14)} Ver o local marcado no mapa</a>` : ''}</dd></div>` : ''}
           ${p.ifood?.telefone ? `<div><dt>Telefone (iFood)</dt><dd>${esc(p.ifood.telefone)}${p.ifood.localizador ? `, localizador ${esc(p.ifood.localizador)}` : ''}</dd></div>` : ''}
           ${p.ifood?.codigo_coleta ? `<div><dt>Código de coleta</dt><dd>${esc(p.ifood.codigo_coleta)}</dd></div>` : ''}
-          ${p.ifood ? `<div><dt>Pagamento</dt><dd>${esc(p.ifood.pagamento_texto)}</dd></div>` : `<div><dt>Pagamento</dt><dd>${PAGAMENTOS[p.pagamento]}${p.troco_para_centavos ? `, troco para ${reais(p.troco_para_centavos)} (levar ${reais(p.troco_para_centavos - p.total_centavos)})` : ''}</dd></div>`}
+          ${p.ifood?.documento ? `<div><dt>CPF/CNPJ na nota</dt><dd>${esc(p.ifood.documento)}</dd></div>` : ''}
+          ${p.ifood ? `<div><dt>Pagamento</dt><dd>${esc(p.ifood.pagamento_texto)}<br><strong>${p.ifood.pago_online ? 'Não cobrar: já pago no iFood' : `Cobrar ${reais(p.ifood.a_cobrar_centavos ?? p.total_centavos)}`}</strong></dd></div>` : `<div><dt>Pagamento</dt><dd>${PAGAMENTOS[p.pagamento]}${p.troco_para_centavos ? `, troco para ${reais(p.troco_para_centavos)} (levar ${reais(p.troco_para_centavos - p.total_centavos)})` : ''}</dd></div>`}
         </dl>
       </section>
 
@@ -131,7 +136,16 @@ function desenhar() {
 }
 
 // ---------- Cancelar com motivo ----------
-export function pedirCancelamento(id) {
+export async function pedirCancelamento(id) {
+  // Pedido do iFood: o iFood diz quais motivos aceita para ESTE pedido (GET cancellationReasons) e a pessoa escolhe um da lista.
+  let motivosIfood = null;
+  if (fonte.pedidos.get(id)?.ifood) {
+    try {
+      const r = await api(`/api/admin/pedidos/${id}/ifood/motivos`);
+      motivosIfood = r.motivos?.length ? r.motivos : null;
+    } catch { /* sem a lista do iFood: cai nos motivos de sempre e o servidor escolhe um código válido */ }
+  }
+  const opcoes = motivosIfood ? motivosIfood.map((m) => ({ valor: m.codigo, rotulo: m.descricao })) : MOTIVOS.map((m) => ({ valor: m, rotulo: m }));
   dialogo.innerHTML = `
     <header class="folha__topo">
       <h2 class="folha__titulo" id="folha-dialogo-titulo">Cancelar o pedido #${id}?</h2>
@@ -139,38 +153,40 @@ export function pedirCancelamento(id) {
     </header>
     <form class="folha__corpo cancelar" id="form-cancelar" novalidate>
       <fieldset class="grupo-opcoes">
-        <legend class="campo__rotulo">Por quê? O cliente vê este motivo.</legend>
-        ${MOTIVOS.map((motivo) => `
+        <legend class="campo__rotulo">${motivosIfood ? 'Motivos aceitos pelo iFood para este pedido. O cliente vê este motivo.' : 'Por quê? O cliente vê este motivo.'}</legend>
+        ${opcoes.map((op) => `
           <label class="opcao">
-            <input class="opcao__entrada" type="radio" name="motivo" value="${esc(motivo)}">
+            <input class="opcao__entrada" type="radio" name="motivo" value="${esc(op.valor)}">
             <span class="opcao__marca">${icone('check', 14)}</span>
-            <span class="opcao__corpo"><span class="opcao__titulo">${esc(motivo)}</span></span>
+            <span class="opcao__corpo"><span class="opcao__titulo">${esc(op.rotulo)}</span></span>
           </label>`).join('')}
       </fieldset>
+      ${motivosIfood ? '' : `
       <label class="campo">
         <span class="campo__rotulo">Outro motivo</span>
         <input class="entrada" type="text" name="outro" maxlength="200" autocomplete="off">
-      </label>
-      <p class="campo__erro" id="erro-motivo" role="alert" hidden>Escolha ou escreva o motivo.</p>
+      </label>`}
+      <p class="campo__erro" id="erro-motivo" role="alert" hidden>Escolha ${motivosIfood ? 'um dos motivos' : 'ou escreva o motivo'}.</p>
     </form>
     <footer class="folha__rodape folha__rodape--acoes">
       <button type="button" class="botao botao--secundario" data-fechar>Manter o pedido</button>
       <button type="submit" form="form-cancelar" class="botao botao--perigo">Cancelar pedido</button>
     </footer>`;
   const form = $('#form-cancelar');
-  form.outro.addEventListener('input', () => {
+  form.outro?.addEventListener('input', () => {
     if (form.outro.value.trim()) form.querySelectorAll('[name="motivo"]').forEach((r) => (r.checked = false));
   });
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const motivo = form.outro.value.trim() || form.motivo.value;
+    const escolhido = form.motivo.value;
+    const motivo = motivosIfood ? opcoes.find((op) => op.valor === escolhido)?.rotulo : (form.outro?.value.trim() || escolhido);
     if (!motivo) {
       $('#erro-motivo').hidden = false;
       return;
     }
     const botao = dialogo.querySelector('button[type="submit"]');
     botao.setAttribute('aria-busy', 'true');
-    const pedido = await fonte.mudarStatus(id, 'cancelado', motivo);
+    const pedido = await fonte.mudarStatus(id, 'cancelado', motivo, motivosIfood ? escolhido : null);
     botao.removeAttribute('aria-busy');
     if (pedido) {
       await fecharFolha(dialogo);

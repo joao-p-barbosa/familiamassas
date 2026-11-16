@@ -120,8 +120,13 @@ final class Comanda
             if (!$comPreco) {
                 $l[] = ['t' => '', 'e' => 'linha'];
             }
-            $l[] = ['t' => $ifood['pago_online'] ? 'PAGO ONLINE - NÃO COBRAR' : 'COBRAR ' . self::reais((int) $pedido['total_centavos']), 'e' => 'caixa', 'a' => 'c'];
+            $aCobrar = (int) ($ifood['a_cobrar_centavos'] ?? $pedido['total_centavos']);
+            $l[] = ['t' => $ifood['pago_online'] ? 'PAGO ONLINE - NÃO COBRAR' : 'COBRAR ' . self::reais($aCobrar), 'e' => 'caixa', 'a' => 'c'];
             $l[] = ['t' => (string) $ifood['pagamento_texto'], 'e' => 'pequeno', 'a' => 'c'];
+            // Cupom e quem paga (iFood ou loja): exigência da homologação do iFood.
+            foreach ($ifood['cupons'] ?? [] as $cupom) {
+                $l[] = ['t' => (string) $cupom, 'e' => 'pequeno', 'a' => 'c'];
+            }
         }
         return $l;
     }

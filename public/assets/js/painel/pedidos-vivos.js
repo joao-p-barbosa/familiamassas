@@ -73,9 +73,9 @@ export function criarFonte({ aoMudar, aoChegar = () => {}, antesDeMudar = () => 
     },
 
     /** Muda a etapa de um pedido. Devolve o pedido atualizado, ou null se não deu. */
-    async mudarStatus(id, status, motivo = null) {
+    async mudarStatus(id, status, motivo = null, codigoIfood = null) {
       try {
-        const pedido = await api(`/api/admin/pedidos/${id}/status`, { metodo: 'PATCH', corpo: { status, motivo } });
+        const pedido = await api(`/api/admin/pedidos/${id}/status`, { metodo: 'PATCH', corpo: { status, motivo, ifood_codigo: codigoIfood } });
         antesDeMudar();
         pedidos.set(pedido.id, pedido);
         aoMudar('dados');

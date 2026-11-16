@@ -66,8 +66,9 @@ export function comandaHtml(pedido, { largura = ajustes.comanda_largura_mm, comP
         ${ifood.codigo_coleta ? `<p><b>Código de coleta: ${esc(ifood.codigo_coleta)}</b></p>` : ''}` : '';
   const ifoodPagamento = ifood ? `
       <div class="comanda__bloco">
-        <p class="comanda__tipo">${ifood.pago_online ? 'Pago online - não cobrar' : `Cobrar ${reais(pedido.total_centavos)}`}</p>
+        <p class="comanda__tipo">${ifood.pago_online ? 'Pago online - não cobrar' : `Cobrar ${reais(ifood.a_cobrar_centavos ?? pedido.total_centavos)}`}</p>
         <p class="comanda__via">${esc(ifood.pagamento_texto)}</p>
+        ${(ifood.cupons ?? []).map((cupom) => `<p class="comanda__via">${esc(cupom)}</p>`).join('')}
       </div>` : '';
   return `
     <div class="comanda ${largura === 58 ? 'comanda--58' : ''}">

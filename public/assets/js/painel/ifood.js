@@ -17,6 +17,7 @@ const ACOES = { confirm: 'Confirmar', startPreparation: 'Iniciar preparo', ready
 
 let situacao = null;
 let relogio = 0;
+let editando = false;   // o dono está digitando nas credenciais: a atualização automática não apaga
 
 function estadoHtml(s) {
   const item = (ok, texto) => `<li ${ok ? 'data-ok' : ''}><span class="checagem__marca">${icone(ok ? 'check' : 'menos', 14)}</span><span>${texto}</span></li>`;
@@ -24,9 +25,9 @@ function estadoHtml(s) {
     return `
       <section class="bloco">
         <h2 class="bloco__titulo">Modo simulado <span class="selo selo--alerta">sem iFood de verdade</span></h2>
-        <p class="bloco__nota">${icone('info', 16)}<span>Faltam as credenciais do aplicativo no servidor (variáveis <strong>IFOOD_CLIENT_ID</strong> e <strong>IFOOD_CLIENT_SECRET</strong>, criadas no Portal do Desenvolvedor do iFood). Enquanto isso, use os botões abaixo: o pedido de teste entra no Kanban com origem iFood, é confirmado e sai na impressora como um pedido real.</span></p>
+        <p class="bloco__nota">${icone('info', 16)}<span>Faltam o Client ID e o Client Secret do aplicativo (você os recebe ao criar o aplicativo no Portal do Desenvolvedor do iFood). Preencha em <strong>Credenciais do aplicativo</strong>, logo abaixo. Enquanto isso, use os botões de pedido de teste mais adiante: o pedido entra no Kanban com origem iFood, é confirmado e sai na impressora como um pedido real.</span></p>
         <ul class="checagem">
-          ${item(false, 'Credenciais do aplicativo do iFood no servidor')}
+          ${item(false, 'Credenciais do aplicativo (preencha abaixo)')}
           ${item(false, 'Loja autorizada no Portal do Parceiro')}
         </ul>
       </section>`;
@@ -45,9 +46,9 @@ function estadoHtml(s) {
   } else if (s.codigo) {
     acoes = `
       <ol class="ifood__passos">
-        <li>Abra o <a href="${esc(s.codigo.url)}" target="_blank" rel="noopener">Portal do Parceiro do iFood ${icone('externo', 14)}</a> com o login da loja.</li>
-        <li>Digite este código: <code class="codigo ifood__codigo">${esc(s.codigo.user_code)}</code> (vale até ${hora(s.codigo.expira_em)}).</li>
-        <li>O iFood mostra um <strong>código de autorização</strong>. Cole aqui:</li>
+        <li>Abra o <a href="${esc(s.codigo.url)}" target="_blank" rel="noopener">Portal do Parceiro do iFood ${icone('externo', 14)}</a> com o login da loja. Se preferir, entre em <strong>Serviços e soluções › Integrações › Ativar integração por código</strong>.</li>
+        <li>Digite este código: <code class="codigo ifood__codigo">${esc(s.codigo.user_code)}</code> (vale até ${hora(s.codigo.expira_em)}, 10 minutos).</li>
+        <li>No quadro <strong>Autorizar aplicativo</strong>, clique em <strong>Autorizar</strong>. O iFood mostra um <strong>código de autorização</strong> (vale só 5 minutos). Cole aqui:</li>
       </ol>
       <form class="ifood__autorizar" id="form-autorizar">
         <label class="campo">
@@ -60,19 +61,69 @@ function estadoHtml(s) {
   } else {
     acoes = `<div><button type="button" class="botao" data-ifood="conectar">${icone('externo', 18)}Conectar loja do iFood</button></div>
       <p class="campo__ajuda">${s.tipo_app === 'centralizado'
-        ? 'Aplicativo centralizado: a conexão usa as credenciais do servidor, sem código.'
+        ? 'Aplicativo centralizado: a conexão usa o Client ID e o Client Secret acima, sem código. A loja precisa já estar liberada para o aplicativo (no aplicativo de teste, a loja de teste já vem liberada).'
         : 'Você vai receber um código para digitar no Portal do Parceiro do iFood, como nas plataformas de cardápio.'}</p>`;
   }
   return `
     <section class="bloco">
       <h2 class="bloco__titulo">Conexão ${selo}</h2>
       <ul class="checagem">
-        ${item(true, 'Credenciais do aplicativo no servidor')}
+        ${item(true, `Credenciais do aplicativo ${s.credenciais.origem === 'ambiente' ? '(vêm do servidor)' : '(salvas aqui)'}`)}
         ${item(conectado, s.loja ? `Loja: <strong>${esc(s.loja.nome || s.loja.id)}</strong>` : 'Loja autorizada')}
         ${item(conectado && !s.polling_atrasado, s.ultimo_polling_em ? `Último polling às ${hora(s.ultimo_polling_em)} (a cada 30 s; é o que mantém a loja aberta no app)` : 'Polling de pedidos')}
       </ul>
+      ${s.sem_loja ? `<p class="detalhe__obs">${icone('info', 18)}<span><strong>Nenhuma loja liberada para este aplicativo ainda.</strong> ${s.tipo_app === 'centralizado' ? 'No Portal do Desenvolvedor, em Meus Apps › Permissões, peça acesso à loja pelo ID ou CNPJ; o responsável aprova no Portal do Parceiro.' : 'Confira se o lojista concluiu a autorização.'} A permissão pode levar até 10 minutos para valer; o sistema procura de novo sozinho a cada minuto.</span></p>` : ''}
       ${s.ultimo_erro ? `<p class="detalhe__obs">${icone('alerta', 18)}<span><strong>Último erro (${dataHora(s.ultimo_erro.em)}):</strong> ${esc(s.ultimo_erro.mensagem)}</span></p>` : ''}
       ${acoes}
+    </section>`;
+}
+
+function credenciaisHtml(s) {
+  const c = s.credenciais;
+  const tipos = [
+    ['distribuido', 'Distribuído (o lojista autoriza com um código)'],
+    ['centralizado', 'Centralizado (a loja é liberada no Portal do Desenvolvedor)'],
+  ];
+  if (!c.editavel) {
+    return `
+      <section class="bloco">
+        <h2 class="bloco__titulo">Credenciais do aplicativo <span class="selo selo--sucesso">vêm do servidor</span></h2>
+        <p class="campo__ajuda">O Client ID <code class="codigo ifood__id">${esc(c.client_id)}</code> e o Client Secret estão nas variáveis de ambiente do servidor (IFOOD_CLIENT_ID e IFOOD_CLIENT_SECRET) e valem primeiro. Para trocá-los por esta tela, apague essas duas variáveis na Render.</p>
+      </section>`;
+  }
+  return `
+    <section class="bloco">
+      <h2 class="bloco__titulo">Credenciais do aplicativo ${c.secret_ilegivel ? '<span class="selo selo--perigo">secret ilegível</span>' : c.secret_salvo && c.client_id ? '<span class="selo selo--sucesso">salvas</span>' : '<span class="selo selo--alerta">não preenchidas</span>'}</h2>
+      <p class="bloco__nota">${icone('info', 16)}<span>No <a href="https://developer.ifood.com.br" target="_blank" rel="noopener">Portal do Desenvolvedor do iFood</a>, em <strong>Meus Apps</strong>, copie (ou crie o aplicativo e copie) e copie o <strong>Client ID</strong> e o <strong>Client Secret</strong>. O secret é guardado cifrado e nunca volta para esta tela.</span></p>
+      ${c.app_key_ok ? '' : `<p class="detalhe__obs">${icone('alerta', 18)}<span>O servidor está sem <strong>APP_KEY</strong>, que protege o Client Secret. Defina a variável APP_KEY na Render antes de salvar.</span></p>`}
+      ${c.secret_ilegivel ? `<p class="detalhe__obs">${icone('alerta', 18)}<span>O Client Secret salvo não abre mais (a APP_KEY do servidor mudou). Digite o secret de novo.</span></p>` : ''}
+      <form class="config" id="form-credenciais" novalidate autocomplete="off">
+        <div class="bloco__grade">
+          <label class="campo">
+            <span class="campo__rotulo">Client ID</span>
+            <input class="entrada" name="client_id" value="${esc(c.client_id)}" maxlength="120" spellcheck="false" autocomplete="off" aria-describedby="erro-client_id">
+            <span class="campo__erro" id="erro-client_id" hidden></span>
+          </label>
+          <label class="campo">
+            <span class="campo__rotulo">Client Secret</span>
+            <input class="entrada" type="password" name="client_secret" maxlength="300" spellcheck="false" autocomplete="new-password"
+                   placeholder="${c.secret_salvo && !c.secret_ilegivel ? '•••••••• (salvo; deixe em branco para manter)' : ''}" aria-describedby="erro-client_secret">
+            <span class="campo__erro" id="erro-client_secret" hidden></span>
+          </label>
+        </div>
+        <label class="campo">
+          <span class="campo__rotulo">Tipo do aplicativo</span>
+          <select class="entrada" name="tipo_app" aria-describedby="erro-tipo_app">
+            ${tipos.map(([valor, rotulo]) => `<option value="${valor}" ${s.tipo_app === valor ? 'selected' : ''}>${esc(rotulo)}</option>`).join('')}
+          </select>
+          <span class="campo__ajuda"><strong>Distribuído</strong>: o lojista digita um código no Portal do Parceiro e autoriza o aplicativo (modelo da Brendi). <strong>Centralizado</strong>: o aplicativo usa só o Client ID e o Client Secret, e a loja é liberada em Meus Apps › Permissões. Tem de ser o mesmo tipo escolhido ao criar o aplicativo no Portal do Desenvolvedor. O aplicativo de teste que o iFood cria na sua conta de desenvolvedor usa as credenciais direto, sem código: use <strong>Centralizado</strong> para testar. Trocar o tipo, o Client ID ou o secret desconecta a loja: conecte de novo depois.</span>
+          <span class="campo__erro" id="erro-tipo_app" hidden></span>
+        </label>
+        <div class="ifood__acoes">
+          <button type="submit" class="botao" ${c.app_key_ok ? '' : 'disabled'}>${icone('check', 18)}Salvar credenciais</button>
+          ${c.client_id || c.secret_salvo ? '<button type="button" class="botao botao--perigo-suave" data-remover-credenciais>Remover credenciais</button>' : ''}
+        </div>
+      </form>
     </section>`;
 }
 
@@ -81,8 +132,8 @@ function ajustesHtml(s) {
     <section class="bloco">
       <h2 class="bloco__titulo">Como os pedidos entram</h2>
       <label class="interruptor"><input type="checkbox" name="confirmar_auto" ${s.confirmar_auto ? 'checked' : ''}><span class="interruptor__trilho"></span><span>Confirmar no iFood assim que o pedido chegar</span></label>
-      <p class="campo__ajuda">Ligado: o cliente vê "pedido confirmado" na hora e a comanda já sai. Desligado: o pedido é confirmado quando alguém clicar em "Iniciar preparo". O iFood cancela pedidos que ficam muito tempo sem confirmação.</p>
-      <p class="bloco__nota">${icone('info', 16)}<span>Cada etapa do Kanban volta para o iFood: <strong>Iniciar preparo</strong> → em preparo; <strong>Marcar pronto</strong> → pronto para retirar (retirada ou entregador do iFood); <strong>Saiu para entrega</strong> → saiu (só quando a entrega é da loja); <strong>Cancelar</strong> → pedido de cancelamento com o motivo escrito.</span></p>
+      <p class="campo__ajuda">Ligado: o cliente vê "pedido confirmado" na hora e a comanda já sai. Desligado: o pedido é confirmado quando alguém clicar em "Iniciar preparo". <strong>Atenção: sem confirmação em ${s.prazo_confirmacao_min ?? 8} minutos o iFood cancela o pedido sozinho.</strong></p>
+      <p class="bloco__nota">${icone('info', 16)}<span>Cada etapa do Kanban volta para o iFood: <strong>Iniciar preparo</strong> → em preparo; <strong>Marcar pronto</strong> → pronto para retirar (<code>readyToPickup</code>, em qualquer tipo de entrega); <strong>Saiu para entrega</strong> → <code>dispatch</code> (só quando a entrega é da loja); <strong>Cancelar</strong> → você escolhe um dos motivos que o próprio iFood aceita para aquele pedido. Quando o Gestor de Pedidos do iFood (ou o iFood) mudar a etapa, o quadro acompanha.</span></p>
     </section>`;
 }
 
@@ -126,10 +177,12 @@ function ultimosHtml(s) {
 
 function desenhar(s) {
   situacao = s;
+  editando = false;
   conteudo.innerHTML = `
     <div class="cabecalho-tela"><h1 class="cabecalho-tela__titulo">iFood</h1></div>
     <div class="config">
       ${estadoHtml(s)}
+      ${credenciaisHtml(s)}
       ${ajustesHtml(s)}
       ${testeHtml(s)}
       ${ultimosHtml(s)}
@@ -139,8 +192,8 @@ function desenhar(s) {
 async function atualizar() {
   try {
     const nova = await api('/api/admin/ifood');
-    // Não apaga o código que o dono está digitando.
-    if (document.activeElement?.closest('#form-autorizar')) return;
+    // Não apaga o que o dono está digitando (código de autorização ou credenciais).
+    if (editando || document.activeElement?.closest('#form-autorizar, #form-credenciais')) return;
     if (JSON.stringify(nova) !== JSON.stringify(situacao)) desenhar(nova);
   } catch { /* tenta no próximo ciclo */ }
 }
@@ -162,6 +215,25 @@ delegar(conteudo, 'click', '[data-ifood]', async (e, botao) => {
       avisar(r.resultado.pedidos ? `${r.resultado.pedidos} pedido(s) novo(s) do iFood` : 'Nenhum pedido novo no iFood');
       fonte.sincronizar();
     }
+  } catch (erro) {
+    botao.removeAttribute('aria-busy');
+    mostrarErro(erro);
+  }
+});
+
+delegar(conteudo, 'input', '#form-credenciais', () => { editando = true; });
+
+delegar(conteudo, 'click', '[data-remover-credenciais]', async (e, botao) => {
+  if (!(await confirmar({
+    titulo: 'Remover as credenciais do iFood?',
+    texto: 'A loja é desconectada e o Client ID e o Client Secret salvos são apagados. Os pedidos que já entraram continuam no quadro.',
+    confirmar: 'Remover',
+    perigo: true,
+  }))) return;
+  botao.setAttribute('aria-busy', 'true');
+  try {
+    desenhar(await api('/api/admin/ifood/credenciais', { metodo: 'DELETE' }));
+    avisar('Credenciais removidas');
   } catch (erro) {
     botao.removeAttribute('aria-busy');
     mostrarErro(erro);
@@ -192,6 +264,34 @@ delegar(conteudo, 'change', 'input[name="confirmar_auto"]', async (e, entrada) =
 });
 
 conteudo.addEventListener('submit', async (e) => {
+  if (e.target.id === 'form-credenciais') {
+    e.preventDefault();
+    const form = e.target;
+    const botao = form.querySelector('button[type="submit"]');
+    for (const el of form.querySelectorAll('.campo__erro')) el.hidden = true;
+    botao.setAttribute('aria-busy', 'true');
+    try {
+      const era = situacao.estado;
+      const nova = await api('/api/admin/ifood/credenciais', {
+        metodo: 'PUT',
+        corpo: { client_id: form.client_id.value, client_secret: form.client_secret.value, tipo_app: form.tipo_app.value },
+      });
+      desenhar(nova);
+      avisar(era === 'conectado' && nova.estado !== 'conectado' ? 'Credenciais salvas. A loja foi desconectada: conecte de novo.' : 'Credenciais salvas');
+    } catch (erro) {
+      botao.removeAttribute('aria-busy');
+      if (erro.codigo === 'validacao') {
+        for (const [campo, mensagem] of Object.entries(erro.campos)) {
+          const el = $(`#erro-${campo}`, form);
+          if (el) { el.textContent = mensagem; el.hidden = false; }
+        }
+        form.querySelector('.campo__erro:not([hidden])')?.scrollIntoView({ block: 'center' });
+      } else {
+        mostrarErro(erro);
+      }
+    }
+    return;
+  }
   if (e.target.id !== 'form-autorizar') return;
   e.preventDefault();
   const form = e.target;

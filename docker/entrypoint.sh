@@ -48,15 +48,14 @@ if [ "${WHATSAPP_CANAL:-}" = "qr" ]; then
 fi
 
 # 4) iFood (D77): o polling de pedidos roda num processo PHP ao lado do Apache, a cada 30 s, mesmo sem ninguém no painel
-#    (é o polling que mantém a loja aberta no app do iFood). Só sobe com as credenciais do aplicativo. Reinicia se cair.
-if [ -n "${IFOOD_CLIENT_ID:-}" ] && [ -n "${IFOOD_CLIENT_SECRET:-}" ]; then
-  (
-    while true; do
-      su -p -s /bin/sh www-data -c "cd $APP && exec php bin/ifood.php" || true
-      echo "[entrypoint] o processo do iFood encerrou; reiniciando em 5 s" >&2
-      sleep 5
-    done
-  ) &
-fi
+#    (é o polling que mantém a loja aberta no app do iFood). Sobe sempre: o Client ID e o Client Secret podem vir das variáveis
+#    de ambiente ou da tela iFood (D82), e enquanto não houver credenciais ele só confere de novo a cada 30 s. Reinicia se cair.
+(
+  while true; do
+    su -p -s /bin/sh www-data -c "cd $APP && exec php bin/ifood.php" || true
+    echo "[entrypoint] o processo do iFood encerrou; reiniciando em 5 s" >&2
+    sleep 5
+  done
+) &
 
 exec apache2-foreground

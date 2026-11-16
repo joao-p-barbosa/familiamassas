@@ -224,3 +224,14 @@ Testados no navegador (celular e desktop) e com testes automáticos. `⚠️` = 
 - ✅ Impressora pausada no Windows: faixa no painel e comandas esperando na fila.
 - ⚠️ iFood de verdade: falta o aplicativo no Portal do Desenvolvedor e a homologação (os caminhos da API não foram conferidos na documentação oficial, D77).
 - ⚠️ Não testado: `bin/ifood.php` dentro do contêiner da Render; agente rodando horas seguidas; a tela Impressora e a tela iFood no celular.
+
+### iFood: o que testar e como (atualizado em 16/11)
+
+1. **Conta de desenvolvedor:** developer.ifood.com.br › Cadastre-se. O e-mail **não pode** ser o de um Portal do Parceiro existente (use outro e-mail). A conta já nasce com uma **loja de teste** e um **aplicativo de teste**.
+2. **Credenciais:** em Meus Apps, abra o aplicativo de teste e copie o Client ID e o Client Secret.
+3. **No sistema:** Painel › iFood › Credenciais do aplicativo: cole os dois, escolha **Centralizado**, salve e clique em **Conectar loja do iFood**. A loja de teste só aparece aberta no app se o sistema estiver fazendo polling (a cada 30 s).
+4. **Pedido de teste:** Portal do Desenvolvedor › Testes › **Gerar pedido de teste** (ou pelo app do iFood com o usuário de teste). Em até 30 s o pedido entra no Kanban, é confirmado e a comanda sai na impressora.
+5. **Homologação (produção):** só depois de tudo funcionar na loja de teste: crie o aplicativo de **produção** (categoria PDV, módulos Order e Events), rode Homologação › Nova homologação (5 etapas, 5 capturas de tela cada) e, aprovado, peça acesso à loja (Meus Apps › Permissões, ou o lojista digita o código, no tipo Distribuído).
+- ✅ Testado em navegador real com um iFood de mentira local: credenciais digitadas na tela, conexão, pedido importado e confirmado, cupom com quem paga, lista de motivos de cancelamento e `requestCancellation` com o código escolhido.
+- ⚠️ Não testado: contra o iFood de verdade (precisa do aplicativo de teste); homologação; bloqueio de IP da Render (se vier 403 com a loja autorizada, abrir chamado no Portal do Desenvolvedor).
+- ✅ **Contra o iFood real (16/11):** conexão, polling, pedido, confirmação, preparo, pronto, saiu, motivos e cancelamento funcionaram (D84). Falta: produção (homologação) e conferir o acesso a partir da Render.

@@ -4,6 +4,8 @@ declare(strict_types=1);
 namespace App\Ifood;
 
 use App\Core\Env;
+use App\Core\Segredo;
+use App\Repositories\ConfigRepository;
 
 /**
  * Cliente da Merchant API do iFood (https://developer.ifood.com.br), versão v1.0 dos módulos.
@@ -14,8 +16,9 @@ use App\Core\Env;
  *     POST /events/v1.0/events/acknowledgment.
  *   * Pedido: GET /order/v1.0/orders/{id} e as ações POST /order/v1.0/orders/{id}/{confirm|startPreparation|readyToPickup|dispatch|requestCancellation}.
  * Todos os caminhos estão em CAMINHOS: se o iFood mudar algum na homologação, muda só aqui.
- * O clientId e o clientSecret vêm só das variáveis de ambiente IFOOD_CLIENT_ID e IFOOD_CLIENT_SECRET (nunca do banco nem do painel)
- * e nunca entram em log nem em mensagem de erro. O transporte HTTP é um parâmetro para os testes não precisarem de rede.
+ * O clientId e o clientSecret vêm das variáveis de ambiente IFOOD_CLIENT_ID e IFOOD_CLIENT_SECRET (se existirem, valem primeiro) ou dos
+ * campos da tela iFood (D82): lá o secret fica cifrado no banco (App\Core\Segredo) e nunca volta para o navegador. Nunca entram em log
+ * nem em mensagem de erro. O transporte HTTP é um parâmetro para os testes não precisarem de rede.
  */
 final class IfoodApi
 {
@@ -51,26 +54,62 @@ final class IfoodApi
         $this->transporte = $transporte;
     }
 
+    /**
+     * Credenciais do aplicativo: ambiente primeiro (os dois valores), depois os campos da tela iFood.
+     * @return array{id:string, secret:string, origem:string, secret_ilegivel:bool} origem: ambiente | painel | nenhuma
+     */
+    public static function credenciais(): array
+    {
+        $id = Env::get('IFOOD_CLIENT_ID');
+        $secret = Env::get('IFOOD_CLIENT_SECRET');
+        if ($id !== '' && $secret !== '') {
+            return ['id' => $id, 'secret' => $secret, 'origem' => 'ambiente', 'secret_ilegivel' => false];
+        }
+        try {
+            $config = new ConfigRepository();
+            $idSalvo = $config->get('ifood_client_id');
+            $cifrado = $config->get('ifood_client_secret');
+        } catch (\Throwable) {
+            return ['id' => '', 'secret' => '', 'origem' => 'nenhuma', 'secret_ilegivel' => false];
+        }
+        $aberto = $cifrado === '' ? null : Segredo::decifrar($cifrado);
+        return [
+            'id' => $idSalvo,
+            'secret' => (string) $aberto,
+            'origem' => $idSalvo !== '' || $cifrado !== '' ? 'painel' : 'nenhuma',
+            'secret_ilegivel' => $cifrado !== '' && $aberto === null,
+        ];
+    }
+
     public static function clientId(): string
     {
-        return Env::get('IFOOD_CLIENT_ID');
+        return self::credenciais()['id'];
     }
 
     private static function clientSecret(): string
     {
-        return Env::get('IFOOD_CLIENT_SECRET');
+        return self::credenciais()['secret'];
     }
 
     /** Com as duas credenciais o iFood é de verdade; sem elas, o painel fica no modo simulado. */
     public static function configurada(): bool
     {
-        return self::clientId() !== '' && self::clientSecret() !== '';
+        $c = self::credenciais();
+        return $c['id'] !== '' && $c['secret'] !== '';
     }
 
     /** "distribuido" (padrão: o dono autoriza a loja com um código, como na Brendi) ou "centralizado" (credenciais da própria loja). */
     public static function tipoDeAplicativo(): string
     {
-        return Env::get('IFOOD_TIPO_APP') === 'centralizado' ? 'centralizado' : 'distribuido';
+        $doAmbiente = Env::get('IFOOD_TIPO_APP');
+        if (in_array($doAmbiente, ['centralizado', 'distribuido'], true)) {
+            return $doAmbiente;
+        }
+        try {
+            return (new ConfigRepository())->get('ifood_tipo_app') === 'centralizado' ? 'centralizado' : 'distribuido';
+        } catch (\Throwable) {
+            return 'distribuido';
+        }
     }
 
     /** Endereço da API. Só muda por IFOOD_BASE_URL (testes com um servidor de mentira). */
@@ -144,7 +183,8 @@ final class IfoodApi
             return ['ok' => false, 'status' => 0, 'dados' => [], 'erro' => 'Ação desconhecida: ' . $acao];
         }
         $caminho = str_replace(['{id}', '{acao}'], [rawurlencode($pedidoId), $acao], self::CAMINHOS['acao']);
-        return $this->chamar('POST', $caminho, $token, $corpo ?? []);
+        // Só o cancelamento tem corpo. As outras ações vão sem corpo: com um "[]" o readyToPickup responde 400 (visto no iFood real).
+        return $this->chamar('POST', $caminho, $token, $corpo);
     }
 
     public function motivosDeCancelamento(string $token, string $pedidoId): array
@@ -191,7 +231,7 @@ final class IfoodApi
         $detalhe = mb_substr(preg_replace('/\s+/', ' ', $detalhe) ?? '', 0, 200);
         return match (true) {
             $status === 401 => 'O iFood não aceitou as credenciais ou o token (401). Confira IFOOD_CLIENT_ID e IFOOD_CLIENT_SECRET, ou conecte a loja de novo.',
-            $status === 403 => 'O aplicativo não tem permissão para esta loja no iFood (403). Autorize a loja de novo no Portal do Parceiro.',
+            $status === 403 => 'O iFood recusou o acesso (403). Confira se a loja autorizou o aplicativo (a permissão nova leva até 10 minutos). Se persistir com a loja autorizada, o iFood pode estar bloqueando o IP da hospedagem: abra um chamado no Portal do Desenvolvedor com o ID de referência da resposta.',
             $status === 404 => 'O iFood não encontrou o recurso (404)' . ($detalhe !== '' ? ": {$detalhe}" : '.'),
             $status === 429 => 'Muitas chamadas ao iFood em pouco tempo (429). Ele tenta de novo sozinho.',
             $status >= 500 => "O iFood está com instabilidade ({$status}). Ele tenta de novo sozinho.",
@@ -219,6 +259,8 @@ final class IfoodApi
         ];
         if ($corpo !== null) {
             $opcoes[CURLOPT_POSTFIELDS] = $corpo;
+        } elseif ($metodo === 'POST') {
+            $opcoes[CURLOPT_POSTFIELDS] = '';   // POST sem corpo, com Content-Length: 0
         }
         curl_setopt_array($conexao, $opcoes);
         $resposta = curl_exec($conexao);

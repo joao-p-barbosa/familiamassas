@@ -48,6 +48,31 @@ final class IntegracoesController
         Resposta::json((new Ifood())->desconectar());
     }
 
+    /** GET /api/admin/pedidos/{id}/ifood/motivos: motivos de cancelamento que o iFood aceita para este pedido. */
+    public function ifoodMotivos(Requisicao $req): void
+    {
+        Sessao::exigir($req);
+        Resposta::json((new Ifood())->motivosDeCancelamento((int) $req->parametro('id')));
+    }
+
+    /** PUT /api/admin/ifood/credenciais   {"client_id", "client_secret" (vazio = mantém o salvo), "tipo_app"} */
+    public function ifoodCredenciais(Requisicao $req): void
+    {
+        Sessao::exigir($req, ['admin'], true);
+        $d = $req->json();
+        Resposta::json((new Ifood())->salvarCredenciais(
+            mb_substr((string) ($d['client_id'] ?? ''), 0, 200),
+            mb_substr((string) ($d['client_secret'] ?? ''), 0, 400),
+            (string) ($d['tipo_app'] ?? ''),
+        ));
+    }
+
+    public function ifoodRemoverCredenciais(Requisicao $req): void
+    {
+        Sessao::exigir($req, ['admin'], true);
+        Resposta::json((new Ifood())->removerCredenciais());
+    }
+
     /** PUT /api/admin/ifood/ajustes   {"confirmar_auto": bool} */
     public function ifoodAjustes(Requisicao $req): void
     {

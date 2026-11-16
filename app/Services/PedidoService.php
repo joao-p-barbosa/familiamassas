@@ -220,8 +220,9 @@ final class PedidoService
      * Muda o status de um pedido, respeitando o caminho do tipo dele.
      * Proprietário e atendente podem mover e cancelar (cancelar exige motivo); o que muda entre eles é o que cada um vê no painel.
      * @param array{id:int, perfil:string} $usuario
+     * @param string|null $codigoIfood pedido do iFood cancelado: o código escolhido na lista de motivos do próprio iFood (cancellationReasons)
      */
-    public function mudarStatus(int $id, string $para, ?string $motivo, array $usuario): array
+    public function mudarStatus(int $id, string $para, ?string $motivo, array $usuario, ?string $codigoIfood = null): array
     {
         $pedido = $this->pedidos->porId($id);
         if ($pedido === null) {
@@ -250,7 +251,7 @@ final class PedidoService
             throw new ErroHttp(409, 'conflito', 'Outra pessoa acabou de mover este pedido. A tela já vai atualizar.');
         }
         $this->avisarCliente($id);   // cada avanço no Kanban avisa o cliente que veio pelo WhatsApp
-        (new \App\Ifood\Ifood())->statusMudou($pedido, $para, $motivo);   // pedido do iFood: a etapa volta para o app (D78)
+        (new \App\Ifood\Ifood())->statusMudou($pedido, $para, $motivo, $codigoIfood);   // pedido do iFood: a etapa volta para o app (D78)
         return $this->pedidos->porId($id);
     }
 

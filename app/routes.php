@@ -103,6 +103,9 @@ return static function (Roteador $r): void {
     // ---------- iFood (D76 a D78) ----------
     $integracoes = new IntegracoesController();
     $r->get('/api/admin/ifood', $integracoes->ifood(...));
+    $r->get('/api/admin/pedidos/{id}/ifood/motivos', $integracoes->ifoodMotivos(...));
+    $r->put('/api/admin/ifood/credenciais', $integracoes->ifoodCredenciais(...));
+    $r->delete('/api/admin/ifood/credenciais', $integracoes->ifoodRemoverCredenciais(...));
     $r->post('/api/admin/ifood/conectar', $integracoes->ifoodConectar(...));
     $r->post('/api/admin/ifood/autorizar', $integracoes->ifoodAutorizar(...));
     $r->post('/api/admin/ifood/desconectar', $integracoes->ifoodDesconectar(...));

@@ -1723,3 +1723,7 @@ a.balao__acao {
 .impressora__instalar[open] summary {
   margin-bottom: var(--e-3);
 }
+.ifood__id {
+  display: inline-block;
+  padding: var(--e-1) var(--e-2);
+}

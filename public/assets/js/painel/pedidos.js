@@ -182,6 +182,8 @@ function cartaoHtml(p) {
           <span class="selo cartao-pedido__modalidade">${icone(TIPOS[p.tipo].icone, 14)}${esc(rotuloDoTipo(p))}</span>
           <span class="selo">${esc(ORIGENS[p.origem] ?? p.origem)}${p.ifood ? ` nº ${esc(p.ifood.display_id)}` : ''}</span>
           ${p.ifood?.falhas ? '<span class="selo selo--alerta">iFood não recebeu a etapa</span>' : ''}
+          ${p.ifood?.alerta ? '<span class="selo selo--alerta">Atenção no iFood</span>' : ''}
+          ${p.ifood && !p.ifood.confirmado && p.status === 'novo' && !p.ifood.simulado ? '<span class="selo selo--alerta">Falta confirmar no iFood</span>' : ''}
           ${p.ifood?.agendado_para ? `<span class="selo selo--alerta">Agendado ${hora(p.ifood.agendado_para)}</span>` : ''}
           ${p.observacoes || p.itens.some((i) => i.observacoes) ? '<span class="selo selo--alerta">Tem observação</span>' : ''}
         </span>

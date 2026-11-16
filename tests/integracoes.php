@@ -142,13 +142,15 @@ conferir('Item com complemento: preço por unidade com o complemento', [$itens[0
 conferir('Complementos e observação do item viram a observação', $itens[0]['observacoes'], '1x Bacon extra · Obs: Sem cebola');
 conferir('O 0800 do iFood não vira cadastro de cliente', $p['cliente_telefone'], '');
 conferir('Pago online, número do app, localizador e código de coleta', [$extra['pago_online'], $extra['display_id'], $extra['localizador'], $extra['codigo_coleta'], $extra['entregue_por']], [true, '4821', '12345678', '5521', 'IFOOD']);
-conferir('Texto do pagamento', $extra['pagamento_texto'], 'Pago online no iFood (Crédito VISA)');
+conferir('Texto do pagamento: pago online, com a bandeira do cartão e o valor', $extra['pagamento_texto'], 'Pago online no iFood: Crédito VISA R$ 82,49');
+conferir('Pedido pago online: nada a cobrar', Ifood::aCobrarCentavos($pedidoIfood('x')), 0);
 [$p2, , $extra2] = Ifood::converter($pedidoIfood('uuid-2', [
     'orderType' => 'TAKEOUT', 'delivery' => null,
     'payments' => ['prepaid' => 0, 'pending' => 82.49, 'methods' => [['value' => 82.49, 'method' => 'CASH', 'type' => 'OFFLINE', 'prepaid' => false, 'cash' => ['changeFor' => 100]]]],
 ]));
 conferir('Retirada em dinheiro: cobrar na hora, com troco', [$p2['tipo'], $p2['pagamento'], $p2['troco_para_centavos'], $extra2['pago_online']], ['retirada', 'dinheiro', 10000, false]);
-conferir('Texto do pagamento a cobrar', $extra2['pagamento_texto'], 'Cobrar na entrega: Dinheiro · troco para R$ 100,00');
+conferir('Texto do pagamento a cobrar: sem bandeira em dinheiro, com o troco e quanto levar', $extra2['pagamento_texto'], 'Cobrar na entrega: Dinheiro R$ 82,49 · troco para R$ 100,00 (levar R$ 17,51)');
+conferir('Valor a cobrar vem de payments.pending', Ifood::detalhesDoPedido($pedidoIfood('x', ['payments' => ['prepaid' => 0, 'pending' => 82.49]]))['a_cobrar_centavos'], 8249);
 
 echo "\nIFOOD: CONEXÃO (aplicativo centralizado e distribuído)\n";
 conferir('Sem credenciais: modo simulado', [IfoodApi::configurada(), $ifood->situacao()['modo']], [false, 'simulado']);
@@ -199,7 +201,7 @@ conferir('Pedido no Kanban com origem iFood, status novo e o bloco do iFood', [$
 conferir('Confirmado no iFood na hora (confirmação automática)', in_array('POST /order/v1.0/orders/uuid-10/confirm', $caminhos(), true), true);
 conferir('Depois de confirmar, o pedido mostra a etapa do iFood', [$novo['ifood']['confirmado'], $novo['ifood']['status']], [true, 'CONFIRMED']);
 $ack = array_values(array_filter($chamadas, static fn (array $c): bool => str_ends_with($c['caminho'], '/events/acknowledgment')));
-conferir('Os eventos lidos são confirmados (acknowledgment) com o id de cada um', json_decode((string) ($ack[0]['corpo'] ?? '[]'), true), [['id' => 'ev-1'], ['id' => 'ev-1']]);
+conferir('Os eventos lidos são confirmados (acknowledgment) com o id de cada um, sem repetir', json_decode((string) ($ack[0]['corpo'] ?? '[]'), true), [['id' => 'ev-1']]);
 conferir('Ciclo de novo antes de 30 s: não roda (trava no banco)', $ifood->cicloSeHora()['rodou'], false);
 $liberarCiclo();
 $ifood->cicloSeHora();
@@ -223,6 +225,7 @@ $dono = ['id' => 1, 'perfil' => 'admin'];
 $zerar();
 $servico->mudarStatus($novo['id'], 'em_preparo', null, $dono);
 conferir('"Iniciar preparo" avisa o iFood (startPreparation)', $caminhos(), ['POST /order/v1.0/orders/uuid-10/startPreparation']);
+conferir('Ação sem corpo vai sem corpo (com "[]" o iFood real respondeu 400 no readyToPickup)', $chamadas[0]['corpo'], null);
 $zerar();
 $servico->mudarStatus($novo['id'], 'pronto', null, $dono);
 conferir('"Marcar pronto" com entregador do iFood: readyToPickup', $caminhos(), ['POST /order/v1.0/orders/uuid-10/readyToPickup']);
@@ -232,10 +235,20 @@ conferir('"Saiu para entrega" com entregador do iFood: não manda dispatch (o iF
 
 $outro = (int) $pdo->query("SELECT pedido_id FROM ifood_pedidos WHERE ifood_id = 'uuid-11'")->fetchColumn();
 $zerar();
-$servico->mudarStatus($outro, 'cancelado', 'Acabou o molho', $dono);
-$cancelamento = $chamadas[0] ?? null;
-conferir('Cancelar no Kanban: requestCancellation com o motivo escrito', [$cancelamento['caminho'] ?? null, json_decode((string) ($cancelamento['corpo'] ?? ''), true)],
-    ['/order/v1.0/orders/uuid-11/requestCancellation', ['reason' => 'Acabou o molho', 'cancellationCode' => '509']]);
+$respostas['#/uuid-11/cancellationReasons$#'] = fn () => $json([['cancelCodeId' => '501', 'description' => 'Problemas no sistema'], ['cancelCodeId' => '503', 'description' => 'Item indisponível']]);
+$servico->mudarStatus($outro, 'cancelado', 'Item indisponível', $dono, '503');
+$cancelamento = array_values(array_filter($chamadas, static fn (array $c): bool => str_ends_with($c['caminho'], '/requestCancellation')))[0] ?? null;
+conferir('Cancelar: consulta os motivos aceitos para o pedido (cancellationReasons) antes de cancelar', $caminhos(), ['GET /order/v1.0/orders/uuid-11/cancellationReasons', 'POST /order/v1.0/orders/uuid-11/requestCancellation']);
+conferir('Cancelar: usa o código escolhido da lista do iFood, com o motivo escrito', json_decode((string) ($cancelamento['corpo'] ?? ''), true), ['reason' => 'Item indisponível', 'cancellationCode' => '503']);
+$ifood->importar($pedidoIfood('uuid-14', ['displayId' => '4825']));
+$quatorze = (int) $pdo->query("SELECT pedido_id FROM ifood_pedidos WHERE ifood_id = 'uuid-14'")->fetchColumn();
+$respostas['#/uuid-14/cancellationReasons$#'] = fn () => $json([['cancelCodeId' => '501', 'description' => 'Problemas no sistema'], ['cancelCodeId' => '509', 'description' => 'Dificuldades internas']]);
+$zerar();
+$servico->mudarStatus($quatorze, 'cancelado', 'Qualquer', $dono, '999');
+$cancelamento = array_values(array_filter($chamadas, static fn (array $c): bool => str_ends_with($c['caminho'], '/requestCancellation')))[0] ?? null;
+conferir('Código fora da lista do pedido: troca pelo 509 (se existir) em vez de mandar um código que o iFood recusa', json_decode((string) ($cancelamento['corpo'] ?? ''), true)['cancellationCode'] ?? null, '509');
+$motivos = $ifood->motivosDeCancelamento($quatorze);
+conferir('A tela pode pedir a lista de motivos do pedido', [$motivos['origem'], array_column($motivos['motivos'], 'codigo')], ['ifood', ['501', '509']]);
 
 // Cancelado no iFood (pelo cliente ou pelo próprio iFood): o cartão sai do quadro.
 $eventos = [['id' => 'ev-3', 'fullCode' => 'CANCELLED', 'orderId' => 'uuid-12']];
@@ -260,12 +273,129 @@ $respostas['#/uuid-13/startPreparation$#'] = fn () => $json([], 202);
 $pdo->exec("UPDATE ifood_acoes SET proxima_em = '2000-01-01 00:00:00' WHERE pedido_id = {$terceiro}");
 $ifood->processarAcoes(5);
 conferir('Na nova tentativa a etapa vai', $pdo->query("SELECT estado FROM ifood_acoes WHERE pedido_id = {$terceiro} AND acao = 'startPreparation'")->fetchColumn(), 'feita');
-$respostas['#/uuid-13/readyToPickup$#'] = fn () => $json(['message' => 'order not found'], 404);
+$respostas['#/uuid-13/readyToPickup$#'] = fn () => $json([], 202);
 $respostas['#/uuid-13/dispatch$#'] = fn () => $json(['message' => 'order not found'], 404);
+$zerar();
 $servico->mudarStatus($terceiro, 'pronto', null, $dono);
+conferir('Entrega própria: "Marcar pronto" já avisa readyToPickup (o dispatch só vale depois dele)', $caminhos(), ['POST /order/v1.0/orders/uuid-13/readyToPickup']);
+$zerar();
 $servico->mudarStatus($terceiro, 'saiu_entrega', null, $dono);
-conferir('Entrega da própria loja: "Saiu para entrega" manda dispatch', $pdo->query("SELECT COUNT(*) FROM ifood_acoes WHERE pedido_id = {$terceiro} AND acao = 'dispatch'")->fetchColumn(), 1);
+conferir('Entrega própria: "Saiu para entrega" manda dispatch, sem repetir o readyToPickup', $caminhos(), ['POST /order/v1.0/orders/uuid-13/dispatch']);
+conferir('readyToPickup foi enviado uma vez só', $pdo->query("SELECT COUNT(*) FROM ifood_acoes WHERE pedido_id = {$terceiro} AND acao = 'readyToPickup' AND estado = 'feita'")->fetchColumn(), 1);
 conferir('Erro 404 do iFood: desiste na hora e o cartão mostra a falha', [$pdo->query("SELECT estado FROM ifood_acoes WHERE pedido_id = {$terceiro} AND acao = 'dispatch'")->fetchColumn(), $pedidos->porId($terceiro)['ifood']['falhas']], ['falhou', 1]);
+
+echo "\nIFOOD: REGRAS DA DOCUMENTAÇÃO (retry, ordem, outro sistema, token, loja, cupons)\n";
+$sucessoPolling = $respostas['#events:polling$#'];
+
+// 404 ao ler o pedido logo depois do evento: tenta de novo por até 10 minutos e só então desiste.
+$eventos = [['id' => 'ev-g1', 'fullCode' => 'PLACED', 'orderId' => 'uuid-16', 'createdAt' => '2026-11-16T19:00:00Z']];
+$respostas['#/order/v1.0/orders/uuid-16$#'] = fn () => $json(['message' => 'not found'], 404);
+$zerar();
+$ifood->ciclo();
+conferir('Pedido com 404 logo após o evento: sem acknowledgment (o iFood manda retry por até 10 min)', [in_array('POST /events/v1.0/events/acknowledgment', $caminhos(), true), str_starts_with((string) $pdo->query("SELECT resultado FROM ifood_eventos WHERE id = 'ev-g1'")->fetchColumn(), 'buscando:')], [false, true]);
+$respostas['#/order/v1.0/orders/uuid-16$#'] = fn () => $json($pedidoIfood('uuid-16', ['displayId' => '4827']));
+$ifood->ciclo();
+conferir('No polling seguinte o pedido aparece e entra (o evento guardado como "buscando" é reaproveitado)', [(int) $pdo->query("SELECT COUNT(*) FROM ifood_pedidos WHERE ifood_id = 'uuid-16'")->fetchColumn(), $pdo->query("SELECT resultado FROM ifood_eventos WHERE id = 'ev-g1'")->fetchColumn()], [1, 'pedido_criado']);
+$eventos = [['id' => 'ev-g2', 'fullCode' => 'PLACED', 'orderId' => 'uuid-17', 'createdAt' => '2026-11-16T19:00:00Z']];
+$respostas['#/order/v1.0/orders/uuid-17$#'] = fn () => $json(['message' => 'not found'], 404);
+$ifood->ciclo();
+$pdo->exec("UPDATE ifood_eventos SET resultado = 'buscando:" . (time() - 700) . "' WHERE id = 'ev-g2'");
+$zerar();
+$ifood->ciclo();
+conferir('Passados 10 minutos: desiste e confirma o evento (evita "strike" por evento sem confirmação)', [in_array('POST /events/v1.0/events/acknowledgment', $caminhos(), true), $pdo->query("SELECT resultado FROM ifood_eventos WHERE id = 'ev-g2'")->fetchColumn()], [true, 'desistiu_busca']);
+
+// Eventos fora de ordem: processados pela hora de criação.
+$eventos = [
+    ['id' => 'ev-o2', 'code' => 'RTP', 'orderId' => 'uuid-15', 'createdAt' => '2026-11-16T19:00:05Z'],
+    ['id' => 'ev-o1', 'fullCode' => 'PLACED', 'orderId' => 'uuid-15', 'createdAt' => '2026-11-16T19:00:00Z'],
+];
+$respostas['#/order/v1.0/orders/uuid-15$#'] = fn () => $json($pedidoIfood('uuid-15', ['displayId' => '4826']));
+$ifood->ciclo();
+$id15 = (int) $pdo->query("SELECT pedido_id FROM ifood_pedidos WHERE ifood_id = 'uuid-15'")->fetchColumn();
+conferir('Eventos fora de ordem (pronto antes de novo): o pedido entra e depois vai para Pronto', [$id15 > 0, $id15 > 0 ? $pedidos->porId($id15)['status'] : null], [true, 'pronto']);
+
+// Outro sistema (Gestor de Pedidos do iFood) muda a etapa: o quadro acompanha, só para frente, sem avisar o iFood de volta.
+$eventos = [['id' => 'ev-d1', 'fullCode' => 'DISPATCHED', 'orderId' => 'uuid-15', 'createdAt' => '2026-11-16T19:00:06Z']];
+$zerar();
+$ifood->ciclo();
+conferir('DISPATCHED feito pelo Gestor de Pedidos: o quadro vai para "Saiu para entrega"', $pedidos->porId($id15)['status'], 'saiu_entrega');
+conferir('...e o app não manda nada de volta ao iFood (só polling e confirmação do evento)', $caminhos(), ['GET /events/v1.0/events:polling', 'POST /events/v1.0/events/acknowledgment']);
+$eventos = [['id' => 'ev-d2', 'code' => 'PRS', 'orderId' => 'uuid-15', 'createdAt' => '2026-11-16T19:00:07Z']];
+$ifood->ciclo();
+conferir('Evento de uma etapa anterior (PRS, pelo código curto) não faz o pedido voltar', $pedidos->porId($id15)['status'], 'saiu_entrega');
+$eventos = [['id' => 'ev-h1', 'code' => 'HSD', 'orderId' => 'uuid-15', 'createdAt' => '2026-11-16T19:00:08Z']];
+$ifood->ciclo();
+conferir('Disputa aberta pelo cliente: o cartão avisa para responder no Gestor de Pedidos', [str_contains((string) (Ifood::dadosDosPedidos([$id15])[$id15]['alerta'] ?? ''), 'disputa'), Ifood::dadosDosPedidos([$id15])[$id15]['rotulo']], [true, 'Disputa aberta']);
+$eventos = [];
+
+// Token: renova só quando venceu, espera depois de uma falha e renova depois de um 401.
+$guardado = $respostas['#/oauth/token$#'];
+$conexaoAgora = static fn (): array => $pdo->query('SELECT * FROM ifood_conexao WHERE id = 1')->fetch();
+$chamadasDeToken = static function () use (&$chamadas): int {
+    return count(array_filter($chamadas, static fn (array $c): bool => str_ends_with($c['caminho'], '/oauth/token')));
+};
+$config->salvar(['ifood_token_espera_ate' => '0']);
+$pdo->exec("UPDATE ifood_conexao SET token_expira_em = '" . gmdate('Y-m-d H:i:s', time() + 120) . "'");
+$zerar();
+$ifood->ciclo();
+conferir('Token ainda válido (faltando 2 minutos): não renova antes da hora', $chamadasDeToken(), 0);
+$pdo->exec("UPDATE ifood_conexao SET token_expira_em = '2000-01-01 00:00:00'");
+$respostas['#/oauth/token$#'] = fn () => $json(['error' => ['message' => 'instável']], 500);
+$zerar();
+$ifood->ciclo();
+$ifood->ciclo();
+conferir('Token vencido e a renovação falhou: espera 2 minutos em vez de insistir a cada polling', $chamadasDeToken(), 1);
+$respostas['#/oauth/token$#'] = $guardado;
+$config->salvar(['ifood_token_espera_ate' => '0']);
+$zerar();
+$ifood->ciclo();
+conferir('Passada a espera, renova (uma chamada) e o polling segue', [$chamadasDeToken(), in_array('GET /events/v1.0/events:polling', $caminhos(), true)], [1, true]);
+$config->salvar(['ifood_token_renovado_em' => (string) (time() - 1000)]);
+$respostas['#events:polling$#'] = fn () => $json(['error' => ['message' => 'token expirado']], 401);
+$ifood->ciclo();
+conferir('O iFood respondeu 401 no polling: o token é dado como vencido', $conexaoAgora()['token_expira_em'] < gmdate('Y-m-d H:i:s'), true);
+$respostas['#events:polling$#'] = $sucessoPolling;
+$zerar();
+$ifood->ciclo();
+conferir('...e o ciclo seguinte pede um token novo', $chamadasDeToken(), 1);
+$pdo->exec("UPDATE ifood_conexao SET token_expira_em = '2000-01-01 00:00:00'");
+$config->salvar(['ifood_token_renovado_em' => (string) time(), 'ifood_token_espera_ate' => '0']);
+$respostas['#events:polling$#'] = fn () => $json(['error' => ['message' => 'token expirado']], 401);
+$ifood->ciclo();
+$respostas['#events:polling$#'] = $sucessoPolling;
+$pdo->exec("UPDATE ifood_conexao SET token_expira_em = '" . gmdate('Y-m-d H:i:s', time() + 3600) . "'");
+$config->salvar(['ifood_token_renovado_em' => (string) time()]);
+$respostas['#events:polling$#'] = fn () => $json(['error' => ['message' => 'token expirado']], 401);
+$ifood->ciclo();
+conferir('401 logo depois de renovar: não invalida de novo (evita pedir token a cada 30 s)', $conexaoAgora()['token_expira_em'] > gmdate('Y-m-d H:i:s'), true);
+$respostas['#events:polling$#'] = $sucessoPolling;
+
+// Conectado sem loja (a permissão do lojista leva até 10 minutos para valer): procura de novo sozinho.
+$pdo->exec('UPDATE ifood_conexao SET merchant_id = NULL, merchant_nome = NULL');
+$config->salvar(['ifood_busca_loja_em' => '0']);
+conferir('Conectado sem loja: a tela avisa', $ifood->situacao()['sem_loja'], true);
+$zerar();
+$ifood->ciclo();
+conferir('O ciclo procura a loja de novo e a encontra', [in_array('GET /merchant/v1.0/merchants', $caminhos(), true), $conexaoAgora()['merchant_id']], [true, 'loja-1']);
+$zerar();
+$pdo->exec('UPDATE ifood_conexao SET merchant_id = NULL');
+$ifood->ciclo();
+conferir('Mas só uma vez por minuto', in_array('GET /merchant/v1.0/merchants', $caminhos(), true), false);
+$pdo->exec("UPDATE ifood_conexao SET merchant_id = 'loja-1'");
+
+// O que a homologação manda exibir: cupom e quem paga, CPF/CNPJ da nota, observação de retirada, "customization" no singular.
+$d = Ifood::detalhesDoPedido($pedidoIfood('x', [
+    'benefits' => [['value' => 5.0, 'target' => 'CART', 'sponsorshipValues' => [['name' => 'IFOOD', 'value' => 3.0], ['name' => 'MERCHANT', 'value' => 2.0]]],
+                   ['value' => 4.99, 'target' => 'DELIVERY_FEE', 'sponsorshipValues' => [['name' => 'EXTERNAL', 'value' => 4.99], ['name' => 'MERCHANT', 'value' => 0]]]],
+    'customer' => ['documentNumber' => '12345678909', 'documentType' => 'CPF'],
+]));
+conferir('Cupons com quem paga (iFood, loja ou parceiro)', $d['cupons'], ['Cupom de R$ 5,00 (carrinho) · quem paga: iFood R$ 3,00, Loja R$ 2,00', 'Cupom de R$ 4,99 (taxa de entrega) · quem paga: parceiro do iFood R$ 4,99']);
+conferir('CPF/CNPJ da nota fiscal', $d['documento'], 'CPF 12345678909');
+conferir('Taxas adicionais (additionalFees) são lidas', Ifood::detalhesDoPedido($pedidoIfood('x', ['total' => ['additionalFees' => 1]]))['taxas_adicionais_centavos'], 100);
+[$pRetirada] = Ifood::converter($pedidoIfood('y', ['orderType' => 'TAKEOUT', 'delivery' => null, 'takeout' => ['mode' => 'DEFAULT', 'observations' => 'Cliente espera no estacionamento']]));
+conferir('Observação da retirada entra nas observações do pedido', str_contains($pRetirada['observacoes'], 'estacionamento'), true);
+[, $itensCustom] = Ifood::converter($pedidoIfood('z', ['items' => [['name' => 'Pizza', 'quantity' => 1, 'unitPrice' => 30, 'totalPrice' => 33, 'options' => [['name' => 'Borda', 'quantity' => 1, 'customization' => [['name' => 'Catupiry']]]]]]]));
+conferir('Complemento com a lista "customization" (singular) também é lido', str_contains($itensCustom[0]['observacoes'], 'Catupiry'), true);
 
 echo "\nIFOOD: SIMULADOR\n";
 Env::definir('IFOOD_CLIENT_ID', '');
@@ -279,10 +409,82 @@ conferir('Etapas do pedido de teste também não chamam o iFood', $chamadas, [])
 $retirada = $pedidos->porId($ifood->simularPedido('TAKEOUT')['id']);
 conferir('Simular retirada', [$retirada['tipo'], $retirada['taxa_entrega_centavos']], ['retirada', 0]);
 
+echo "\nIFOOD: CREDENCIAIS PELOS CAMPOS DA TELA (Client Secret cifrado)\n";
+foreach (['IFOOD_CLIENT_ID', 'IFOOD_CLIENT_SECRET', 'IFOOD_TIPO_APP'] as $variavel) {
+    Env::definir($variavel, '');
+}
+Env::definir('APP_KEY', str_repeat('k', 64));
+$ifood->removerCredenciais();
+$camposDoErro = static function (callable $acao): array {
+    try {
+        $acao();
+        return [];
+    } catch (App\Core\ErroHttp $e) {
+        return array_keys($e->campos);
+    }
+};
+conferir('Sem credenciais (ambiente e tela vazios): modo simulado', [$ifood->situacao()['modo'], $ifood->situacao()['credenciais']['origem']], ['simulado', 'nenhuma']);
+conferir('Validação: Client ID curto e sem secret', $camposDoErro(fn () => $ifood->salvarCredenciais('abc', '', 'centralizado')), ['client_id', 'client_secret']);
+conferir('Validação: secret com espaço e tipo inexistente', $camposDoErro(fn () => $ifood->salvarCredenciais('client-painel-123', 'tem espaco', 'outro')), ['client_secret', 'tipo_app']);
+$s = $ifood->salvarCredenciais('client-painel-123', 'segredo-do-painel-xyz', 'centralizado');
+conferir('Salvou: modo real, origem painel, secret salvo e tipo', [$s['modo'], $s['credenciais']['origem'], $s['credenciais']['client_id'], $s['credenciais']['secret_salvo'], $s['tipo_app']], ['real', 'painel', 'client-painel-123', true, 'centralizado']);
+$noBanco = json_encode($config->todas());
+conferir('O banco guarda o secret cifrado, nunca em texto', [str_contains($noBanco, 'segredo-do-painel-xyz'), str_contains($noBanco, '"ifood_client_secret":"v1:')], [false, true]);
+conferir('A situação do painel não leva o secret', str_contains(json_encode($ifood->situacao()), 'segredo-do-painel-xyz'), false);
+conferir('Duas cifragens do mesmo texto saem diferentes e abrem de volta', [App\Core\Segredo::cifrar('a') !== App\Core\Segredo::cifrar('a'), App\Core\Segredo::decifrar(App\Core\Segredo::cifrar('olá'))], [true, 'olá']);
+
+// As credenciais da tela são as que vão na chamada ao iFood.
+$respostas['#/oauth/token$#'] = fn () => $json(['accessToken' => 'tok-painel', 'expiresIn' => 21600]);
+$respostas['#/merchant/v1.0/merchants$#'] = fn () => $json([['id' => 'loja-p', 'name' => 'Loja do painel']]);
+$zerar();
+$s = $ifood->conectar();
+conferir('Centralizado com credenciais da tela: conecta e acha a loja', [$s['estado'], $s['loja']['id'] ?? null], ['conectado', 'loja-p']);
+parse_str((string) $chamadas[0]['corpo'], $enviado);
+conferir('A chamada de token leva o Client ID e o secret que foram digitados', [$enviado['grantType'] ?? null, $enviado['clientId'] ?? null, $enviado['clientSecret'] ?? null], ['client_credentials', 'client-painel-123', 'segredo-do-painel-xyz']);
+
+// Secret em branco mantém o salvo e não desconecta; trocar qualquer credencial desconecta.
+$s = $ifood->salvarCredenciais('client-painel-123', '', 'centralizado');
+conferir('Salvar de novo com o secret em branco: mantém o salvo e continua conectado', [$s['credenciais']['secret_salvo'], $s['estado']], [true, 'conectado']);
+$s = $ifood->salvarCredenciais('client-painel-123', '', 'distribuido');
+conferir('Trocar o tipo do aplicativo desconecta a loja e esquece a loja antiga', [$s['estado'], $s['loja']], ['desconectado', null]);
+$ifood->salvarCredenciais('client-painel-123', '', 'centralizado');
+$ifood->conectar();
+$s = $ifood->salvarCredenciais('outro-client-9999', 'novo-segredo-abc', 'centralizado');
+conferir('Trocar o Client ID e o secret desconecta', [$s['estado'], $s['credenciais']['client_id']], ['desconectado', 'outro-client-9999']);
+$s = $ifood->removerCredenciais();
+conferir('Remover: volta ao modo simulado e apaga o secret', [$s['modo'], $s['credenciais']['secret_salvo'], str_contains(json_encode($config->todas()), 'v1:')], ['simulado', false, false]);
+
+// As variáveis de ambiente valem primeiro e bloqueiam a edição pela tela.
+Env::definir('IFOOD_CLIENT_ID', 'id-do-ambiente-1');
+Env::definir('IFOOD_CLIENT_SECRET', 'secret-do-ambiente-1');
+$s = $ifood->situacao();
+conferir('Com as variáveis de ambiente: origem ambiente e tela só leitura', [$s['credenciais']['origem'], $s['credenciais']['editavel'], $s['credenciais']['client_id']], ['ambiente', false, 'id-do-ambiente-1']);
+conferir('Salvar pela tela com credenciais no ambiente é recusado', codigoDoErro(fn () => $ifood->salvarCredenciais('client-painel-123', 'segredo-do-painel-xyz', 'centralizado')), '409 ifood_credenciais_no_ambiente');
+conferir('Remover pela tela com credenciais no ambiente é recusado', codigoDoErro(fn () => $ifood->removerCredenciais()), '409 ifood_credenciais_no_ambiente');
+Env::definir('IFOOD_CLIENT_ID', '');
+Env::definir('IFOOD_CLIENT_SECRET', '');
+
+// Sem APP_KEY não dá para proteger o secret: recusa em vez de guardar em texto.
+Env::definir('APP_KEY', '');
+conferir('Sem APP_KEY no servidor: não grava o secret', codigoDoErro(fn () => $ifood->salvarCredenciais('client-painel-123', 'segredo-do-painel-xyz', 'centralizado')), '409 ifood_sem_app_key');
+// APP_KEY trocada: o secret antigo não abre mais e a tela avisa para digitar de novo.
+Env::definir('APP_KEY', str_repeat('k', 64));
+$ifood->salvarCredenciais('client-painel-123', 'segredo-do-painel-xyz', 'centralizado');
+Env::definir('APP_KEY', str_repeat('z', 64));
+$s = $ifood->situacao();
+conferir('APP_KEY trocada: secret ilegível, modo simulado e aviso na tela', [$s['credenciais']['secret_ilegivel'], $s['modo']], [true, 'simulado']);
+Env::definir('APP_KEY', str_repeat('k', 64));
+$ifood->removerCredenciais();
+
 echo "\nCOMANDA EM LINHAS (o que o agente imprime)\n";
 $texto = static fn (array $linhas): string => implode("\n", array_map(static fn (array $l): string => $l['t'] . (isset($l['d']) ? ' | ' . $l['d'] : ''), $linhas));
 $doIfood = $texto(Comanda::linhas($doSimulador, ['nome_loja' => 'Família Massas', 'com_preco' => false]));
 conferir('Comanda do iFood: número do app e "pago online" mesmo sem preços', [str_contains($doIfood, 'iFood nº ' . $doSimulador['ifood']['display_id'] . ' (TESTE)'), str_contains($doIfood, 'PAGO ONLINE - NÃO COBRAR'), str_contains($doIfood, 'TOTAL')], [true, true, false]);
+conferir('Comanda do iFood: cupom com quem paga (exigência da homologação) e sem CPF impresso', [str_contains($doIfood, 'quem paga: iFood R$ 3,00, Loja R$ 2,00'), str_contains($doIfood, '12345678909')], [true, false]);
+$aCobrar = $doSimulador;
+$aCobrar['ifood']['pago_online'] = false;
+$aCobrar['ifood']['a_cobrar_centavos'] = 1234;
+conferir('Comanda do iFood a cobrar: o valor é o de payments.pending, não o total', str_contains($texto(Comanda::linhas($aCobrar, ['nome_loja' => 'X', 'com_preco' => false])), 'COBRAR R$ 12,34'), true);
 conferir('Comanda do iFood: código de coleta e quem entrega', [str_contains($doIfood, 'Código de coleta: '), str_contains($doIfood, 'Entregador do iFood')], [true, true]);
 $comum = $pedidos->porId($pedidoComum());
 $comPreco = $texto(Comanda::linhas($comum, ['nome_loja' => 'Família Massas', 'com_preco' => true]));

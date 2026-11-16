@@ -70,6 +70,7 @@ final class AdminPedidoController
             (string) ($dados['status'] ?? ''),
             isset($dados['motivo']) ? (string) $dados['motivo'] : null,
             $usuario,
+            isset($dados['ifood_codigo']) ? mb_substr((string) $dados['ifood_codigo'], 0, 20) : null,
         );
         Resposta::json($pedido);
     }
