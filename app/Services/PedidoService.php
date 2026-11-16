@@ -250,6 +250,7 @@ final class PedidoService
             throw new ErroHttp(409, 'conflito', 'Outra pessoa acabou de mover este pedido. A tela já vai atualizar.');
         }
         $this->avisarCliente($id);   // cada avanço no Kanban avisa o cliente que veio pelo WhatsApp
+        (new \App\Ifood\Ifood())->statusMudou($pedido, $para, $motivo);   // pedido do iFood: a etapa volta para o app (D78)
         return $this->pedidos->porId($id);
     }
 

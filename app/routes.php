@@ -8,6 +8,7 @@ use App\Controllers\AdminAtendimentoController;
 use App\Controllers\AdminConfigController;
 use App\Controllers\AdminPedidoController;
 use App\Controllers\AdminUsuarioController;
+use App\Controllers\IntegracoesController;
 use App\Controllers\PainelController;
 use App\Controllers\PublicoController;
 use App\Controllers\WhatsAppController;
@@ -98,4 +99,25 @@ return static function (Roteador $r): void {
     $r->get('/api/admin/whatsapp/conversa', $whatsapp->conversa(...));
     $r->post('/api/admin/whatsapp/conversas/{telefone}/responder', $whatsapp->responder(...));
     $r->post('/api/admin/whatsapp/conversas/{telefone}/bot', $whatsapp->devolverAoBot(...));
+
+    // ---------- iFood (D76 a D78) ----------
+    $integracoes = new IntegracoesController();
+    $r->get('/api/admin/ifood', $integracoes->ifood(...));
+    $r->post('/api/admin/ifood/conectar', $integracoes->ifoodConectar(...));
+    $r->post('/api/admin/ifood/autorizar', $integracoes->ifoodAutorizar(...));
+    $r->post('/api/admin/ifood/desconectar', $integracoes->ifoodDesconectar(...));
+    $r->put('/api/admin/ifood/ajustes', $integracoes->ifoodAjustes(...));
+    $r->post('/api/admin/ifood/simular', $integracoes->ifoodSimular(...));
+    $r->post('/api/admin/ifood/sincronizar', $integracoes->ifoodSincronizar(...));
+    $r->get('/cron/ifood', $integracoes->ifoodCron(...));
+
+    // ---------- Impressora e agente de impressão (D79 a D81) ----------
+    $r->get('/api/admin/impressora', $integracoes->impressora(...));
+    $r->put('/api/admin/impressora', $integracoes->impressoraSalvar(...));
+    $r->post('/api/admin/impressora/codigo', $integracoes->impressoraCodigo(...));
+    $r->post('/api/admin/impressora/revogar', $integracoes->impressoraRevogar(...));
+    $r->post('/api/admin/impressora/teste', $integracoes->impressoraTeste(...));
+    $r->get('/api/admin/impressora/agente/{arquivo}', $integracoes->impressoraArquivo(...));
+    $r->post('/api/impressora/ciclo', $integracoes->agenteCiclo(...));          // o agente do computador da loja (código no cabeçalho)
+    $r->post('/api/impressora/resultado', $integracoes->agenteResultado(...));
 };

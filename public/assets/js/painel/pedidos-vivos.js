@@ -7,9 +7,10 @@ import { ajustes, mostrarErro } from './casca.js';
  * @param {{ aoMudar: (motivo: 'dados'|'conexao') => void, aoChegar?: (novos: object[]) => void, antesDeMudar?: () => void }} opcoes
  *   aoMudar: algo mudou e a tela deve redesenhar;  aoChegar: pedidos novos que entraram depois da primeira carga;
  *   aoWhatsApp: a cada consulta, a situação do WhatsApp por QR code (null quando esse canal não está em uso);
- *   aoIA: a cada consulta, o aviso de crédito do assistente com IA (null quando não há; só o proprietário recebe).
+ *   aoIA: a cada consulta, o aviso de crédito do assistente com IA (null quando não há; só o proprietário recebe);
+ *   aoImpressora: a cada consulta, o aviso do agente de impressão (null quando está tudo certo ou o modo é o navegador).
  */
-export function criarFonte({ aoMudar, aoChegar = () => {}, antesDeMudar = () => {}, aoWhatsApp = () => {}, aoIA = () => {} }) {
+export function criarFonte({ aoMudar, aoChegar = () => {}, antesDeMudar = () => {}, aoWhatsApp = () => {}, aoIA = () => {}, aoImpressora = () => {} }) {
   const pedidos = new Map();   // id → pedido
   let desde = null;            // hora (do servidor) da última consulta
   let primeiraCarga = true;
@@ -52,6 +53,7 @@ export function criarFonte({ aoMudar, aoChegar = () => {}, antesDeMudar = () => 
         fonte.carregado = true;
         aoWhatsApp(r.whatsapp ?? null);
         aoIA(r.ia ?? null);
+        aoImpressora(r.impressora ?? null);
         fonte.ultimaSincronia = new Date();
         primeiraCarga = false;
         if (mudou) aoMudar('dados');

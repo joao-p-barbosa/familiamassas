@@ -25,3 +25,8 @@ data/backups/
 # Conector do WhatsApp por QR code: dependências e pareamento (o pareamento é uma credencial)
 conector/node_modules/
 conector/.auth/
+
+# Agente de impressão: o config.json guarda o código do agente (segredo) e o log é só da máquina da loja.
+impressora/config.json
+impressora/agente.log
+impressora/agente.log.antigo

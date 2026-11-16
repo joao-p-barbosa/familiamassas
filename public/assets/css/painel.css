@@ -1675,3 +1675,51 @@ a.balao__acao {
   margin: var(--e-2) 0 0 auto;
   background: var(--cor-acento-suave);
 }
+
+/* ---------- Telas iFood e Impressora (D76 a D81) ---------- */
+.ifood__acoes,
+.impressora__acoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e-3);
+}
+.ifood__passos,
+.impressora__instalar ol {
+  display: grid;
+  gap: var(--e-2);
+  margin: 0;
+  padding-left: 1.25rem;
+}
+.ifood__codigo {
+  display: inline-block;
+  padding: var(--e-1) var(--e-3);
+  font-size: var(--texto-5);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+.ifood__autorizar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--e-3);
+}
+.ifood__autorizar .campo {
+  flex: 1 1 16rem;
+}
+.impressora__codigo {
+  display: grid;
+  gap: var(--e-2);
+  padding: var(--e-4);
+  border: 1px solid var(--cor-borda-forte);
+  border-radius: var(--raio-2);
+}
+.impressora__codigo p {
+  margin: 0;
+}
+.impressora__instalar summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.impressora__instalar[open] summary {
+  margin-bottom: var(--e-3);
+}

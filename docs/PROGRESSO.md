@@ -211,3 +211,16 @@ Testados no navegador (celular e desktop) e com testes automáticos. `⚠️` = 
 - ✅ Faixa de crédito conferida no navegador (amarela "baixo" e vermelha "sem crédito", que se limpa sozinha quando uma chamada volta a funcionar), com o texto legível nos 4 temas pelo teste de contraste.
 - ⚠️ **Não testado:** uma chamada real ao OpenRouter e ao Haiku 5.5 (formato das respostas, `usage.cost`, `reasoning` e `provider.data_collection` seguem a documentação, mas só uma chave real confirma); a migração 004 no Postgres (o SQL é o mesmo, com `IDENTITY` no lugar de `AUTOINCREMENT`); a qualidade das respostas em português de cada modelo.
 - ⚠️ A resposta da IA leva alguns segundos. No canal QR o conector espera até 60 s; na Cloud API da Meta, que exige resposta em poucos segundos, a Meta pode reenviar o evento (o `wamid` repetido é ignorado, então não responde duas vezes).
+
+## iFood e agente de impressão (2026-11-16)
+
+**Como testar (sem credenciais do iFood):** Painel → iFood → "Simular entrega": o pedido aparece no Kanban com "iFood nº ...", já confirmado; Iniciar preparo, Pronto e Cancelar contam ao iFood (no simulado, sem chamar nada).
+
+**Agente de impressão (computador da impressora):** Painel → Impressora → "Computador da loja" → baixe os 3 arquivos → "Gerar código do agente" → dois cliques em `iniciar-impressora.bat` (pede o endereço e o código) → escolha a impressora, "Como enviar" e a largura → "Imprimir comanda de teste". Para abrir com o Windows: `iniciar-impressora.bat instalar`.
+
+**Testes:** `php -d extension=pdo_sqlite tests/integracoes.php` (77 testes, iFood de mentira, sem rede) e `tests/regras.php` (321).
+
+- ✅ Ponta a ponta com a **impressora real** (QIA-8388, ESC/POS, 58 mm) e um iFood de mentira local: pedido feito no "app" → polling → confirmado no iFood → Kanban → comanda impressa sozinha em 3 a 30 s (depende de onde cai a janela de 30 s), legível e no formato do pedido.
+- ✅ Impressora pausada no Windows: faixa no painel e comandas esperando na fila.
+- ⚠️ iFood de verdade: falta o aplicativo no Portal do Desenvolvedor e a homologação (os caminhos da API não foram conferidos na documentação oficial, D77).
+- ⚠️ Não testado: `bin/ifood.php` dentro do contêiner da Render; agente rodando horas seguidas; a tela Impressora e a tela iFood no celular.

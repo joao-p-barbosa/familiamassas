@@ -21,6 +21,8 @@ const MODULOS = {
   configuracoes: () => import('./configuracoes.js'),
   whatsapp: () => import('./whatsapp.js'),
   assistente: () => import('./assistente.js'),
+  ifood: () => import('./ifood.js'),
+  impressora: () => import('./impressora.js'),
 };
 
 const abertas = new Map();   // nome → { raiz, modulo }: cada tela fica no DOM (escondida) depois de aberta

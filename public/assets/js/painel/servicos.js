@@ -12,7 +12,7 @@ import { criarFonte } from './pedidos-vivos.js';
 import { imprimirAutomatico, estacao } from './impressao.js';
 import { tocarAlerta } from './som.js';
 import { iniciarDetalhe, atualizarDetalhe } from './detalhe.js';
-import { usuario, ehAdmin, confirmar, mostrarErro } from './casca.js';
+import { usuario, ehAdmin, confirmar, mostrarErro, ajustes } from './casca.js';
 
 const ouvintes = { antes: new Set(), mudou: new Set() };
 
@@ -35,6 +35,7 @@ export const fonte = criarFonte({
   antesDeMudar: () => ouvintes.antes.forEach((f) => f()),
   aoWhatsApp: (w) => atualizarFaixaWhatsApp(w),
   aoIA: (ia) => atualizarFaixaIA(ia),
+  aoImpressora: (aviso) => atualizarFaixaImpressora(aviso),
   aoMudar: (motivo) => {
     ouvintes.mudou.forEach((f) => f(motivo));
     if (motivo === 'conexao') return;
@@ -124,6 +125,32 @@ function atualizarFaixaIA(ia) {
   faixa.hidden = false;
 }
 
+// ---------- Faixa do agente de impressão (D81) ----------
+// Modo agente: quem imprime é o computador da loja. Se ele cair, a impressora parar ou uma comanda falhar, a faixa aparece em
+// qualquer tela e o som toca (e de novo a cada 2 min enquanto durar), porque pedido sem comanda é pedido esquecido.
+let faixaImpressoraAtual = '';
+let somDaImpressora = 0;
+
+function atualizarFaixaImpressora(aviso) {
+  const faixa = $('#faixa-impressora');
+  if (!faixa) return;
+  if (!aviso) {
+    faixa.hidden = true;
+    faixaImpressoraAtual = '';
+    somDaImpressora = 0;
+    return;
+  }
+  if (Date.now() - somDaImpressora > REPETE_SOM_MS) {
+    somDaImpressora = Date.now();
+    tocarAlerta();
+  }
+  const assinatura = JSON.stringify(aviso);
+  if (assinatura === faixaImpressoraAtual) return;
+  faixaImpressoraAtual = assinatura;
+  faixa.innerHTML = `<p class="faixa-ia__texto"><strong>Impressão parada.</strong> ${esc(aviso.texto)}</p>${ehAdmin ? '<a href="/painel/impressora">Ver a impressora</a>' : ''}`;
+  faixa.hidden = false;
+}
+
 // "Enviar pendentes" e "Descartar": valem na faixa e na tela WhatsApp (os dois desenham o mesmo botão com data-fila).
 document.addEventListener('click', async (e) => {
   const botao = e.target instanceof Element ? e.target.closest('[data-fila]') : null;
@@ -162,8 +189,11 @@ function avisarProntosDoSalao() {
 
 /** Imprime as comandas ainda não impressas (só se este aparelho for a estação de impressão). */
 export async function imprimirPendentes() {
-  if (!estacao.ativa) return;
+  // Modo agente (D79): o computador da loja imprime; o navegador só imprime quando alguém pede (Reimprimir).
+  if (!estacao.ativa || ajustes.impressao_modo === 'agente') return;
+  const origens = ajustes.impressao_origens ?? ['cardapio', 'whatsapp', 'ifood', 'balcao'];
   for (const p of fonte.lista()) {
+    if (!origens.includes(p.origem)) continue;
     if (p.impresso_em || !['novo', 'em_preparo'].includes(p.status) || imprimindo.has(p.id)) continue;
     imprimindo.add(p.id);
     const atualizado = await imprimirAutomatico(p);

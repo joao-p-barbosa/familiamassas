@@ -1,11 +1,11 @@
-// Configurações da loja: dados, funcionamento e horários, tipos de pedido, tema e impressão. (Senhas e usuários: tela Usuários.)
+// Configurações da loja: dados, funcionamento e horários, tipos de pedido, tema e atualização do painel.
+// (Senhas e usuários: tela Usuários. Impressora, papel e comanda: tela Impressora.)
 import { $, $$, esc, delegar } from '../shared/dom.js';
 import { icone } from '../shared/icones.js';
 import { centavosDeTexto, textoDeCentavos, telefone as formatarTelefone } from '../shared/formato.js';
 import { api } from '../shared/api.js';
 import { avisar } from '../shared/avisos.js';
 import { recipienteDaTela, mostrarErro } from './casca.js';
-import { imprimirTeste } from './impressao.js';
 
 const conteudo = recipienteDaTela();   // o contêiner desta tela (criado pelo roteador)
 
@@ -106,20 +106,11 @@ function desenhar() {
       </section>
 
       <section class="bloco">
-        <h2 class="bloco__titulo">Impressão e atualização</h2>
+        <h2 class="bloco__titulo">Atualização do painel</h2>
         <div class="bloco__grade">
-          <label class="campo">
-            <span class="campo__rotulo">Largura do papel</span>
-            <select class="entrada" name="comanda_largura_mm">
-              <option value="80" ${c.comanda_largura_mm === 80 ? 'selected' : ''}>80 mm</option>
-              <option value="58" ${c.comanda_largura_mm === 58 ? 'selected' : ''}>58 mm</option>
-            </select>
-          </label>
           ${campo('polling_segundos', 'Atualizar o painel a cada (s)', c.polling_segundos, { extra: 'inputmode="numeric"', ajuda: 'De 3 a 60 segundos.' })}
         </div>
-        ${liga('comanda_mostra_preco', 'Imprimir preços e pagamento na comanda', c.comanda_mostra_preco)}
-        <div><button type="button" class="botao botao--secundario" id="comanda-teste">${icone('impressora', 18)}Imprimir comanda de teste</button></div>
-        <div class="comanda-previa" id="comanda-previa" hidden></div>
+        <p class="bloco__nota">${icone('impressora', 16)}<span>Impressora, papel e comanda ficam na tela <a href="/painel/impressora">Impressora</a>.</span></p>
       </section>
 
       <div class="barra-salvar">
@@ -181,14 +172,6 @@ delegar(conteudo, 'focusout', 'input[name="taxa_entrega"]', (e, entrada) => {
 delegar(conteudo, 'input', 'input[name="whatsapp_loja"]', (e, entrada) => {
   entrada.value = formatarTelefone(entrada.value);
 });
-delegar(conteudo, 'click', '#comanda-teste', () => {
-  const form = $('#form-config');
-  const previa = $('#comanda-previa');
-  previa.innerHTML = imprimirTeste(Number(form.comanda_largura_mm.value), form.comanda_mostra_preco.checked);
-  previa.hidden = false;
-  avisar('Comanda de teste enviada para a impressora padrão');
-});
-
 conteudo.addEventListener('submit', async (e) => {
   e.preventDefault();
   const form = e.target;
@@ -210,7 +193,6 @@ conteudo.addEventListener('submit', async (e) => {
         taxa_entrega_centavos: taxa, area_entrega: form.area_entrega.value,
         tempo_entrega_min: form.tempo_entrega_min.value, tempo_retirada_min: form.tempo_retirada_min.value,
         tema: form.tema.value,
-        comanda_largura_mm: Number(form.comanda_largura_mm.value), comanda_mostra_preco: form.comanda_mostra_preco.checked,
         polling_segundos: form.polling_segundos.value,
       },
     });

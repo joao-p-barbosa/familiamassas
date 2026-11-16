@@ -348,7 +348,7 @@ echo "\nPERFIS E TELAS\n";
 conferir('Só existem os perfis proprietário (admin) e atendente', Sessao::PERFIS, ['admin', 'atendente']);
 conferir('Os dois perfis entram no quadro de pedidos (o salão é uma coluna dele)', [PainelController::telaInicial('atendente'), PainelController::telaInicial('admin')], ['/painel/pedidos', '/painel/pedidos']);
 conferir('Menu da atendente: pedidos e cardápio', array_keys(PainelController::menuDo('atendente')), ['pedidos', 'cardapio']);
-conferir('Menu do proprietário: pedidos, cardápio, usuários, configurações, WhatsApp e assistente', array_keys(PainelController::menuDo('admin')), ['pedidos', 'cardapio', 'usuarios', 'configuracoes', 'whatsapp', 'assistente']);
+conferir('Menu do proprietário: pedidos, cardápio, usuários, configurações, WhatsApp, assistente, iFood e impressora', array_keys(PainelController::menuDo('admin')), ['pedidos', 'cardapio', 'usuarios', 'configuracoes', 'whatsapp', 'assistente', 'ifood', 'impressora']);
 conferir('"Produtos do atendimento" é uma tela de apoio: fora do menu, mas a atendente a abre', [isset(PainelController::menuDo('atendente')['atendimento']), PainelController::TELAS['atendimento']['perfis']], [false, ['admin', 'atendente']]);
 conferir('Cozinha, Salão e Histórico do salão não são mais telas', [isset(PainelController::TELAS['cozinha']), isset(PainelController::TELAS['salao']), isset(PainelController::TELAS['historico'])], [false, false, false]);
 conferir('Usuários, Configurações e WhatsApp são só do proprietário', [PainelController::TELAS['usuarios']['perfis'], PainelController::TELAS['configuracoes']['perfis'], PainelController::TELAS['whatsapp']['perfis']], [['admin'], ['admin'], ['admin']]);
@@ -1321,7 +1321,7 @@ foreach ([['A1', 'Mesa 5', 'local', '5', 'pix', 'concluido', 'balcao'], ['A2', '
 }
 
 $aplicadas = App\Core\Banco::migrar($antigo, $arquivoAntigo);
-conferir('Banco da versão 1 recebe as migrações 002 a 006', $aplicadas, [2, 3, 4, 5, 6]);
+conferir('Banco da versão 1 recebe as migrações 002 a 007', $aplicadas, [2, 3, 4, 5, 6, 7]);
 conferir('A versão do banco passa a ser a atual', (int) $antigo->query('PRAGMA user_version')->fetchColumn(), App\Core\Banco::VERSAO_DO_ESQUEMA);
 conferir('Uma cópia do banco antigo foi guardada antes de mexer', count(glob($pastaMigracao . '/backups/antigo-antes-da-v2-*.sqlite') ?: []), 1);
 conferir('Rodar de novo não faz nada', App\Core\Banco::migrar($antigo, $arquivoAntigo), []);

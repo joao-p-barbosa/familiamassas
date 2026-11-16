@@ -73,10 +73,12 @@ function desenhar() {
       <div class="detalhe__selos">
         <span class="selo ${SELO_STATUS[p.status]}">${STATUS[p.status].rotulo}</span>
         <span class="selo">${icone(TIPOS[p.tipo].icone, 14)}${esc(rotuloDoTipo(p))}</span>
-        <span class="selo">${esc(ORIGENS[p.origem] ?? p.origem)}</span>
+        <span class="selo">${esc(ORIGENS[p.origem] ?? p.origem)}${p.ifood ? ` nº ${esc(p.ifood.display_id)}` : ''}</span>
+        ${p.ifood ? `<span class="selo">iFood: ${esc(p.ifood.rotulo)}${p.ifood.simulado ? ' (teste)' : ''}</span>` : ''}
         <span class="selo">${p.impresso_em ? `Impresso às ${hora(p.impresso_em)}` : 'Comanda não impressa'}</span>
       </div>
 
+      ${p.ifood?.falhas ? `<p class="detalhe__obs">${icone('alerta', 18)}<span><strong>O iFood não recebeu uma etapa deste pedido.</strong> Confira no Gestor de Pedidos do iFood (o motivo está na tela iFood).</span></p>` : ''}
       ${p.observacoes ? `<p class="detalhe__obs">${icone('alerta', 18)}<span><strong>Observação do pedido:</strong> ${esc(p.observacoes)}</span></p>` : ''}
 
       <section class="detalhe__bloco">
@@ -102,7 +104,9 @@ function desenhar() {
           <div><dt>Nome</dt><dd>${esc(p.cliente_nome)}</dd></div>
           ${zap ? `<div><dt>WhatsApp</dt><dd><a href="${esc(zap)}" target="_blank" rel="noopener">${esc(telefone(p.cliente_telefone))}</a></dd></div>` : ''}
           ${p.tipo === 'entrega' ? `<div><dt>Endereço</dt><dd>${esc(p.endereco_rua)}, ${esc(p.endereco_numero)}${p.endereco_complemento ? ` · ${esc(p.endereco_complemento)}` : ''}<br>${esc(p.endereco_bairro)}${p.endereco_referencia ? `<br>Ref.: ${esc(p.endereco_referencia)}` : ''}${p.entrega_lat !== null && p.entrega_lng !== null ? `<br><a href="${esc(linkDoPonto(p.entrega_lat, p.entrega_lng))}" target="_blank" rel="noopener">${icone('mapa', 14)} Ver o local marcado no mapa</a>` : ''}</dd></div>` : ''}
-          <div><dt>Pagamento</dt><dd>${PAGAMENTOS[p.pagamento]}${p.troco_para_centavos ? `, troco para ${reais(p.troco_para_centavos)} (levar ${reais(p.troco_para_centavos - p.total_centavos)})` : ''}</dd></div>
+          ${p.ifood?.telefone ? `<div><dt>Telefone (iFood)</dt><dd>${esc(p.ifood.telefone)}${p.ifood.localizador ? `, localizador ${esc(p.ifood.localizador)}` : ''}</dd></div>` : ''}
+          ${p.ifood?.codigo_coleta ? `<div><dt>Código de coleta</dt><dd>${esc(p.ifood.codigo_coleta)}</dd></div>` : ''}
+          ${p.ifood ? `<div><dt>Pagamento</dt><dd>${esc(p.ifood.pagamento_texto)}</dd></div>` : `<div><dt>Pagamento</dt><dd>${PAGAMENTOS[p.pagamento]}${p.troco_para_centavos ? `, troco para ${reais(p.troco_para_centavos)} (levar ${reais(p.troco_para_centavos - p.total_centavos)})` : ''}</dd></div>`}
         </dl>
       </section>
 
@@ -215,7 +219,7 @@ delegar(lateral, 'click', '[data-detalhe]', async (e, botao) => {
       const atualizado = await reimprimir(p);
       if (atualizado) {
         fonte.guardar(atualizado);
-        avisar('Comanda enviada para a impressora');
+        avisar(atualizado.agente_offline ? 'Comanda na fila: o agente de impressão está desligado' : 'Comanda enviada para a impressora');
       }
       desenhar();
       break;

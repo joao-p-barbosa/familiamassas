@@ -19,7 +19,7 @@ final class Banco
      * 1 = esquema da rodada de 12/11 (manhã) · 2 = atendimentos do salão e proteínas separadas.
      * Migração nova deve funcionar nos dois bancos (o PDO que ela recebe diz qual é: ATTR_DRIVER_NAME).
      */
-    public const VERSAO_DO_ESQUEMA = 6;
+    public const VERSAO_DO_ESQUEMA = 7;
 
     /** Chave do bloqueio do Postgres que serializa a criação e a migração do banco (pg_advisory_xact_lock). */
     private const TRAVA_DO_ESQUEMA = 726451;
@@ -38,6 +38,12 @@ final class Banco
     public static function ehPostgres(PDO $pdo): bool
     {
         return $pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'pgsql';
+    }
+
+    /** Esquece a conexão (o processo de fundo do iFood reabre depois de um erro, como uma conexão que o Neon derrubou). */
+    public static function esquecerConexao(): void
+    {
+        self::$pdo = null;
     }
 
     public static function conexao(): PDO

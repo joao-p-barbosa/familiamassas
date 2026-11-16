@@ -1,0 +1,37 @@
+AGENTE DE IMPRESSÃO
+===================
+
+O que é: um programa pequeno que fica aberto no computador onde a impressora térmica está ligada (USB).
+Ele pergunta ao sistema, a cada 3 segundos, se chegou pedido novo, e imprime a comanda sozinho:
+sem janela de impressão e mesmo com o painel fechado. Funciona com impressora de cupom (58 ou 80 mm)
+e de etiqueta (ex.: 100 x 150 mm), desde que ela esteja instalada no Windows (tenha driver).
+
+INSTALAR (uma vez)
+1. Ponha os 3 arquivos (agente.ps1, iniciar-impressora.bat e este LEIA-ME) numa pasta, ex.: C:\Impressora
+2. No painel, tela Impressora, clique em "Gerar código do agente".
+3. Dê dois cliques em iniciar-impressora.bat. Na primeira vez ele pede:
+     - o endereço do servidor (ex.: https://familia-massas.onrender.com)
+     - o código do agente (o que o painel mostrou)
+   Os dois ficam gravados no arquivo config.json desta pasta. Não mande esse arquivo para ninguém.
+4. No painel, a tela Impressora passa a mostrar "conectado" e a lista de impressoras deste computador.
+   Escolha a térmica, "Como enviar" (cupom = ESC/POS; etiqueta = TSPL), a largura do papel e a letra,
+   salve e clique em "Imprimir comanda de teste".
+   Dica: a etiqueta embaixo da impressora diz a linguagem (ex.: "Comandos ESC/POS") e a largura (ex.: 57,5 mm = rolo de 58 mm).
+
+ABRIR SOZINHO AO LIGAR O COMPUTADOR
+- Abra o Prompt de Comando nesta pasta e rode:  iniciar-impressora.bat instalar
+- Para desfazer: Win+R, digite shell:startup e apague o atalho "Agente de impressao".
+
+NO DIA A DIA
+- Deixe a janela preta aberta (pode minimizar). Se ela fechar, as comandas esperam na fila
+  e o painel mostra uma faixa vermelha "Impressão parada".
+- Impressora pausada, sem papel ou com erro no Windows: as comandas esperam e saem quando ela voltar.
+- O que aconteceu fica anotado em agente.log, nesta pasta.
+
+PROBLEMAS COMUNS
+- "O servidor recusou o código": gere um código novo no painel e apague o config.json desta pasta.
+- A impressora aparece como "pausada": Configurações do Windows > Bluetooth e dispositivos > Impressoras
+  > escolha a impressora > Abrir fila de impressão > menu Impressora > desmarque "Pausar impressão".
+- A comanda sai cortada ou pequena: ajuste largura, tipo de papel, margem e tamanho da letra na tela Impressora.
+- Sai texto estranho ("SIZE", "GAP", símbolos) ou nada: o "Como enviar" ou a largura estão errados. Desligue e ligue
+  a impressora (para limpar o que ficou na memória dela) e troque a opção na tela Impressora.

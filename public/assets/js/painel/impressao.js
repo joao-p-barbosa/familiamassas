@@ -55,16 +55,31 @@ export function comandaHtml(pedido, { largura = ajustes.comanda_largura_mm, comP
   }).join('');
 
   const troco = pedido.pagamento === 'dinheiro' && pedido.troco_para_centavos ? ` · troco para ${reais(pedido.troco_para_centavos)}` : '';
+  // Pedido do iFood: número do app, quem entrega, código de coleta e "pago ou cobrar" (sai mesmo na comanda sem preço).
+  const ifood = pedido.ifood;
+  const doIfood = ifood ? `
+      <p class="comanda__tipo">iFood nº ${esc(ifood.display_id)}${ifood.simulado ? ' (teste)' : ''}</p>
+      ${ifood.agendado_para ? `<p class="comanda__tipo">Agendado para ${dataHora(ifood.agendado_para)}</p>` : ''}` : '';
+  const ifoodCliente = ifood ? `
+        ${ifood.telefone ? `<p>${esc(ifood.telefone)}${ifood.localizador ? ` · localizador ${esc(ifood.localizador)}` : ''}</p>` : ''}
+        ${pedido.tipo === 'entrega' ? `<p><b>${ifood.entregue_por === 'IFOOD' ? 'Entregador do iFood' : 'Entrega da loja'}</b></p>` : ''}
+        ${ifood.codigo_coleta ? `<p><b>Código de coleta: ${esc(ifood.codigo_coleta)}</b></p>` : ''}` : '';
+  const ifoodPagamento = ifood ? `
+      <div class="comanda__bloco">
+        <p class="comanda__tipo">${ifood.pago_online ? 'Pago online - não cobrar' : `Cobrar ${reais(pedido.total_centavos)}`}</p>
+        <p class="comanda__via">${esc(ifood.pagamento_texto)}</p>
+      </div>` : '';
   return `
     <div class="comanda ${largura === 58 ? 'comanda--58' : ''}">
       <p class="comanda__loja">${esc(ajustes.nome_loja)}</p>
       <p class="comanda__numero">#${pedido.id}</p>
+      ${doIfood}
       <p class="comanda__tipo">${esc(tipo)}</p>
       <p class="comanda__meta"><span>${dataHora(pedido.criado_em)}</span><span>${esc(ORIGENS[pedido.origem] ?? pedido.origem)}</span></p>
       <div class="comanda__bloco">
         <p class="comanda__cliente">${esc(pedido.cliente_nome)}</p>
         ${pedido.cliente_telefone ? `<p>${esc(telefone(pedido.cliente_telefone))}</p>` : ''}
-        ${endereco}
+        ${endereco}${ifoodCliente}
       </div>
       <div class="comanda__bloco">${itens}</div>
       ${pedido.observacoes ? `<div class="comanda__bloco"><p class="comanda__obs">OBS DO PEDIDO: ${esc(pedido.observacoes)}</p></div>` : ''}
@@ -72,8 +87,9 @@ export function comandaHtml(pedido, { largura = ajustes.comanda_largura_mm, comP
       <div class="comanda__bloco">
         ${pedido.taxa_entrega_centavos ? `<p class="comanda__meta"><span>Taxa de entrega</span><span>${reais(pedido.taxa_entrega_centavos)}</span></p>` : ''}
         <p class="comanda__total"><span>TOTAL</span><span>${reais(pedido.total_centavos)}</span></p>
-        <p>${PAGAMENTOS[pedido.pagamento]}${troco}</p>
+        ${ifood ? '' : `<p>${PAGAMENTOS[pedido.pagamento]}${troco}</p>`}
       </div>` : ''}
+      ${ifoodPagamento}
       ${reimpressao ? `<p class="comanda__via">Reimpressão · ${hora(new Date().toISOString())}</p>` : ''}
     </div>`;
 }
@@ -133,13 +149,14 @@ export async function imprimirAutomatico(pedido) {
   }
 }
 
-/** Botão "Reimprimir": sempre imprime, em qualquer aparelho. */
+/** Botão "Reimprimir": sempre imprime. No modo agente, a comanda vai para a fila do computador da loja (D79). */
 export async function reimprimir(pedido) {
   try {
     const r = await api(`/api/admin/pedidos/${pedido.id}/impressao`, {
       metodo: 'POST',
       corpo: { estacao_id: estacao.id, estacao_nome: estacao.nome, modo: 'manual' },
     });
+    if (r.agente) return { ...r.pedido, agente_offline: !r.agente_online };
     imprimirHtml(comandaHtml(r.pedido, { reimpressao: Boolean(pedido.impresso_em) }), ajustes.comanda_largura_mm);
     return r.pedido;
   } catch (erro) {

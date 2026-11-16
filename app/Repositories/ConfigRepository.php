@@ -11,6 +11,12 @@ final class ConfigRepository
     /** @var array<string,string>|null */
     private static ?array $cache = null;
 
+    /** Processo que fica ligado (bin/ifood.php): relê as configurações a cada volta, para valer o que o dono mudou no painel. */
+    public static function esquecer(): void
+    {
+        self::$cache = null;
+    }
+
     /** @return array<string,string> */
     public function todas(): array
     {

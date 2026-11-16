@@ -11,6 +11,7 @@ use App\Core\Sessao;
 use App\Repositories\PedidoRepository;
 use App\Services\PedidoService;
 use App\IA\Assistente;
+use App\Impressao\AgenteImpressao;
 use App\WhatsApp\Conector;
 
 // API do quadro de pedidos (a produção) e da impressão. Proprietário (admin) e atendente usam as mesmas rotas.
@@ -30,6 +31,8 @@ final class AdminPedidoController
         }
         // A hora é lida ANTES da consulta: na próxima chamada, nada que mudou no meio do caminho se perde.
         $agora = Relogio::iso(Relogio::agora());
+        // Reserva do processo de fundo (bin/ifood.php): enquanto o painel estiver aberto, o polling do iFood roda (no máximo 1 a cada 30 s).
+        (new \App\Ifood\Ifood())->cicloSeHora();
         $pedidos = new PedidoRepository();
         $fechamento = $pedidos->fechamentoDoDia();
         if ($usuario['perfil'] !== 'admin') {
@@ -42,7 +45,9 @@ final class AdminPedidoController
         $whatsapp = Conector::ativo() ? (new Conector())->paraOPainel() : null;
         // Crédito do assistente com IA acabando ou acabado: só o proprietário vê (D72).
         $ia = $usuario['perfil'] === 'admin' ? (new Assistente())->alertaParaOPainel() : null;
-        Resposta::json(['agora' => $agora, 'pedidos' => $lista, 'fechamento' => $fechamento, 'whatsapp' => $whatsapp, 'ia' => $ia]);
+        // Agente de impressão fora do ar, impressora com problema ou comanda que não saiu (só no modo agente).
+        $impressora = (new AgenteImpressao())->alertaParaOPainel();
+        Resposta::json(['agora' => $agora, 'pedidos' => $lista, 'fechamento' => $fechamento, 'whatsapp' => $whatsapp, 'ia' => $ia, 'impressora' => $impressora]);
     }
 
     public function detalhe(Requisicao $req): void
@@ -87,9 +92,18 @@ final class AdminPedidoController
         if ($pedidos->porId($id) === null) {
             throw ErroHttp::naoEncontrado('Pedido não encontrado.');
         }
+        $manual = ($dados['modo'] ?? 'auto') === 'manual';
+        // Modo agente (D79): a impressão é do computador da loja. O navegador não imprime sozinho, e o "Reimprimir" vai para a fila do agente.
+        $agente = new AgenteImpressao();
+        if ($agente->ajustes()['modo'] === 'agente') {
+            if ($manual) {
+                $agente->pedirReimpressao($id);
+            }
+            Resposta::json(['imprimir' => false, 'agente' => $manual, 'agente_online' => $agente->online(), 'pedido' => $pedidos->porId($id)]);
+            return;
+        }
         $pedidos->registrarEstacao($estacao, mb_substr(trim((string) ($dados['estacao_nome'] ?? 'Estação')), 0, 60) ?: 'Estação');
         $ficouComEla = $pedidos->reivindicarImpressao($id, $estacao);
-        $manual = ($dados['modo'] ?? 'auto') === 'manual';
         Resposta::json(['imprimir' => $manual || $ficouComEla, 'pedido' => $pedidos->porId($id)]);
     }
 }

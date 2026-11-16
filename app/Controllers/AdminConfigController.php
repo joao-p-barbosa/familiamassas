@@ -11,7 +11,7 @@ use App\Repositories\ConfigRepository;
 use App\Services\LojaService;
 use App\Services\PedidoService;
 
-// Configurações da loja e situação da integração com o WhatsApp.
+// Configurações da loja e situação da integração com o WhatsApp. (Impressora e comanda: IntegracoesController, tela Impressora.)
 final class AdminConfigController
 {
     public const TEMAS = ['italia', 'linho', 'pedra', 'grafite'];
@@ -33,8 +33,6 @@ final class AdminConfigController
             'whatsapp_loja' => $c->get('whatsapp_loja'),
             'aceita_entrega' => $c->get('aceita_entrega', '1') === '1',
             'aceita_retirada' => $c->get('aceita_retirada', '1') === '1',
-            'comanda_largura_mm' => $c->inteiro('comanda_largura_mm', 80),
-            'comanda_mostra_preco' => $c->get('comanda_mostra_preco', '0') === '1',
             'polling_segundos' => $c->inteiro('polling_segundos', 5),
             'estado_agora' => (new LojaService())->estado(),
         ]);
@@ -91,9 +89,6 @@ final class AdminConfigController
         $aceita = ['entrega' => !empty($d['aceita_entrega']), 'retirada' => !empty($d['aceita_retirada'])];
         if (!in_array(true, $aceita, true)) { $erros['aceita'] = 'Deixe pelo menos um tipo de pedido ligado.'; }
 
-        $largura = (int) ($d['comanda_largura_mm'] ?? 80);
-        if (!in_array($largura, [58, 80], true)) { $erros['comanda_largura_mm'] = 'Escolha 58 ou 80 mm.'; }
-
         $valores = [
             'nome_loja' => $nome,
             'tema' => $tema,
@@ -107,8 +102,6 @@ final class AdminConfigController
             'whatsapp_loja' => $whatsapp,
             'aceita_entrega' => $aceita['entrega'] ? '1' : '0',
             'aceita_retirada' => $aceita['retirada'] ? '1' : '0',
-            'comanda_largura_mm' => (string) $largura,
-            'comanda_mostra_preco' => !empty($d['comanda_mostra_preco']) ? '1' : '0',
             'polling_segundos' => (string) $numero('polling_segundos', 3, 60, 'Informe de 3 a 60 segundos.'),
         ];
         if ($erros !== []) {

@@ -8,7 +8,7 @@
 // O que foi concluído ou cancelado sai do quadro e entra nos números do fechamento do dia.
 import { $, $$, esc, delegar, menosMovimento } from '../shared/dom.js';
 import { icone } from '../shared/icones.js';
-import { reais, minutosDesde, duracao, plural } from '../shared/formato.js';
+import { reais, minutosDesde, duracao, plural, hora } from '../shared/formato.js';
 import { avisar } from '../shared/avisos.js';
 import { FLUXOS, STATUS, ACAO_PARA, TIPOS, ORIGENS, PAGAMENTOS, encerrado, proximaEtapa, resumoMontagem, rotuloDoTipo } from '../shared/pedido.js';
 import { segundosDeProducao, minutosDe, faixaDeTempo, emProducao } from '../shared/tempo.js';
@@ -180,13 +180,15 @@ function cartaoHtml(p) {
         <span class="cartao-pedido__selos">
           <span class="selo ${SELO_STATUS[p.status]}">${STATUS[p.status].rotulo}</span>
           <span class="selo cartao-pedido__modalidade">${icone(TIPOS[p.tipo].icone, 14)}${esc(rotuloDoTipo(p))}</span>
-          <span class="selo">${esc(ORIGENS[p.origem] ?? p.origem)}</span>
+          <span class="selo">${esc(ORIGENS[p.origem] ?? p.origem)}${p.ifood ? ` nº ${esc(p.ifood.display_id)}` : ''}</span>
+          ${p.ifood?.falhas ? '<span class="selo selo--alerta">iFood não recebeu a etapa</span>' : ''}
+          ${p.ifood?.agendado_para ? `<span class="selo selo--alerta">Agendado ${hora(p.ifood.agendado_para)}</span>` : ''}
           ${p.observacoes || p.itens.some((i) => i.observacoes) ? '<span class="selo selo--alerta">Tem observação</span>' : ''}
         </span>
         <span class="cartao-pedido__itens">${linhasDeItens(p)}</span>
       </button>
       <div class="cartao-pedido__rodape">
-        <span>${PAGAMENTOS[p.pagamento]}${preparo}</span>
+        <span>${p.ifood ? (p.ifood.pago_online ? 'Pago no iFood' : `iFood: cobrar (${PAGAMENTOS[p.pagamento]})`) : PAGAMENTOS[p.pagamento]}${preparo}</span>
         <span class="cartao-pedido__total">${reais(p.total_centavos)}</span>
       </div>
       ${proxima ? `<button type="button" class="botao botao--bloco cartao-pedido__avancar" data-avancar="${proxima}">${ACAO_PARA[proxima]}${icone('seta-dir', 18)}</button>` : ''}

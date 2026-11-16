@@ -27,6 +27,8 @@ final class PainelController
         'configuracoes' => ['titulo' => 'Configurações',           'grupo' => 'Loja',     'perfis' => ['admin']],
         'whatsapp'      => ['titulo' => 'WhatsApp',                'grupo' => 'Loja',     'perfis' => ['admin']],
         'assistente'    => ['titulo' => 'Assistente',              'grupo' => 'Loja',     'perfis' => ['admin']],
+        'ifood'         => ['titulo' => 'iFood',                   'grupo' => 'Integrações', 'perfis' => ['admin']],
+        'impressora'    => ['titulo' => 'Impressora',              'grupo' => 'Integrações', 'perfis' => ['admin']],
     ];
 
     /** Telas que saíram do painel: quem tinha o endereço salvo cai no quadro de pedidos. */
@@ -112,6 +114,9 @@ final class PainelController
                 'comanda_largura_mm' => $config->inteiro('comanda_largura_mm', 80),
                 'comanda_mostra_preco' => $config->get('comanda_mostra_preco', '0') === '1',
                 'nome_loja' => $config->get('nome_loja', 'Nome do Restaurante'),
+                // Modo agente: quem imprime é o computador da loja, não o navegador (D79). Origens: o que sai sozinho.
+                'impressao_modo' => (new \App\Impressao\AgenteImpressao())->ajustes()['modo'],
+                'impressao_origens' => (new \App\Impressao\AgenteImpressao())->ajustes()['origens'],
             ],
         ]);
     }

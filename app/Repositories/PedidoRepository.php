@@ -260,7 +260,11 @@ final class PedidoRepository
             }
         }
 
-        return array_map(static function (array $p) use ($itens, $historico, $linhasDeTempo, $comHistorico, $contas): array {
+        // Pedido do iFood: número do app, pagamento online, localizador e código de coleta (D76).
+        $doIfood = \App\Ifood\Ifood::dadosDosPedidos(array_values(array_map(static fn (array $p): int => (int) $p['id'],
+            array_filter($pedidos, static fn (array $p): bool => $p['origem'] === 'ifood'))));
+
+        return array_map(static function (array $p) use ($itens, $historico, $linhasDeTempo, $comHistorico, $contas, $doIfood): array {
             $id = (int) $p['id'];
             foreach (['id', 'cliente_id', 'atendimento_id', 'criado_por', 'troco_para_centavos', 'subtotal_centavos', 'taxa_entrega_centavos', 'total_centavos'] as $coluna) {
                 $p[$coluna] = $p[$coluna] === null ? null : (int) $p[$coluna];
@@ -273,6 +277,7 @@ final class PedidoRepository
             }
             $p['itens'] = $itens[$id] ?? [];
             $p['conta_aberta'] = $p['atendimento_id'] === null ? null : ($contas[$p['atendimento_id']] ?? false);
+            $p['ifood'] = $doIfood[$id] ?? null;
             // Tempo em "Novo" + "Em preparo" (regra das cores do cartão): o navegador soma o período que ainda está aberto.
             $tempo = TempoDePreparo::calcular($linhasDeTempo[$id] ?? []);
             $p['producao_acumulado_s'] = $tempo['acumulado_s'];
