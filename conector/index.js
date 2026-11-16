@@ -114,7 +114,10 @@ async function conectar() {
         await auth.limpar();
         auth = null;
       }
-      agendar();
+      // Outro conector abriu a mesma conta (o servidor antigo dura ~2 min depois de um deploy): quem foi derrubado
+      // espera o antigo sair, em vez de reconectar na hora e derrubar o novo, num vai-e-vem que perde mensagens.
+      if (codigo === DisconnectReason.connectionReplaced) console.log('[conector] outro conector assumiu a conta: esperando 2 min antes de reconectar');
+      agendar(codigo === DisconnectReason.connectionReplaced ? 120_000 : undefined);
     }
   });
 
@@ -147,11 +150,11 @@ async function conectar() {
 }
 
 /** Reconecta com espera crescente (3 s, 6 s, ... até 60 s). */
-function agendar() {
+function agendar(esperaFixa) {
   if (reconectando) return;
   reconectando = true;
   tentativas += 1;
-  const espera = Math.min(60_000, 3000 * tentativas);
+  const espera = esperaFixa ?? Math.min(60_000, 3000 * tentativas);
   setTimeout(async () => {
     reconectando = false;
     try {
