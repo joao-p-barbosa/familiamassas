@@ -92,6 +92,12 @@ async function conectar() {
   });
   sock.ev.on('creds.update', auth.saveCreds);
 
+  // Só a forma do pacote (sem texto, sem número): mostra se o conteúdo cifrado chegou para este aparelho.
+  sock.ws.on('CB:message', (no) => {
+    const filhos = (Array.isArray(no.content) ? no.content : []).filter((c) => c?.tag).map((c) => `${c.tag}${c.attrs?.type ? ':' + c.attrs.type : ''}`);
+    console.log(`[conector] pacote de=@${String(no.attrs?.from ?? '').split('@')[1] ?? '?'} tipo=${no.attrs?.type ?? '-'} categoria=${no.attrs?.category ?? '-'} offline=${no.attrs?.offline ?? '-'} filhos=${filhos.join(',') || '-'}`);
+  });
+
   sock.ev.on('connection.update', async (u) => {
     if (u.qr) {
       qr = await QRCode.toDataURL(u.qr, { margin: 1, width: 280 });
@@ -127,7 +133,10 @@ async function conectar() {
     console.log(`[conector] messages.upsert type=${type} qtd=${messages.length}`);
     const lote = [];
     for (const m of messages) {
-      if (m.key.fromMe) continue;
+      if (m.key.fromMe) {
+        console.log(`[conector] mensagem própria ignorada (stub ${m.messageStubType ?? '-'})`);
+        continue;
+      }
       const tipoJid = (m.key.remoteJid ?? '').split('@')[1] ?? '?';
       if (tipoJid !== 's.whatsapp.net' && tipoJid !== 'lid') continue;   // grupo, status, canal
       // Conversa com mensagens temporárias ou de visualização única traz o conteúdo embrulhado.
