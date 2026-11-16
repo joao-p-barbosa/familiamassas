@@ -132,7 +132,12 @@ async function conectar() {
       if (tipoJid !== 's.whatsapp.net' && tipoJid !== 'lid') continue;   // grupo, status, canal
       // Conversa com mensagens temporárias ou de visualização única traz o conteúdo embrulhado.
       const conteudo = normalizeMessageContent(m.message);
-      const telefone = telefoneDe(m.key);
+      let telefone = telefoneDe(m.key);
+      if (!telefone && tipoJid === 'lid') {
+        // Sem o número na própria mensagem: o Baileys guarda o par LID → número.
+        const pn = await sock.signalRepository?.lidMapping?.getPNForLID(m.key.remoteJid).catch(() => null);
+        if (pn) telefone = telefoneDe({ remoteJid: pn.includes('@') ? pn : `${pn}@s.whatsapp.net` });
+      }
       const texto = textoDe(conteudo);
       const local = localDe(conteudo);   // o pin da entrega, no pedido pelo chat
       if (telefone && (texto || local)) {

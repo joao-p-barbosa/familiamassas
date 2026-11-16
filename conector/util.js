@@ -3,8 +3,8 @@
 /** Só dígitos do número de uma conversa individual. Grupos, status e canais devolvem null (o bot não responde neles). */
 function telefoneDe(chave) {
   const jid = chave?.remoteJid ?? '';
-  // Contatos "LID": o número de telefone vem em senderPn (Baileys 6.7).
-  const alvo = jid.endsWith('@lid') ? (chave.senderPn ?? '') : jid;
+  // Contatos "LID": o número de telefone vem em remoteJidAlt (Baileys 7) ou senderPn (Baileys 6.7).
+  const alvo = jid.endsWith('@lid') ? (chave.remoteJidAlt ?? chave.senderPn ?? '') : jid;
   if (!alvo.endsWith('@s.whatsapp.net')) return null;
   const digitos = alvo.split('@')[0].split(':')[0].replace(/\D/g, '');
   return digitos.length >= 10 && digitos.length <= 15 ? digitos : null;

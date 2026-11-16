@@ -4,10 +4,15 @@
   "private": true,
   "description": "Conector do WhatsApp por QR code (Baileys) da Família Massas",
   "main": "index.js",
-  "scripts": { "start": "node index.js", "test": "node --test" },
-  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node index.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  },
   "dependencies": {
-    "@whiskeysockets/baileys": "6.7.24",
+    "@whiskeysockets/baileys": "7.0.0-rc14",
     "pg": "^8.13.0",
     "pino": "^9.6.0",
     "qrcode": "^1.5.4"

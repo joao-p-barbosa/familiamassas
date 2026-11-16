@@ -9,6 +9,7 @@ test('telefoneDe: conversa individual, LID com senderPn, e o que o bot ignora', 
   assert.equal(telefoneDe({ remoteJid: '5511912345678@s.whatsapp.net' }), '5511912345678');
   assert.equal(telefoneDe({ remoteJid: '5511912345678:7@s.whatsapp.net' }), '5511912345678');
   assert.equal(telefoneDe({ remoteJid: '99999@lid', senderPn: '5511912345678@s.whatsapp.net' }), '5511912345678');
+  assert.equal(telefoneDe({ remoteJid: '99999@lid', remoteJidAlt: '5511912345678@s.whatsapp.net' }), '5511912345678');
   assert.equal(telefoneDe({ remoteJid: '99999@lid' }), null);
   assert.equal(telefoneDe({ remoteJid: '1203630@g.us' }), null);
   assert.equal(telefoneDe({ remoteJid: 'status@broadcast' }), null);
