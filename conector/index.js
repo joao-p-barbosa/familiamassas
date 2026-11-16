@@ -8,7 +8,7 @@ const path = require('node:path');
 const fs = require('node:fs');
 const pino = require('pino');
 const QRCode = require('qrcode');
-const { default: makeWASocket, DisconnectReason, fetchLatestBaileysVersion, useMultiFileAuthState, Browsers } = require('@whiskeysockets/baileys');
+const { default: makeWASocket, DisconnectReason, fetchLatestBaileysVersion, useMultiFileAuthState, Browsers, normalizeMessageContent } = require('@whiskeysockets/baileys');
 const { criarServidor } = require('./servidor');
 const { telefoneDe, textoDe, localDe, segundosDe } = require('./util');
 
@@ -122,11 +122,23 @@ async function conectar() {
     if (type !== 'notify') return;   // "append" é histórico antigo, não mensagem nova
     const lote = [];
     for (const m of messages) {
-      if (m.key.fromMe || !m.message) continue;
+      if (m.key.fromMe) continue;
+      const tipoJid = (m.key.remoteJid ?? '').split('@')[1] ?? '?';
+      if (tipoJid !== 's.whatsapp.net' && tipoJid !== 'lid') continue;   // grupo, status, canal
+      // Conversa com mensagens temporárias ou de visualização única traz o conteúdo embrulhado.
+      const conteudo = normalizeMessageContent(m.message);
       const telefone = telefoneDe(m.key);
-      const texto = textoDe(m.message);
-      const local = localDe(m.message);   // o pin da entrega, no pedido pelo chat
-      if (telefone && (texto || local)) lote.push({ id: m.key.id, telefone, texto, local, nome: m.pushName ?? null, em: segundosDe(m.messageTimestamp) });
+      const texto = textoDe(conteudo);
+      const local = localDe(conteudo);   // o pin da entrega, no pedido pelo chat
+      if (telefone && (texto || local)) {
+        lote.push({ id: m.key.id, telefone, texto, local, nome: m.pushName ?? null, em: segundosDe(m.messageTimestamp) });
+        continue;
+      }
+      // O motivo do descarte, sem o texto e sem o telefone do cliente.
+      const motivo = !conteudo ? `sem conteúdo (stub ${m.messageStubType ?? '-'}: ${m.messageStubParameters?.[0] ?? '-'})`
+        : !telefone ? `sem número do remetente (senderPn ${m.key.senderPn ? 'presente' : 'ausente'})`
+        : `sem texto (tipos: ${Object.keys(conteudo).join(', ')})`;
+      console.log(`[conector] mensagem ignorada (@${tipoJid}): ${motivo}`);
     }
     if (lote.length > 0) await postar('/api/conector/mensagens', { mensagens: lote }, 60_000);   // a resposta da IA pode levar alguns segundos
   });
