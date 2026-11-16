@@ -98,6 +98,7 @@ async function conectar() {
       mudar('aguardando_qr');   // manda o sinal com o QR novo (ele troca a cada ~20 s)
     }
     if (u.connection === 'open') {
+      console.log(`[conector] conectado como ***${String(sock.user?.id ?? '').split('@')[0].split(':')[0].slice(-4)}`);
       qr = null;
       tentativas = 0;
       mudar('conectado');
@@ -119,7 +120,8 @@ async function conectar() {
 
   // site ← WhatsApp
   sock.ev.on('messages.upsert', async ({ messages, type }) => {
-    if (type !== 'notify') return;   // "append" é histórico antigo, não mensagem nova
+    // "append" também entra: o site ignora o que tem mais de 10 minutos e não repete o mesmo id.
+    console.log(`[conector] messages.upsert type=${type} qtd=${messages.length}`);
     const lote = [];
     for (const m of messages) {
       if (m.key.fromMe) continue;
