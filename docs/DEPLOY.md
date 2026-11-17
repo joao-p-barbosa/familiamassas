@@ -79,6 +79,8 @@ Custo (base nov/2026, confira na tabela da Meta): conversas iniciadas pelo clien
 
 Alternativa à Cloud API: sem conta Meta, com um número dedicado à loja. **Não é oficial: o WhatsApp pode bloquear o número.** Use um chip só para isso, nunca o número pessoal. Decisões D66 a D69.
 
+> **O número do QR não pode estar ligado à API da Meta (D75).** Tem de ser um WhatsApp (Business) comum. Se o chat do cliente mostra "esta empresa usa um serviço seguro da Meta", o aparelho ligado por QR recebe a mensagem sem conteúdo e o bot fica mudo, sem erro nenhum. Saída: parear outro número comum, ou usar a Cloud API (seção anterior) no número da Meta.
+
 1. **Plano `starter` da Render** (US$ 7/mês, 512 MB): o gratuito dorme e derrubaria a conexão. O `render.yaml` já está nele.
 2. Variáveis de ambiente do serviço: `WHATSAPP_CANAL` = `qr` e `CONECTOR_SEGREDO` (o blueprint sorteia; se criar à mão, 16+ caracteres). `DATABASE_URL` (Neon) já existe e é onde fica o pareamento.
 3. Faça o deploy. Nos logs aparecem `[conector] ouvindo em 127.0.0.1:3001` e `desconectado → aguardando_qr`.
@@ -86,7 +88,7 @@ Alternativa à Cloud API: sem conta Meta, com um número dedicado à loja. **Nã
 5. O pareamento fica no Neon: um deploy novo reconecta sozinho. Se o celular desconectar o aparelho, o conector apaga o pareamento e mostra um QR novo.
 6. Se o WhatsApp cair por 2 min ou mais, a faixa vermelha aparece em todas as telas do painel (com som, se o botão "Som de pedido novo" estiver ligado). Na volta, escolha **Enviar pendentes** ou **Descartar**.
 
-**Limites:** o Node usa até ~160 MB dentro da máquina de 512 MB; se o serviço reiniciar por falta de memória, suba o plano. O Baileys 6.7.24 é a versão estável; a imagem busca a dependência `libsignal` no GitHub no momento do build, com a versão fixada no `conector/package-lock.json` (mantenha o arquivo no repositório).
+**Limites:** o Node usa até ~160 MB dentro da máquina de 512 MB; se o serviço reiniciar por falta de memória, suba o plano. O conector usa o Baileys 7.0.0-rc14 (D75); a imagem busca a dependência `libsignal` no GitHub no momento do build, com a versão fixada no `conector/package-lock.json` (mantenha o arquivo no repositório).
 
 ## Ligar o assistente com IA (Etapa 4c)
 

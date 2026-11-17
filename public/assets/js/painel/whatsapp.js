@@ -69,7 +69,7 @@ function conectorHtml(s) {
   const c = s.conector;
   const desde = c.desde ? ` desde ${hora(c.desde)}` : '';
   const explicacao = {
-    conectado: 'O número da loja está conectado. O cliente que escreve recebe o menu por número: 1 Fazer pedido, 2 Acompanhar pedido, 3 Falar com atendente.',
+    conectado: 'O número da loja está conectado. O bot só responde quando o cliente digita a palavra do pedido (a que você configura em Assistente, “Cardápio” por padrão): aí conduz o pedido passo a passo, até a confirmação, e o pedido cai no Kanban. “Acompanhar” mostra o pedido em andamento e “atendente” chama uma pessoa. Fora dessas palavras o bot fica em silêncio: a saudação é a do seu WhatsApp Business. A IA só entra para tirar uma dúvida no meio do pedido.',
     aguardando_qr: 'No celular da loja: WhatsApp → Aparelhos conectados → Conectar um aparelho, e aponte a câmera para o QR code abaixo. O código troca sozinho a cada poucos segundos. Use um número dedicado à loja.',
     desconectado: `O WhatsApp está desconectado${desde}. O conector tenta voltar sozinho; se o celular tiver desconectado o aparelho, aparece um QR code novo aqui.`,
     sem_sinal: `O conector não dá sinal${desde}. Ele reinicia sozinho; se passar de alguns minutos, veja os logs do serviço na Render.`,
