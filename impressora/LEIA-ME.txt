@@ -6,7 +6,11 @@ Ele pergunta ao sistema, a cada 3 segundos, se chegou pedido novo, e imprime a c
 sem janela de impressão e mesmo com o painel fechado. Funciona com impressora de cupom (58 ou 80 mm)
 e de etiqueta (ex.: 100 x 150 mm), desde que ela esteja instalada no Windows (tenha driver).
 
-INSTALAR (uma vez)
+JEITO NORMAL (recomendado): no painel, tela Impressora, clique em "Baixar o programa da impressora" no
+computador da impressora e abra o arquivo baixado. Ele ja vem configurado e faz tudo sozinho. O que esta abaixo
+e o jeito manual, para quem preferir.
+
+INSTALAR A MAO (uma vez)
 1. Ponha os 3 arquivos (agente.ps1, iniciar-impressora.bat e este LEIA-ME) numa pasta, ex.: C:\Impressora
 2. No painel, tela Impressora, clique em "Gerar código do agente".
 3. Dê dois cliques em iniciar-impressora.bat. Na primeira vez ele pede:

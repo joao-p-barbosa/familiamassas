@@ -1722,12 +1722,140 @@ a.balao__acao {
 .impressora__codigo p {
   margin: 0;
 }
-.impressora__instalar summary {
+/* Passo a passo da impressora (D86): 3 cartões numerados; só o passo de agora fica aberto. */
+.impressora {
+  display: grid;
+  gap: var(--e-4);
+  max-width: 46rem;
+}
+.roteiro {
+  display: grid;
+  gap: var(--e-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.passo {
+  display: grid;
+  gap: var(--e-4);
+  padding: var(--e-4) var(--e-5);
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio-2);
+  background: var(--cor-superficie);
+}
+.passo[data-estado="atual"] {
+  border-color: var(--cor-acento);
+  box-shadow: inset 0 0 0 1px var(--cor-acento);
+}
+.passo[data-estado="depois"] {
+  color: var(--cor-texto-2);
+}
+.passo__cabeca {
+  display: flex;
+  align-items: center;
+  gap: var(--e-3);
+}
+.passo__numero {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  background: var(--cor-superficie-2);
+  color: var(--cor-texto-2);
+  font-weight: 700;
+}
+.passo[data-estado="atual"] .passo__numero {
+  background: var(--cor-acento);
+  color: var(--cor-acento-texto);
+}
+.passo[data-estado="feito"] .passo__numero {
+  background: var(--cor-sucesso-suave);
+  color: var(--cor-sucesso);
+}
+.passo__titulo {
+  margin: 0;
+  font-size: var(--texto-5);
+  font-weight: 700;
+}
+.passo__resumo {
+  margin: 0;
+  font-size: var(--texto-3);
+  color: var(--cor-texto-2);
+  overflow-wrap: anywhere;
+}
+.passo__corpo,
+.passo__form {
+  display: grid;
+  gap: var(--e-4);
+}
+.passo__corpo p {
+  margin: 0;
+}
+.passo__lista {
+  display: grid;
+  gap: var(--e-2);
+  margin: 0;
+  padding-left: 1.25rem;
+}
+.passo .escolha-perfil legend {
+  margin-bottom: var(--e-2);
+}
+.passo [data-perigo] {
+  color: var(--cor-perigo);
+  font-weight: 600;
+}
+.respostas {
+  display: grid;
+  gap: var(--e-2);
+  max-width: 26rem;
+}
+.respostas .botao {
+  justify-content: flex-start;
+}
+.espera {
+  display: flex;
+  align-items: center;
+  gap: var(--e-3);
+  font-weight: 600;
+}
+.espera__giro {
+  flex: none;
+  width: 1.15rem;
+  height: 1.15rem;
+  border: 2px solid var(--cor-acento);
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: giro 0.8s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .espera__giro { animation-duration: 2.4s; }
+}
+.detalhe__obs--info {
+  background: var(--cor-info-suave);
+  color: var(--cor-info);
+}
+.pronto .bloco__titulo {
+  display: flex;
+  align-items: center;
+  gap: var(--e-2);
+  color: var(--cor-sucesso);
+}
+.impressora__mais summary {
   cursor: pointer;
   font-weight: 600;
 }
-.impressora__instalar[open] summary {
-  margin-bottom: var(--e-3);
+.impressora__mais summary .campo__ajuda {
+  display: block;
+  margin-top: 2px;
+  font-weight: 400;
+}
+.impressora__mais[open] summary {
+  margin-bottom: var(--e-4);
+}
+.impressora__mais .detalhe__titulo {
+  margin-top: var(--e-4);
 }
 .ifood__id {
   display: inline-block;

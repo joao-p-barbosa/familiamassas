@@ -12,6 +12,7 @@ use App\Core\Env;
 use App\Ifood\Ifood;
 use App\Ifood\IfoodApi;
 use App\Impressao\AgenteImpressao;
+use App\Impressao\Instalador;
 use App\Impressao\Comanda;
 use App\Repositories\ConfigRepository;
 use App\Repositories\PedidoRepository;
@@ -571,6 +572,45 @@ $pedidoComum();
 conferir('Modo navegador: o agente não pega pedido nenhum e não há faixa', [$agente->ciclo($info)['trabalhos'], $agente->alertaParaOPainel()], [[], null]);
 $agente->revogar();
 conferir('Desligar o agente: o código para de valer', $agente->codigoValido($codigo), false);
+
+echo "\nPASSO A PASSO DA IMPRESSORA (D86)\n";
+$codigo = $agente->gerarCodigo();
+$virtuais = ['nome' => 'Microsoft Print to PDF', 'status' => 'Normal', 'padrao' => true, 'porta' => 'PORTPROMPT:', 'driver' => 'Microsoft Print To PDF'];
+$agente->ciclo(['computador' => 'CAIXA', 'versao' => 3, 'pronta' => true, 'impressoras' => [
+    ['nome' => 'QIA-8388', 'status' => 'Normal', 'padrao' => false, 'porta' => 'USB001', 'driver' => 'LABEL'], $virtuais,
+    ['nome' => 'OneNote (Desktop)', 'status' => 'Normal', 'padrao' => false, 'porta' => 'nul:', 'driver' => 'Send to Microsoft OneNote 16 Driver'],
+]]);
+$lista = $agente->situacao()['agente']['impressoras'];
+conferir('PDF e OneNote ficam marcadas como virtuais; a térmica USB não', array_column($lista, 'virtual', 'nome'), ['QIA-8388' => false, 'Microsoft Print to PDF' => true, 'OneNote (Desktop)' => true]);
+conferir('Agente antigo (sem porta): reconhece pelo nome', [AgenteImpressao::virtual(['nome' => 'Microsoft XPS Document Writer']), AgenteImpressao::virtual(['nome' => 'Elgin i9'])], [true, false]);
+$base = ['modo' => 'agente', 'impressora' => 'QIA-8388', 'linguagem' => 'escpos', 'largura_mm' => 58, 'altura_mm' => 0, 'margem_mm' => 3, 'fonte' => 'm', 'vias' => 1, 'com_preco' => false, 'origens' => AgenteImpressao::ORIGENS];
+$agente->salvarAjustes($base);
+conferir('Antes do teste, nada confirmado', $agente->situacao()['agente']['confirmada_em'], null);
+$agente->confirmar();
+conferir('"Saiu certinha": fica confirmado', $agente->situacao()['agente']['confirmada_em'] !== null, true);
+$agente->salvarAjustes(['vias' => 2] + $base);
+conferir('Mudar vias não desfaz a confirmação', $agente->situacao()['agente']['confirmada_em'] !== null, true);
+$agente->salvarAjustes(['linguagem' => 'tspl'] + $base);
+conferir('Trocar o jeito de enviar pede um teste novo', $agente->situacao()['agente']['confirmada_em'], null);
+$agente->confirmar();
+$agente->salvarAjustes(['largura_mm' => 80] + $base);
+conferir('Trocar a largura pede um teste novo', $agente->situacao()['agente']['confirmada_em'], null);
+$agente->confirmar();
+$novo = $agente->gerarCodigo();
+$s = $agente->situacao();
+conferir('Baixar o programa de novo: confirmação e sinal do antigo zerados (a tela espera o novo ligar)', [$s['agente']['confirmada_em'], $s['agente']['online'], $agente->codigoValido($codigo), $agente->codigoValido($novo)], [null, false, false, true]);
+
+$cmd = Instalador::cmd('https://loja.exemplo.com', $novo, "# agente\r\nWrite-Host 'oi'\r\n");
+$marca = strrpos($cmd, Instalador::MARCADOR . "\r\n");
+conferir('Instalador: só ASCII e quebra de linha CRLF (o cmd lê assim)', [preg_match('/[^\x00-\x7F]/', $cmd), preg_match("/(?<!\r)\n/", $cmd)], [0, 0]);
+conferir('Instalador: já vem com o endereço e o código (nada para digitar)', [str_contains($cmd, "\$servidor = 'https://loja.exemplo.com'"), str_contains($cmd, "\$codigo = '{$novo}'")], [true, true]);
+preg_match("/FromBase64String\('([^']+)'\)/", $cmd, $b64);
+conferir('Instalador: o agente vai inteiro dentro dele', base64_decode($b64[1] ?? ''), "# agente\r\nWrite-Host 'oi'\r\n");
+conferir('Instalador: o cmd para antes do PowerShell e o PowerShell começa no marcador', [$marca !== false, strpos($cmd, 'exit /b 1') < $marca, substr_count($cmd, Instalador::MARCADOR)], [true, true, 1]);
+conferir('Instalador: abre sozinho com o Windows, escondido', [str_contains($cmd, "GetFolderPath('Startup')"), str_contains($cmd, '-WindowStyle Hidden')], [true, true]);
+conferir('Instalador: aspas simples no endereço não quebram o script', str_contains(Instalador::cmd("https://x.com/a'b", 'c', 'x'), "'https://x.com/a''b'"), true);
+conferir('Instalador de verdade: leva o agente.ps1 do repositório', str_contains(Instalador::cmd('https://x', 'c'), base64_encode((string) file_get_contents(dirname(__DIR__) . '/impressora/agente.ps1'))), true);
+$agente->revogar();
 
 echo "\nOS DOIS ESQUEMAS TÊM AS TABELAS NOVAS\n";
 foreach (['schema.sqlite.sql', 'schema.pgsql.sql'] as $arquivo) {

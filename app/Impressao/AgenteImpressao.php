@@ -36,6 +36,8 @@ final class AgenteImpressao
     private const SEM_RESPOSTA_S = 180;
     /** Estados da fila do Windows (Get-Printer) que impedem a impressão. */
     private const PROBLEMAS = ['Paused', 'Error', 'PaperJam', 'PaperOut', 'Offline', 'NotAvailable', 'UserIntervention', 'DoorOpen', 'PaperProblem', 'NoToner'];
+    /** Impressoras do Windows que não são papel (PDF, OneNote, XPS, fax): a tela não oferece para comanda. */
+    private const PORTAS_VIRTUAIS = ['PORTPROMPT:', 'NUL:', 'SHRFAX:', 'XPSPORT:', 'FILE:'];
     private const PROBLEMAS_PT = [
         'Paused' => 'pausada no Windows', 'Error' => 'com erro', 'PaperJam' => 'com papel enroscado', 'PaperOut' => 'sem papel',
         'Offline' => 'desligada ou desconectada', 'NotAvailable' => 'indisponível', 'UserIntervention' => 'esperando alguém mexer nela',
@@ -94,6 +96,11 @@ final class AgenteImpressao
         if ($erros !== []) {
             return $erros;
         }
+        // Trocou a impressora, o jeito de enviar ou a largura: o "saiu certinho" do teste não vale mais.
+        $antes = $this->ajustes();
+        if ([$antes['impressora'], $antes['linguagem'], $antes['largura_mm']] !== [$impressora, $linguagem, $largura]) {
+            $this->config->salvar(['impressora_confirmada_em' => '']);
+        }
         $this->config->salvar([
             'impressao_modo' => $modo,
             'impressora_nome' => $impressora,
@@ -119,8 +126,16 @@ final class AgenteImpressao
             'impressora_agente_hash' => hash('sha256', $codigo),
             'impressora_agente_desde' => Relogio::agora(),   // só pedidos daqui em diante: o agente novo não imprime o passado
             'impressao_modo' => 'agente',
+            'impressora_confirmada_em' => '',
+            'impressora_agente_contato_em' => '',   // o sinal do programa antigo não vale para o novo (a tela espera o novo ligar)
         ]);
         return $codigo;
+    }
+
+    /** O dono viu a comanda de teste sair certinha (passo 3 da tela Impressora). */
+    public function confirmar(): void
+    {
+        $this->config->salvar(['impressora_confirmada_em' => Relogio::agora()]);
     }
 
     public function codigoValido(string $codigo): bool
@@ -131,7 +146,7 @@ final class AgenteImpressao
 
     public function revogar(): void
     {
-        $this->config->salvar(['impressora_agente_hash' => '', 'impressora_agente_contato_em' => '', 'impressao_modo' => 'navegador']);
+        $this->config->salvar(['impressora_agente_hash' => '', 'impressora_agente_contato_em' => '', 'impressao_modo' => 'navegador', 'impressora_confirmada_em' => '']);
     }
 
     // ---------- Ciclo do agente ----------
@@ -150,6 +165,8 @@ final class AgenteImpressao
                     'nome' => mb_substr(trim((string) $i['nome']), 0, 120),
                     'status' => mb_substr((string) ($i['status'] ?? ''), 0, 40),
                     'padrao' => !empty($i['padrao']),
+                    'porta' => mb_substr((string) ($i['porta'] ?? ''), 0, 80),
+                    'driver' => mb_substr((string) ($i['driver'] ?? ''), 0, 120),
                 ];
             }
         }
@@ -294,7 +311,8 @@ final class AgenteImpressao
                 'contato_em' => Relogio::iso($this->config->get('impressora_agente_contato_em') ?: null),
                 'computador' => $info['computador'] ?? '',
                 'versao' => (int) ($info['versao'] ?? 0),
-                'impressoras' => $info['impressoras'] ?? [],
+                'impressoras' => array_map(static fn (array $i): array => $i + ['virtual' => self::virtual($i)], $info['impressoras'] ?? []),
+                'confirmada_em' => Relogio::iso($this->config->get('impressora_confirmada_em') ?: null),
             ],
             'alerta' => $this->alertaParaOPainel(),
             'trabalhos' => array_map(static fn (array $t): array => [
@@ -303,6 +321,15 @@ final class AgenteImpressao
                 'criado_em' => Relogio::iso($t['criado_em']), 'feito_em' => Relogio::iso($t['feito_em']),
             ], $trabalhos),
         ];
+    }
+
+    /** PDF, OneNote, XPS, fax e afins: existem no Windows, mas não saem em papel. */
+    public static function virtual(array $impressora): bool
+    {
+        if (in_array(strtoupper((string) ($impressora['porta'] ?? '')), self::PORTAS_VIRTUAIS, true)) {
+            return true;
+        }
+        return preg_match('/\b(pdf|onenote|xps|fax)\b|enviar para|send to/i', (string) ($impressora['nome'] ?? '')) === 1;
     }
 
     /**
@@ -319,8 +346,8 @@ final class AgenteImpressao
         if (!$this->online()) {
             $contato = $this->config->get('impressora_agente_contato_em');
             return ['estado' => 'offline', 'texto' => $contato === ''
-                ? 'O agente de impressão ainda não se conectou. As comandas não estão saindo.'
-                : 'O agente de impressão está desligado ou sem internet. As comandas não estão saindo.'];
+                ? 'O programa da impressora ainda não foi aberto no computador da impressora. As comandas não estão saindo.'
+                : 'O computador da impressora está desligado ou sem internet. As comandas não estão saindo.'];
         }
         $info = json_decode($this->config->get('impressora_agente_info', ''), true);
         $impressoras = is_array($info['impressoras'] ?? null) ? $info['impressoras'] : [];
@@ -331,7 +358,7 @@ final class AgenteImpressao
             }
         }
         if ($a['impressora'] !== '' && $escolhida === null) {
-            return ['estado' => 'impressora', 'texto' => "A impressora \"{$a['impressora']}\" não foi encontrada no computador do agente."];
+            return ['estado' => 'impressora', 'texto' => "A impressora \"{$a['impressora']}\" não foi encontrada no computador da impressora."];
         }
         if ($escolhida !== null && in_array($escolhida['status'], self::PROBLEMAS, true)) {
             return ['estado' => 'impressora', 'texto' => "A impressora \"{$escolhida['nome']}\" está " . self::PROBLEMAS_PT[$escolhida['status']] . '. As comandas ficam na fila até ela voltar.'];

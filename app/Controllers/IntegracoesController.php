@@ -10,6 +10,7 @@ use App\Core\Resposta;
 use App\Core\Sessao;
 use App\Ifood\Ifood;
 use App\Impressao\AgenteImpressao;
+use App\Impressao\Instalador;
 
 /**
  * Telas iFood e Impressora do painel (só o proprietário) e a API do agente de impressão.
@@ -140,6 +141,29 @@ final class IntegracoesController
         Resposta::json(['codigo' => $codigo, 'servidor' => self::enderecoDoSite($req), 'situacao' => $agente->situacao()]);
     }
 
+    /**
+     * POST /api/admin/impressora/instalador: o programa da impressora num arquivo só, já configurado (D86).
+     * Gera um código novo a cada download (o programa instalado antes para de valer) e liga o modo agente.
+     */
+    public function impressoraInstalador(Requisicao $req): void
+    {
+        Sessao::exigir($req, ['admin'], true);
+        $codigo = (new AgenteImpressao())->gerarCodigo();
+        header('Content-Type: application/octet-stream');
+        header('Content-Disposition: attachment; filename="' . Instalador::NOME_ARQUIVO . '"');
+        header('Cache-Control: no-store');
+        echo Instalador::cmd(self::enderecoDoSite($req), $codigo);
+    }
+
+    /** POST /api/admin/impressora/confirmar: o dono viu a comanda de teste sair certinha. */
+    public function impressoraConfirmar(Requisicao $req): void
+    {
+        Sessao::exigir($req, ['admin'], true);
+        $agente = new AgenteImpressao();
+        $agente->confirmar();
+        Resposta::json($agente->situacao());
+    }
+
     public function impressoraRevogar(Requisicao $req): void
     {
         Sessao::exigir($req, ['admin'], true);
@@ -154,7 +178,7 @@ final class IntegracoesController
         Sessao::exigir($req, ['admin'], true);
         $agente = new AgenteImpressao();
         if (!$agente->online()) {
-            throw new ErroHttp(409, 'agente_offline', 'O agente de impressão não está conectado. Abra o "iniciar-impressora" no computador da impressora.');
+            throw new ErroHttp(409, 'agente_offline', 'O programa da impressora não está ligado. Confira se o computador da impressora está ligado e com internet.');
         }
         $agente->pedirTeste();
         Resposta::json($agente->situacao(), 201);

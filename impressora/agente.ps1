@@ -6,7 +6,9 @@
 #   * Pelo driver do Windows: para impressora de etiqueta (TSPL/ZPL) ou qualquer uma com o driver certo.
 # Toda a parametrizacao (impressora, jeito de enviar, papel, letra, vias) vem do painel.
 #
-# Uso:  iniciar-impressora.bat                 (normal; na primeira vez pede o endereco do servidor e o codigo)
+# Instalacao normal (D86): o painel entrega um instalar-impressora.cmd ja configurado, que grava este arquivo e o config.json
+# em %LOCALAPPDATA%\ImpressoraDoPainel e liga o agente escondido, abrindo sozinho com o Windows.
+# Uso manual:  iniciar-impressora.bat         (na primeira vez pede o endereco do servidor e o codigo)
 #       powershell -File agente.ps1 -UmaVez     (um ciclo so, para teste)
 #       powershell -File agente.ps1 -UmaVez -Previa C:\pasta   (em vez de imprimir, salva cada comanda como PNG nesta pasta)
 # Este arquivo fica so com caracteres ASCII: o PowerShell 5.1 le scripts sem BOM com a codificacao do Windows.
@@ -38,7 +40,7 @@ if ($Instalar) {
     Write-Host ''
     exit 0
 }
-$VERSAO = 2
+$VERSAO = 3
 $LOG = Join-Path $PSScriptRoot 'agente.log'
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 Add-Type -AssemblyName System.Drawing
@@ -249,7 +251,7 @@ function Impressoras {
     try { $padrao = (Get-CimInstance Win32_Printer -Filter 'Default=TRUE').Name } catch { }
     $lista = @()
     foreach ($p in (Get-Printer)) {
-        $lista += [pscustomobject]@{ nome = $p.Name; status = [string]$p.PrinterStatus; padrao = ($p.Name -eq $padrao) }
+        $lista += [pscustomobject]@{ nome = $p.Name; status = [string]$p.PrinterStatus; padrao = ($p.Name -eq $padrao); porta = [string]$p.PortName; driver = [string]$p.DriverName }
     }
     $script:cacheImpressoras = $lista
     $script:cacheEm = Get-Date
@@ -530,7 +532,10 @@ function Imprimir($trabalho, $ajustes) {
 
 # ---------------------------------------------------------------- laco principal
 $mutex = New-Object System.Threading.Mutex($false, 'Local\AgenteImpressaoFamiliaMassas')
-if (-not $mutex.WaitOne(0)) {
+# Agente anterior fechado a forca (o instalador faz isso): a trava fica "abandonada" e o .NET avisa com erro, mas ela ja e nossa.
+$livre = $false
+try { $livre = $mutex.WaitOne(0) } catch [System.Threading.AbandonedMutexException] { $livre = $true }
+if (-not $livre) {
     Write-Host 'O agente de impressao ja esta aberto neste computador. Esta janela pode ser fechada.'
     exit 1
 }
@@ -540,6 +545,7 @@ Registrar "Agente de impressao v$VERSAO ligado. Servidor: $($script:cfg.servidor
 $ultimos = $null
 $intervalo = 3
 $falhas = 0
+$conectou = $false
 $avisouProblema = ''
 while ($true) {
     try {
@@ -555,7 +561,8 @@ while ($true) {
         }
 
         $r = Chamar '/api/impressora/ciclo' @{ computador = $env:COMPUTERNAME; versao = $VERSAO; impressoras = @($lista); pronta = $pronta }
-        if ($falhas -gt 0) { Registrar 'Conexao com o servidor de volta.' }
+        if (-not $conectou) { Registrar 'Agente conectado ao servidor.'; $conectou = $true }
+        elseif ($falhas -gt 0) { Registrar 'Conexao com o servidor de volta.' }
         $falhas = 0
         $ultimos = $r.ajustes
         if ($r.intervalo_s) { $intervalo = [int]$r.intervalo_s }
@@ -577,8 +584,10 @@ while ($true) {
     } catch {
         $falhas++
         if ($_.Exception.Message -eq 'CODIGO_INVALIDO') {
-            Registrar 'O servidor recusou o codigo do agente. Gere um codigo novo no painel (tela Impressora) e apague o arquivo config.json desta pasta.'
+            if ($falhas -eq 1 -or $falhas % 20 -eq 0) { Registrar 'O servidor recusou o codigo do agente. Baixe o programa da impressora de novo no painel (tela Impressora).' }
             $intervalo = 30
+            # Instalaram por cima: o config.json novo vale sem reiniciar.
+            try { $novo = Get-Content $Config -Raw -Encoding UTF8 | ConvertFrom-Json; if ($novo.codigo -and $novo.codigo -ne $script:cfg.codigo) { $script:cfg = $novo; $falhas = 0 } } catch { }
         } else {
             if ($falhas -eq 1 -or $falhas % 20 -eq 0) { Registrar "Sem falar com o servidor: $($_.Exception.Message)" }
             $intervalo = [Math]::Min(30, 3 * $falhas)

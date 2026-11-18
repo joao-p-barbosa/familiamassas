@@ -118,6 +118,8 @@ return static function (Roteador $r): void {
     $r->get('/api/admin/impressora', $integracoes->impressora(...));
     $r->put('/api/admin/impressora', $integracoes->impressoraSalvar(...));
     $r->post('/api/admin/impressora/codigo', $integracoes->impressoraCodigo(...));
+    $r->post('/api/admin/impressora/instalador', $integracoes->impressoraInstalador(...));
+    $r->post('/api/admin/impressora/confirmar', $integracoes->impressoraConfirmar(...));
     $r->post('/api/admin/impressora/revogar', $integracoes->impressoraRevogar(...));
     $r->post('/api/admin/impressora/teste', $integracoes->impressoraTeste(...));
     $r->get('/api/admin/impressora/agente/{arquivo}', $integracoes->impressoraArquivo(...));

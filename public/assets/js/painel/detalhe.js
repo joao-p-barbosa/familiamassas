@@ -235,7 +235,7 @@ delegar(lateral, 'click', '[data-detalhe]', async (e, botao) => {
       const atualizado = await reimprimir(p);
       if (atualizado) {
         fonte.guardar(atualizado);
-        avisar(atualizado.agente_offline ? 'Comanda na fila: o agente de impressão está desligado' : 'Comanda enviada para a impressora');
+        avisar(atualizado.agente_offline ? 'Comanda na fila: o programa da impressora está desligado' : 'Comanda enviada para a impressora');
       }
       desenhar();
       break;
