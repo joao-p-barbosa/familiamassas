@@ -27,6 +27,7 @@ const STATUS_WINDOWS = {
 };
 
 let situacao = null;
+let teste = null;          // teste de conexão em andamento ou o último resultado: { rodando, passos: [{ estado, texto, dica }] }
 let codigoGerado = null;   // { codigo, servidor }: só nesta tela, até sair dela
 let editando = false;      // o dono mexeu no formulário: a atualização automática não desfaz
 let relogio = 0;
@@ -130,9 +131,14 @@ function formHtml(s) {
 
       <section class="bloco">
         <h2 class="bloco__titulo">Teste</h2>
+        ${j.modo === 'agente'
+          ? '<p class="campo__ajuda">O site fica na internet e não enxerga a impressora USB sozinho: quem imprime é o agente, aberto no computador da impressora. “Testar a conexão” confere cada elo dessa ligação e imprime uma comanda de teste.</p>'
+          : '<p class="campo__ajuda">No modo “Navegador deste painel” o site só consegue imprimir pela janela de impressão do navegador. Para imprimir sozinho na impressora USB, use o computador da loja (agente).</p>'}
         <div class="impressora__acoes">
+          ${j.modo === 'agente' ? `<button type="button" class="botao" data-impressora="conexao" ${teste?.rodando ? 'disabled' : ''}>${icone('ligacao', 18)}Testar a conexão com a impressora</button>` : ''}
           <button type="button" class="botao botao--secundario" data-impressora="teste">${icone('impressora', 18)}Imprimir comanda de teste</button>
         </div>
+        <div id="teste-conexao" aria-live="polite">${testeHtml()}</div>
         <div class="comanda-previa" id="comanda-previa" hidden></div>
         ${j.modo === 'agente' ? trabalhosHtml(s) : ''}
       </section>
@@ -142,6 +148,107 @@ function formHtml(s) {
         <button type="submit" class="botao botao--g">Salvar impressão</button>
       </div>
     </form>`;
+}
+
+/** Resultado do "Testar a conexão": um passo por elo da ligação site → agente → impressora → papel. */
+function testeHtml() {
+  if (!teste) return '';
+  const marca = { ok: 'check', erro: 'fechar', espera: 'relogio', pendente: 'menos' };
+  return `<ul class="checagem" style="margin-top: var(--e-3);">${teste.passos.map((p) => `
+    <li ${p.estado === 'ok' ? 'data-ok' : ''} ${p.estado === 'erro' ? 'data-erro' : ''}>
+      <span class="checagem__marca">${icone(marca[p.estado] ?? 'menos', 14)}</span>
+      <span class="checagem__texto"><span>${esc(p.texto)}</span>${p.dica ? `<span class="campo__ajuda">${esc(p.dica)}</span>` : ''}</span>
+    </li>`).join('')}</ul>`;
+}
+
+function pintarTeste() {
+  const alvo = $('#teste-conexao');
+  if (alvo) alvo.innerHTML = testeHtml();
+  const botao = $('[data-impressora="conexao"]');
+  if (botao) botao.disabled = Boolean(teste?.rodando);
+}
+
+const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Confere a ligação inteira e diz onde ela quebra:
+ *   1. o agente do computador da loja está falando com o site?
+ *   2. a impressora escolhida existe nele e está pronta no Windows?
+ *   3. uma comanda de teste sai de verdade (e quando falha, o motivo que o agente deu)?
+ */
+async function testarConexao() {
+  const passos = [
+    { estado: 'espera', texto: 'Agente no computador da loja', dica: '' },
+    { estado: 'pendente', texto: 'Impressora no Windows', dica: '' },
+    { estado: 'pendente', texto: 'Comanda de teste', dica: '' },
+  ];
+  teste = { rodando: true, passos };
+  pintarTeste();
+  const fim = (indice, estado, texto, dica = '') => {
+    passos[indice] = { estado, texto, dica };
+    for (let i = indice + 1; i < passos.length; i += 1) {
+      if (estado === 'erro') passos[i] = { ...passos[i], estado: 'pendente' };
+    }
+    if (estado !== 'erro' && passos[indice + 1]) passos[indice + 1].estado = 'espera';
+    pintarTeste();
+  };
+  try {
+    let s = await api('/api/admin/impressora');
+    const a = s.agente;
+
+    if (!a.tem_codigo) {
+      fim(0, 'erro', 'O agente ainda não foi instalado', 'Abra “Como instalar no computador da impressora” aqui em cima, gere o código e rode o iniciar-impressora.bat nesse computador.');
+      return;
+    }
+    if (!a.online) {
+      fim(0, 'erro', a.contato_em ? `O agente parou de responder (último sinal às ${hora(a.contato_em)})` : 'O agente nunca se conectou',
+        'Vá ao computador da impressora e abra o iniciar-impressora.bat (janela preta; pode minimizar). Se ela já está aberta, confira a internet desse computador. Para abrir sozinho ao ligar o computador, rode “iniciar-impressora.bat instalar” uma vez.');
+      return;
+    }
+    fim(0, 'ok', `Agente conectado${a.computador ? ` (${a.computador})` : ''}`);
+
+    const nome = s.ajustes.impressora || a.impressoras.find((i) => i.padrao)?.nome || '';
+    if (a.impressoras.length === 0) {
+      fim(1, 'erro', 'O agente não achou nenhuma impressora no Windows', 'Ligue a impressora no USB, confira se o Windows a mostra em Impressoras e escanners, e espere alguns segundos.');
+      return;
+    }
+    if (!nome) {
+      fim(1, 'erro', 'Nenhuma impressora escolhida', 'Escolha a térmica na lista “Impressora” aqui em cima e clique em Salvar impressão (não há impressora padrão no Windows).');
+      return;
+    }
+    if (s.alerta?.estado === 'impressora') {
+      fim(1, 'erro', s.alerta.texto, 'Resolva isso no computador da impressora (papel, tampa, cabo USB ou fila pausada) e teste de novo.');
+      return;
+    }
+    fim(1, 'ok', `Impressora “${nome}” pronta no Windows`);
+
+    s = await api('/api/admin/impressora/teste', { metodo: 'POST' });
+    const id = Math.max(0, ...s.trabalhos.filter((t) => t.tipo === 'teste').map((t) => t.id));
+    const limite = Date.now() + 30_000;
+    while (Date.now() < limite) {
+      await esperar(1500);
+      s = await api('/api/admin/impressora');
+      const t = s.trabalhos.find((x) => x.id === id);
+      if (t?.estado === 'feito') {
+        fim(2, 'ok', 'A comanda de teste foi enviada à impressora', 'Se o papel não saiu, confira se há bobina, se a tampa está fechada e se a largura e o “Como enviar” estão certos.');
+        return;
+      }
+      if (t?.estado === 'falhou') {
+        fim(2, 'erro', `A impressora recusou a comanda${t.erro ? `: ${t.erro}` : ''}`, 'Troque o “Como enviar” (cupom ou etiqueta) ou a largura do papel, desligue e ligue a impressora e teste de novo.');
+        return;
+      }
+      passos[2] = { estado: 'espera', texto: t?.estado === 'enviado' ? 'Imprimindo…' : 'Comanda de teste na fila do agente…', dica: '' };
+      pintarTeste();
+    }
+    fim(2, 'erro', 'O agente não respondeu em 30 segundos', 'A comanda ficou na fila. Veja se a janela do agente continua aberta e se a internet do computador está estável.');
+  } catch (erro) {
+    const i = passos.findIndex((p) => p.estado === 'espera');
+    fim(i === -1 ? 0 : i, 'erro', erro.message || 'Não deu para fazer o teste', 'Tente de novo em alguns segundos.');
+  } finally {
+    teste.rodando = false;
+    pintarTeste();
+    atualizar();
+  }
 }
 
 function trabalhosHtml(s) {
@@ -273,6 +380,12 @@ delegar(conteudo, 'click', '[data-impressora]', async (e, botao) => {
     } catch (erro) {
       mostrarErro(erro);
     }
+    return;
+  }
+  if (acao === 'conexao') {
+    if (teste?.rodando) return;
+    if (editando && !(await salvar(form, { silencioso: true }))) return;   // o agente lê a parametrização do servidor
+    testarConexao();
     return;
   }
   if (acao === 'teste') {

@@ -13,10 +13,31 @@
 param(
     [string]$Config = (Join-Path $PSScriptRoot 'config.json'),
     [switch]$UmaVez,
-    [string]$Previa = ''
+    [string]$Previa = '',
+    [switch]$Instalar,
+    [string]$PastaAtalho = ''
 )
 
 $ErrorActionPreference = 'Stop'
+
+# Abrir sozinho quando o Windows iniciar: um atalho (minimizado) na pasta Inicializar do usuario. Fica aqui, e nao no .bat,
+# porque as aspas de um comando PowerShell dentro de um .bat se perdem (foi o que quebrou o "instalar" antigo).
+if ($Instalar) {
+    $pasta = $PastaAtalho
+    if (-not $pasta) { $pasta = [Environment]::GetFolderPath('Startup') }
+    $caminho = Join-Path $pasta 'Agente de impressao.lnk'
+    $atalho = (New-Object -ComObject WScript.Shell).CreateShortcut($caminho)
+    $atalho.TargetPath = Join-Path $PSScriptRoot 'iniciar-impressora.bat'
+    $atalho.WorkingDirectory = $PSScriptRoot
+    $atalho.WindowStyle = 7
+    $atalho.Save()
+    Write-Host ''
+    Write-Host '  Pronto: o agente vai abrir sozinho (minimizado) quando o Windows iniciar.'
+    Write-Host "  Atalho criado em: $caminho"
+    Write-Host '  Para desfazer, apague o atalho "Agente de impressao" dessa pasta (Win+R, shell:startup).'
+    Write-Host ''
+    exit 0
+}
 $VERSAO = 2
 $LOG = Join-Path $PSScriptRoot 'agente.log'
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12

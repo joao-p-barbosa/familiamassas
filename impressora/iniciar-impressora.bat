@@ -9,9 +9,6 @@ pause
 goto :eof
 
 :instalar
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$s = (New-Object -ComObject WScript.Shell).CreateShortcut([Environment]::GetFolderPath(Startup) + \Agente de impressao.lnk); $s.TargetPath = %~dp0iniciar-impressora.bat; $s.WorkingDirectory = %~dp0; $s.WindowStyle = 7; $s.Save()"
-echo.
-echo   Pronto: o agente vai abrir sozinho (minimizado) quando o Windows iniciar.
-echo   Para desfazer, apague o atalho "Agente de impressao" da pasta Inicializar (Win+R, shell:startup).
-echo.
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0agente.ps1" -Instalar
 pause
+goto :eof

@@ -984,6 +984,12 @@
   background: var(--cor-sucesso-suave);
   color: var(--cor-sucesso);
 }
+.checagem li[data-erro] .checagem__marca {
+  background: var(--cor-perigo-suave);
+  color: var(--cor-perigo);
+}
+.checagem li { align-items: flex-start; }
+.checagem__texto { display: grid; gap: var(--e-1); }
 .numeros {
   display: grid;
   grid-template-columns: repeat(2, 1fr);

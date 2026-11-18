@@ -18,8 +18,15 @@ INSTALAR (uma vez)
    salve e clique em "Imprimir comanda de teste".
    Dica: a etiqueta embaixo da impressora diz a linguagem (ex.: "Comandos ESC/POS") e a largura (ex.: 57,5 mm = rolo de 58 mm).
 
-ABRIR SOZINHO AO LIGAR O COMPUTADOR
+ABRIR SOZINHO AO LIGAR O COMPUTADOR (faca isso uma vez: sem ele aberto, nada imprime sozinho)
 - Abra o Prompt de Comando nesta pasta e rode:  iniciar-impressora.bat instalar
+  Ele cria um atalho minimizado na pasta Inicializar do Windows.
+- Depois reinicie o computador e confira no painel: tela Impressora > "Testar a conexao com a impressora".
+
+COMO SABER SE ESTA TUDO LIGADO
+- No painel, tela Impressora, clique em "Testar a conexao com a impressora". Ele confere, em ordem:
+  1) o agente deste computador esta falando com o site; 2) a impressora existe e esta pronta no Windows;
+  3) uma comanda de teste sai de verdade. Onde falhar, ele diz o que fazer.
 - Para desfazer: Win+R, digite shell:startup e apague o atalho "Agente de impressao".
 
 NO DIA A DIA
