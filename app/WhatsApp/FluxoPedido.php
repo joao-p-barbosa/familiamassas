@@ -18,7 +18,7 @@ use App\Services\TokenWhatsApp;
  * Pedido pelo WhatsApp passo a passo (D74). Começa quando o cliente digita a palavra configurada (padrão "Cardápio") e segue o mesmo caminho do cardápio
  * digital: pratos da casa, "Monte a sua massa" (tamanho, massa, molho e os grupos de ingredientes), bebidas e sobremesas,
  * entrega ou retirada, nome, localização e endereço, pagamento, resumo e confirmação. Tudo por número, porque o WhatsApp
- * comum não tem botões.
+ * comum não tem botões; no canal QR as escolhas também saem como enquete (D85) e o voto chega como o número da opção.
  *
  * Nada de IA no caminho do pedido: só quando o cliente escreve algo que o passo não entende (uma dúvida no meio do pedido),
  * o assistente responde em uma ou duas frases e o bot repete a pergunta do passo. O pedido sai pelo mesmo PedidoService do
@@ -33,6 +33,10 @@ final class FluxoPedido
     /** Palavras que o bot usa para outras coisas e não podem abrir o cardápio. */
     public const RESERVADAS = ['cancelar', 'atendente', 'acompanhar'];
     public const VALIDADE_SEGUNDOS = 1800;   // 30 min parado: o pedido em andamento some e o bot volta ao silêncio
+    // Limites do WhatsApp para uma enquete (D85).
+    public const ENQUETE_MAX_OPCOES = 12;
+    public const ENQUETE_MAX_OPCAO = 100;
+    public const ENQUETE_MAX_PERGUNTA = 255;
     private const ROTULO_PAGAMENTO = ['pix' => 'Pix', 'cartao' => 'Cartão', 'dinheiro' => 'Dinheiro'];
     private const DESCRICAO_DO_PASSO = [
         'menu' => 'escolhendo um item do cardápio', 'prato_tamanho' => 'escolhendo o tamanho do prato', 'monte_tamanho' => 'escolhendo o tamanho da massa',
@@ -88,8 +92,8 @@ final class FluxoPedido
 
     /**
      * Uma mensagem de quem está no meio de um pedido.
-     * @param array{telefone:string, texto:string, nome:?string, local?:?array{lat:float, lng:float}} $m
-     * @return string o que aconteceu: cancelado | menu | atendente | invalido | ia | pedido_criado | erro_pedido | <passo seguinte>
+     * @param array{telefone:string, texto:string, nome:?string, local?:?array{lat:float, lng:float}, enquete?:?string} $m  enquete: a tag da enquete votada (o voto já chega como o número da opção em "texto")
+     * @return string o que aconteceu: cancelado | menu | atendente | invalido | ia | pedido_criado | erro_pedido | enquete_antiga | <passo seguinte>
      */
     public function receber(array $m): string
     {
@@ -97,6 +101,10 @@ final class FluxoPedido
         $s = $this->carregar($telefone);
         if ($s === null) {
             return 'sem_pedido';
+        }
+        // Voto numa enquete que não é a do passo atual (o cliente já avançou digitando, ou o bot repetiu a pergunta): ignora em silêncio.
+        if (($m['enquete'] ?? null) !== null && ($s['enquete'] ?? null) !== $m['enquete']) {
+            return 'enquete_antiga';
         }
         $texto = trim($m['texto']);
         $chave = self::chave($texto);
@@ -378,42 +386,67 @@ final class FluxoPedido
 
     // ---------- Perguntas ----------
 
-    /** Monta a pergunta do passo atual, grava o que cada número quer dizer e envia. */
+    /**
+     * Monta a pergunta do passo atual, grava o que cada número quer dizer e envia.
+     * No canal QR (D85) os passos de escolha saem como enquete: o texto de contexto (resumo, aviso, tamanhos) vai antes como mensagem
+     * comum e as opções vão na enquete, numeradas igual à lista de sempre (o número digitado continua valendo). Passo com opções demais
+     * para uma enquete, ou outro canal, mantém a lista numerada.
+     */
     private function perguntar(string $telefone, array $s): void
     {
         $catalogo = $this->cardapio->publico();
         $aviso = isset($s['aviso']) ? $s['aviso'] . "\n\n" : '';
-        unset($s['aviso']);
+        unset($s['aviso'], $s['enquete']);
         $s['opcoes'] = [];
-        $linhas = [];
-        $lista = static function (array &$s, array &$linhas, mixed $valor, string $rotulo): void {
+        $linhas = [];        // a pergunta como lista numerada (texto)
+        $contexto = [];      // o que fica como texto comum antes da enquete
+        $rotulos = [];       // o texto de cada opção da enquete (sem o número)
+        $pergunta = null;    // o título da enquete; null = este passo não é de escolha
+        $multipla = false;
+        $ambos = static function (string $linha) use (&$linhas, &$contexto): void {
+            $linhas[] = $linha;
+            $contexto[] = $linha;
+        };
+        // Opção que vale um valor guardado na sessão ($s['opcoes']): o número digitado ou votado aponta para ele.
+        $lista = static function (mixed $valor, string $rotulo) use (&$s, &$linhas, &$rotulos): void {
             $s['opcoes'][] = $valor;
-            $linhas[] = count($s['opcoes']) . '. ' . $rotulo;
+            $rotulos[] = $rotulo;
+            $linhas[] = count($rotulos) . '. ' . $rotulo;
+        };
+        // Opção de número fixo (o passo lê o número direto).
+        $fixa = static function (string $rotulo) use (&$linhas, &$rotulos): void {
+            $rotulos[] = $rotulo;
+            $linhas[] = count($rotulos) . '. ' . $rotulo;
         };
 
         switch ($s['etapa']) {
             case 'menu':
+                $esgotados = [];
                 $linhas[] = '🍝 *Cardápio* (responda com o número)';
                 $linhas[] = '';
                 $linhas[] = '*Pratos da casa*';
                 foreach ($this->itens($catalogo, 'prato_casa') as $i) {
                     if ($i['estado'] !== 'disponivel') {
                         $linhas[] = "~{$i['nome']}~ (esgotado hoje)";
+                        $esgotados[] = $i['nome'];
                         continue;
                     }
-                    $lista($s, $linhas, ['prato', $i['id']], "{$i['nome']}" . ($i['descricao'] !== '' ? " — {$i['descricao']}" : ''));
+                    $lista(['prato', $i['id']], "{$i['nome']}" . ($i['descricao'] !== '' ? " — {$i['descricao']}" : ''));
                 }
                 $linhas[] = '';
-                $lista($s, $linhas, ['monte', null], '*Monte a sua massa* (você escolhe tudo)');
+                $lista(['monte', null], '*Monte a sua massa* (você escolhe tudo)');
                 if ($this->itens($catalogo, 'simples') !== []) {
-                    $lista($s, $linhas, ['simples', null], 'Bebidas e sobremesas');
+                    $lista(['simples', null], 'Bebidas e sobremesas');
                 }
                 if ($s['carrinho'] !== []) {
-                    $lista($s, $linhas, ['fechar', null], '*Fechar o pedido* (' . self::itensTexto($s['carrinho']) . ', ' . self::reais($this->total($s, false)) . ')');
+                    $lista(['fechar', null], '*Fechar o pedido* (' . self::itensTexto($s['carrinho']) . ', ' . self::reais($this->total($s, false)) . ')');
                 }
                 $linhas[] = '';
-                $linhas[] = 'Tamanhos: ' . implode(' · ', array_map(static fn (array $t): string => "{$t['nome']} " . self::reais($t['preco_centavos']), $this->disponiveis($catalogo['tamanhos'])));
+                $tamanhos = 'Tamanhos: ' . implode(' · ', array_map(static fn (array $t): string => "{$t['nome']} " . self::reais($t['preco_centavos']), $this->disponiveis($catalogo['tamanhos'])));
+                $linhas[] = $tamanhos;
                 $linhas[] = 'A qualquer momento: *cancelar* ou *atendente*.';
+                $contexto = ['🍝 *Cardápio*', ...($esgotados !== [] ? ['Esgotado hoje: ' . implode(', ', $esgotados) . '.'] : []), '', $tamanhos, 'A qualquer momento: *cancelar* ou *atendente*.'];
+                $pergunta = 'O que vai ser?';
                 break;
 
             case 'prato_tamanho':
@@ -421,15 +454,17 @@ final class FluxoPedido
                 $linhas[] = "*{$prato['nome']}*. Qual tamanho?";
                 foreach ($this->disponiveis($catalogo['tamanhos']) as $t) {
                     $preco = $this->precoMontado($catalogo, ['tamanho_id' => $t['id'], 'massa_id' => $prato['massa_id'], 'molho_id' => $prato['molho_id'], 'ingrediente_ids' => $prato['ingrediente_ids']]);
-                    $lista($s, $linhas, $t['id'], "{$t['nome']}" . ($t['descricao'] !== '' ? " ({$t['descricao']})" : '') . ' — ' . self::reais($preco));
+                    $lista($t['id'], "{$t['nome']}" . ($t['descricao'] !== '' ? " ({$t['descricao']})" : '') . ' — ' . self::reais($preco));
                 }
+                $pergunta = "{$prato['nome']}: qual tamanho?";
                 break;
 
             case 'monte_tamanho':
                 $linhas[] = '*Monte a sua massa* 🍝 Primeiro, o tamanho:';
                 foreach ($this->disponiveis($catalogo['tamanhos']) as $t) {
-                    $lista($s, $linhas, $t['id'], "{$t['nome']} — " . self::reais($t['preco_centavos']) . " (inclui {$t['inclusos']} ingredientes)");
+                    $lista($t['id'], "{$t['nome']} — " . self::reais($t['preco_centavos']) . " (inclui {$t['inclusos']} ingredientes)");
                 }
+                $pergunta = 'Monte a sua massa 🍝 Primeiro, o tamanho:';
                 break;
 
             case 'monte_massa':
@@ -437,8 +472,9 @@ final class FluxoPedido
                 $massa = $s['etapa'] === 'monte_massa';
                 $linhas[] = $massa ? 'Qual massa?' : 'Qual molho?';
                 foreach ($this->disponiveis($catalogo[$massa ? 'massas' : 'molhos']) as $o) {
-                    $lista($s, $linhas, $o['id'], $o['nome'] . ($o['acrescimo_centavos'] > 0 ? ' (+' . self::reais($o['acrescimo_centavos']) . ')' : ''));
+                    $lista($o['id'], $o['nome'] . ($o['acrescimo_centavos'] > 0 ? ' (+' . self::reais($o['acrescimo_centavos']) . ')' : ''));
                 }
+                $pergunta = $massa ? 'Qual massa?' : 'Qual molho?';
                 break;
 
             case 'monte_grupo':
@@ -447,24 +483,32 @@ final class FluxoPedido
                 $escolhidos = count($s['atual']['ingrediente_ids']);
                 $linhas[] = "*{$grupo}* — pode escolher vários (ex.: 1, 3) ou 0 para nenhum.";
                 if ($s['grupo'] === 0) {
-                    $linhas[] = "Seu tamanho inclui {$tamanho['inclusos']} ingredientes; a partir daí, cada um custa o valor ao lado.";
+                    $ambos("Seu tamanho inclui {$tamanho['inclusos']} ingredientes; a partir daí, cada um custa o valor ao lado.");
                 } elseif ($escolhidos > 0) {
-                    $linhas[] = "Você já escolheu {$escolhidos} de {$tamanho['inclusos']} inclusos.";
+                    $ambos("Você já escolheu {$escolhidos} de {$tamanho['inclusos']} inclusos.");
                 }
                 foreach ($this->disponiveis(array_filter($catalogo['ingredientes'], static fn (array $i): bool => $i['grupo'] === $grupo)) as $i) {
-                    $lista($s, $linhas, $i['id'], $i['nome'] . ' (+' . self::reais($i['preco_extra_centavos']) . ' se for extra)');
+                    $lista($i['id'], $i['nome'] . ' (+' . self::reais($i['preco_extra_centavos']) . ' se for extra)');
                 }
+                $pergunta = "{$grupo}: marque o que quiser e toque em ✅ Pronto";
+                $multipla = true;
                 break;
 
             case 'simples':
+                $esgotados = [];
                 $linhas[] = '*Bebidas e sobremesas*';
                 foreach ($this->itens($catalogo, 'simples') as $i) {
                     if ($i['estado'] !== 'disponivel') {
                         $linhas[] = "~{$i['nome']}~ (esgotado hoje)";
+                        $esgotados[] = $i['nome'];
                         continue;
                     }
-                    $lista($s, $linhas, $i['id'], "{$i['nome']} — " . self::reais($i['preco_centavos']));
+                    $lista($i['id'], "{$i['nome']} — " . self::reais($i['preco_centavos']));
                 }
+                if ($esgotados !== []) {
+                    $contexto[] = 'Esgotado hoje: ' . implode(', ', $esgotados) . '.';
+                }
+                $pergunta = 'Bebidas e sobremesas';
                 break;
 
             case 'quantidade':
@@ -473,22 +517,24 @@ final class FluxoPedido
 
             case 'mais':
                 $ultimo = $s['carrinho'][count($s['carrinho']) - 1];
-                $linhas[] = "Anotado: {$ultimo['quantidade']}× {$ultimo['nome']} — " . self::reais($ultimo['preco'] * $ultimo['quantidade']) . '.';
-                $linhas[] = 'Seu pedido: ' . self::itensTexto($s['carrinho']) . ', ' . self::reais($this->total($s, false)) . '.';
+                $ambos("Anotado: {$ultimo['quantidade']}× {$ultimo['nome']} — " . self::reais($ultimo['preco'] * $ultimo['quantidade']) . '.');
+                $ambos('Seu pedido: ' . self::itensTexto($s['carrinho']) . ', ' . self::reais($this->total($s, false)) . '.');
                 $linhas[] = '';
-                $linhas[] = '1. Pedir mais alguma coisa';
-                $linhas[] = '2. Fechar o pedido';
+                $fixa('Pedir mais alguma coisa');
+                $fixa('Fechar o pedido');
+                $pergunta = 'Mais alguma coisa?';
                 break;
 
             case 'tipo':
                 $linhas[] = 'Entrega ou retirada?';
                 if ($this->config->get('aceita_entrega', '1') === '1') {
                     $taxa = $this->config->inteiro('taxa_entrega_centavos');
-                    $lista($s, $linhas, 'entrega', 'Entrega (' . ($taxa > 0 ? 'taxa ' . self::reais($taxa) . ', ' : '') . 'cerca de ' . $this->config->inteiro('tempo_entrega_min', 50) . ' min)');
+                    $lista('entrega', 'Entrega (' . ($taxa > 0 ? 'taxa ' . self::reais($taxa) . ', ' : '') . 'cerca de ' . $this->config->inteiro('tempo_entrega_min', 50) . ' min)');
                 }
                 if ($this->config->get('aceita_retirada', '1') === '1') {
-                    $lista($s, $linhas, 'retirada', 'Retirada no balcão (cerca de ' . $this->config->inteiro('tempo_retirada_min', 25) . ' min)');
+                    $lista('retirada', 'Retirada no balcão (cerca de ' . $this->config->inteiro('tempo_retirada_min', 25) . ' min)');
                 }
+                $pergunta = 'Entrega ou retirada?';
                 break;
 
             case 'nome':
@@ -507,10 +553,13 @@ final class FluxoPedido
                 break;
 
             case 'pagamento':
-                $linhas[] = 'Como vai pagar? (o pagamento é feito na ' . ($s['tipo'] === 'entrega' ? 'entrega' : 'retirada') . ')';
-                $linhas[] = '1. Pix';
-                $linhas[] = '2. Cartão';
-                $linhas[] = '3. Dinheiro';
+                $quando = 'o pagamento é feito na ' . ($s['tipo'] === 'entrega' ? 'entrega' : 'retirada');
+                $linhas[] = "Como vai pagar? ({$quando})";
+                $contexto[] = ucfirst($quando) . '.';
+                $fixa('Pix');
+                $fixa('Cartão');
+                $fixa('Dinheiro');
+                $pergunta = 'Como vai pagar?';
                 break;
 
             case 'troco':
@@ -519,28 +568,81 @@ final class FluxoPedido
 
             case 'resumo':
                 $s['total_mostrado'] = $this->total($s);
-                $linhas[] = '*Confira o seu pedido:*';
+                $ambos('*Confira o seu pedido:*');
                 foreach ($s['carrinho'] as $item) {
-                    $linhas[] = "• {$item['quantidade']}× {$item['nome']} — " . self::reais($item['preco'] * $item['quantidade']);
+                    $ambos("• {$item['quantidade']}× {$item['nome']} — " . self::reais($item['preco'] * $item['quantidade']));
                 }
                 if ($s['tipo'] === 'entrega' && ($taxa = $this->config->inteiro('taxa_entrega_centavos')) > 0) {
-                    $linhas[] = '• Taxa de entrega — ' . self::reais($taxa);
+                    $ambos('• Taxa de entrega — ' . self::reais($taxa));
                 }
-                $linhas[] = '*Total: ' . self::reais($s['total_mostrado']) . '*';
-                $linhas[] = '';
-                $linhas[] = $s['tipo'] === 'entrega'
+                $ambos('*Total: ' . self::reais($s['total_mostrado']) . '*');
+                $ambos('');
+                $ambos($s['tipo'] === 'entrega'
                     ? "Entrega para {$s['nome']}: {$s['endereco']['rua']}, {$s['endereco']['numero']}, {$s['endereco']['bairro']}" . (($s['endereco']['complemento'] ?? '') !== '' ? ", {$s['endereco']['complemento']}" : '')
-                    : "Retirada no balcão, em nome de {$s['nome']}";
-                $linhas[] = 'Pagamento: ' . self::ROTULO_PAGAMENTO[$s['pagamento']['forma']]
-                    . ($s['pagamento']['troco_para_centavos'] !== null ? ' (troco para ' . self::reais($s['pagamento']['troco_para_centavos']) . ')' : '');
+                    : "Retirada no balcão, em nome de {$s['nome']}");
+                $ambos('Pagamento: ' . self::ROTULO_PAGAMENTO[$s['pagamento']['forma']]
+                    . ($s['pagamento']['troco_para_centavos'] !== null ? ' (troco para ' . self::reais($s['pagamento']['troco_para_centavos']) . ')' : ''));
                 $linhas[] = '';
-                $linhas[] = '1. Confirmar pedido';
-                $linhas[] = '2. Começar de novo';
-                $linhas[] = '3. Cancelar';
+                $fixa('Confirmar pedido');
+                $fixa('Começar de novo');
+                $fixa('Cancelar');
+                $pergunta = 'Confirmar o pedido?';
                 break;
         }
+
+        $enquete = $pergunta !== null && Conector::ativo() ? self::enquete($pergunta, $rotulos, $multipla) : null;
+        if ($enquete !== null) {
+            $s['enquete'] = $enquete['tag'];
+        }
         $this->salvar($telefone, $s);
-        $this->enviar($telefone, $aviso . implode("\n", $linhas), 'fluxo:' . $s['etapa']);
+        $texto = $aviso . implode("\n", $linhas);
+        if ($enquete === null) {
+            $this->enviar($telefone, $texto, 'fluxo:' . $s['etapa']);
+            return;
+        }
+        $antes = trim($aviso . implode("\n", $contexto));
+        if ($antes !== '') {
+            $this->enviar($telefone, $antes, 'fluxo:' . $s['etapa']);
+        }
+        $r = WhatsApp::enviar($telefone, WhatsApp::enquete($enquete['pergunta'], $enquete['opcoes'], $multipla, $enquete['tag']), 'fluxo:' . $s['etapa'] . ':enquete');
+        if (!$r['ok'] && !$r['transitorio']) {   // o conector recusou a enquete: o cliente nunca fica sem a pergunta, ela vai como lista numerada
+            unset($s['enquete']);
+            $this->salvar($telefone, $s);
+            $this->enviar($telefone, $texto, 'fluxo:' . $s['etapa'] . ':texto');
+        }
+    }
+
+    /**
+     * A enquete deste passo, ou null se não cabe numa (menos de 2 ou mais de 12 opções): aí o passo segue como lista numerada.
+     * As opções saem numeradas ("1. Pequeno — R$ 24,90"), então o voto, o número digitado e a lista de sempre apontam para o mesmo item.
+     * Na múltipla, a última opção é o "✅ Pronto" (o voto só vale quando ele está marcado).
+     * @param list<string> $rotulos
+     * @return array{pergunta:string, opcoes:list<string>, tag:string}|null
+     */
+    private static function enquete(string $pergunta, array $rotulos, bool $multipla): ?array
+    {
+        $opcoes = [];
+        foreach ($rotulos as $i => $rotulo) {
+            $opcoes[] = self::cortar(($i + 1) . '. ' . self::semMarcas($rotulo), self::ENQUETE_MAX_OPCAO);
+        }
+        if ($multipla) {
+            $opcoes[] = '✅ Pronto (ou nenhum)';
+        }
+        if (count($opcoes) < 2 || count($opcoes) > self::ENQUETE_MAX_OPCOES) {
+            return null;
+        }
+        return ['pergunta' => self::cortar(self::semMarcas($pergunta), self::ENQUETE_MAX_PERGUNTA), 'opcoes' => $opcoes, 'tag' => bin2hex(random_bytes(6))];
+    }
+
+    /** A enquete não desenha negrito do WhatsApp: tira os * e ~. */
+    private static function semMarcas(string $texto): string
+    {
+        return trim((string) preg_replace('/\s+/u', ' ', strtr($texto, ['*' => '', '~' => ''])));
+    }
+
+    private static function cortar(string $texto, int $max): string
+    {
+        return mb_strlen($texto) > $max ? rtrim(mb_substr($texto, 0, $max - 1)) . '…' : $texto;
     }
 
     // ---------- Cardápio e preço ----------

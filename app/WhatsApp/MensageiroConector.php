@@ -15,7 +15,7 @@ final class MensageiroConector implements Mensageiro
     public function enviar(string $telefone, array $mensagem): array
     {
         $url = rtrim(Env::get('CONECTOR_URL', 'http://127.0.0.1:3001'), '/') . '/enviar';
-        $corpo = (string) json_encode(['telefone' => $telefone, 'texto' => Conector::texto($mensagem)], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $corpo = (string) json_encode(self::corpo($telefone, $mensagem), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         $conexao = curl_init($url);
         curl_setopt_array($conexao, [
             CURLOPT_POST => true,
@@ -38,6 +38,22 @@ final class MensageiroConector implements Mensageiro
         }
         // 503 = WhatsApp desconectado; 429 = fila do conector cheia: tentar de novo mais tarde resolve. O resto não.
         return self::falha("Conector {$status}: " . mb_substr((string) ($dados['erro'] ?? 'resposta inesperada'), 0, 200), in_array($status, [429, 503], true));
+    }
+
+    /**
+     * O que vai para o Node. Enquete (D85): ele envia como enquete de verdade (o texto fica vazio); o resto vai como texto.
+     * @param array<string,mixed> $mensagem
+     * @return array<string,mixed>
+     */
+    public static function corpo(string $telefone, array $mensagem): array
+    {
+        if (($mensagem['type'] ?? '') !== 'poll') {
+            return ['telefone' => $telefone, 'texto' => Conector::texto($mensagem)];
+        }
+        return ['telefone' => $telefone, 'texto' => '', 'enquete' => [
+            'tag' => (string) $mensagem['poll']['tag'], 'pergunta' => (string) $mensagem['poll']['name'],
+            'opcoes' => array_values($mensagem['poll']['options']), 'multipla' => !empty($mensagem['poll']['multipla']),
+        ]];
     }
 
     /** @return array{ok:bool, wamid:?string, erro:?string, transitorio:bool, janela_fechada:bool} */

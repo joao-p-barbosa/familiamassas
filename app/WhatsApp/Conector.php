@@ -129,8 +129,8 @@ final class Conector
 
     /**
      * Uma mensagem do Node no formato que o bot entende.
-     * @param array<string,mixed> $m {id, telefone, texto, nome?, em?: segundos desde 1970, local?: {lat, lng}}
-     * @return array{wamid:string, telefone:string, tipo:string, texto:string, botao:?string, nome:?string, local:?array{lat:float, lng:float}}|null
+     * @param array<string,mixed> $m {id, telefone, texto, nome?, em?: segundos desde 1970, local?: {lat, lng}, enquete?: tag da enquete votada}
+     * @return array{wamid:string, telefone:string, tipo:string, texto:string, botao:?string, nome:?string, local:?array{lat:float, lng:float}, enquete:?string}|null
      */
     public static function normalizar(array $m): ?array
     {
@@ -142,9 +142,10 @@ final class Conector
         $texto = mb_substr(trim((string) ($m['texto'] ?? '')), 0, 1000);
         $nome = mb_substr(trim((string) ($m['nome'] ?? '')), 0, 60);
         $local = self::local($m['local'] ?? null);
+        $enquete = isset($m['enquete']) && is_string($m['enquete']) && preg_match('/^[A-Za-z0-9_-]{4,40}$/', $m['enquete']) === 1 ? $m['enquete'] : null;
         return [
-            'wamid' => 'qr.' . mb_substr($id, 0, 150), 'telefone' => $telefone, 'tipo' => $local !== null ? 'location' : 'text',
-            'texto' => $texto, 'botao' => null, 'nome' => $nome !== '' ? $nome : null, 'local' => $local,
+            'wamid' => 'qr.' . mb_substr($id, 0, 150), 'telefone' => $telefone, 'tipo' => $enquete !== null ? 'poll_vote' : ($local !== null ? 'location' : 'text'),
+            'texto' => $texto, 'botao' => null, 'nome' => $nome !== '' ? $nome : null, 'local' => $local, 'enquete' => $enquete,
         ];
     }
 
@@ -200,6 +201,9 @@ final class Conector
         }
         if (isset($resumo['link'])) {
             $texto .= "\n\n" . $resumo['link']['rotulo'] . ': ' . $resumo['link']['url'];
+        }
+        if (isset($resumo['enquete'])) {   // enquete mandada como texto: as opções já levam o número
+            $texto .= "\n\n" . implode("\n", $resumo['enquete']['opcoes']) . "\n\nResponda com o número" . ($resumo['enquete']['multipla'] ? ' (vários: 1, 3; nenhum: 0).' : '.');
         }
         return $texto;
     }

@@ -676,7 +676,10 @@ $antes = count($falsoWhats->enviadas);
 $conector->receber([['id' => 'm.um', 'telefone' => '5511911112222', 'texto' => '1', 'em' => time()]], new App\WhatsApp\Bot());
 conferir('Fora de um pedido, "1" também fica sem resposta (não existe mais o menu de 3 opções no canal QR)', count($falsoWhats->enviadas) - $antes, 0);
 $conector->receber([['id' => 'm.cardapio', 'telefone' => '5511911112222', 'texto' => 'Cardápio', 'em' => time()]], new App\WhatsApp\Bot());
-conferir('"Cardápio" abre o cardápio pelo chat, também no canal QR', str_contains($ultimaWa()['text']['body'] ?? '', 'Pratos da casa'), true);
+$cardapioQr = array_slice($falsoWhats->enviadas, -2);
+conferir('"Cardápio" abre o cardápio pelo chat, também no canal QR (o contexto em texto e as escolhas em enquete, D85)', [
+    str_contains($cardapioQr[0]['text']['body'] ?? '', 'Cardápio'), $cardapioQr[1]['type'] ?? null, str_contains(implode('|', $cardapioQr[1]['poll']['options'] ?? []), 'Carbonara da casa'),
+], [true, 'poll', true]);
 $pdoQr->exec('DELETE FROM whatsapp_sessoes');
 
 // O envio ao Node: com o conector fora do ar, a falha é "tentar de novo" (e não um erro definitivo).
@@ -1106,6 +1109,153 @@ $pdoFx->exec('DELETE FROM whatsapp_sessoes');
 $pdoFx->exec('DELETE FROM ia_uso');
 $repoIa->salvarConfig(['ia_ativo' => '0']);
 Env::definir('OPENROUTER_API_KEY', '');
+Env::definir('APP_URL', '');
+App\WhatsApp\WhatsApp::usarMensageiro(null);
+ini_set('error_log', $logAntesWa);
+@unlink(sys_get_temp_dir() . '/familiamassas-whatsapp-teste.log');
+
+echo "\nPEDIDO POR ENQUETE NO CANAL QR (D85)\n";
+$pdoEq = App\Core\Banco::conexao();
+$pdoEq->exec('DELETE FROM whatsapp_sessoes');
+Env::definir('WHATSAPP_CANAL', 'qr');
+Env::definir('APP_URL', 'https://exemplo.test');
+App\WhatsApp\WhatsApp::usarMensageiro($falsoWhats);
+ini_set('error_log', sys_get_temp_dir() . '/familiamassas-whatsapp-teste.log');
+(new ConfigRepository())->salvar(['funcionamento' => 'aberta']);
+$botEq = new App\WhatsApp\Bot();
+$foneEq = '5511966670001';
+$nEq = 0;
+// O cliente: digita (sem tag) ou vota (com a tag da enquete, que o conector manda junto com o número da opção).
+$dizEq = static function (string $texto, ?string $enquete = null, string $fone = '5511966670001') use ($botEq, &$nEq): string {
+    $nEq++;
+    return $botEq->receber(['wamid' => "eq.{$nEq}", 'telefone' => $fone, 'tipo' => $enquete !== null ? 'poll_vote' : 'text', 'texto' => $texto, 'botao' => null, 'nome' => 'Ana Souza', 'local' => null, 'enquete' => $enquete]);
+};
+$ultimaEq = static fn (): array => $falsoWhats->enviadas[count($falsoWhats->enviadas) - 1] ?? [];
+$enqueteEq = static fn (): ?array => ($ultimaEq()['type'] ?? '') === 'poll' ? $ultimaEq()['poll'] : null;
+$numeroEq = static function (?array $enquete, string $nome): string {
+    foreach ($enquete['options'] ?? [] as $opcao) {
+        if (preg_match('/^(\d+)\. .*' . preg_quote($nome, '/') . '/u', $opcao, $m) === 1) {
+            return $m[1];
+        }
+    }
+    return 'não achei ' . $nome;
+};
+$sessaoEq = static function (string $fone) use ($pdoEq): array {
+    $consulta = $pdoEq->prepare('SELECT etapa, dados FROM whatsapp_sessoes WHERE telefone = ?');
+    $consulta->execute([$fone]);
+    $linha = $consulta->fetch();
+    return $linha ? ['etapa' => $linha['etapa'], 'enquete' => json_decode((string) $linha['dados'], true)['enquete'] ?? null] : ['etapa' => null, 'enquete' => null];
+};
+
+// O menu: o contexto vai como texto comum e as escolhas, numeradas, vão na enquete.
+$resultadoEq = $dizEq('Cardápio');
+$menuEq = $enqueteEq();
+$contextoEq = $falsoWhats->enviadas[count($falsoWhats->enviadas) - 2] ?? [];
+conferir('Canal QR: "Cardápio" manda o contexto como texto e as escolhas como enquete de escolha única', [
+    $resultadoEq, $contextoEq['type'] ?? null, str_contains($contextoEq['text']['body'] ?? '', 'Tamanhos:'), $menuEq['name'] ?? null, $menuEq['multipla'] ?? null,
+    str_starts_with($menuEq['options'][0] ?? '', '1. '), str_contains(implode('|', $menuEq['options'] ?? []), 'Carbonara da casa'), count($menuEq['options'] ?? []) <= 12,
+], ['menu', 'text', true, 'O que vai ser?', false, true, true, true]);
+conferir('A sessão guarda a tag da enquete que está valendo', $sessaoEq($foneEq), ['etapa' => 'menu', 'enquete' => $menuEq['tag']]);
+conferir('O registro da conversa mostra a enquete como pergunta e opções (o simulador do painel fica legível)', (function () use ($conversasWa, $foneEq): array {
+    $m = array_values(array_filter($conversasWa->mensagens($foneEq), static fn (array $x): bool => $x['tipo'] === 'poll'));
+    $u = end($m);
+    return [$u['texto'], count($u['enquete']['opcoes']) > 1, $u['enquete']['multipla']];
+})(), ['O que vai ser?', true, false]);
+
+// Votar é o mesmo que digitar o número da opção.
+conferir('Voto no prato da casa: vai ao tamanho, com a enquete nova (preço de cada tamanho na opção)', [$dizEq($numeroEq($menuEq, 'Carbonara da casa'), $menuEq['tag']), $enqueteEq()['name'] ?? null, str_contains(implode('|', $enqueteEq()['options'] ?? []), 'R$ 39,90')], ['prato_tamanho', 'Carbonara da casa: qual tamanho?', true]);
+$tamanhoEq = $enqueteEq();
+$antesEq = count($falsoWhats->enviadas);
+conferir('Voto numa enquete antiga (a do menu, depois de avançar) é ignorado em silêncio: o passo e as mensagens não mudam', [
+    $dizEq('1', $menuEq['tag']), count($falsoWhats->enviadas) - $antesEq, $sessaoEq($foneEq)['etapa'], $sessaoEq($foneEq)['enquete'] === $tamanhoEq['tag'],
+], ['enquete_antiga', 0, 'prato_tamanho', true]);
+conferir('O número digitado continua valendo; a quantidade (texto livre) vem sem enquete e a sessão fica sem tag', [
+    $dizEq($numeroEq($tamanhoEq, 'Inteiro')), $ultimaEq()['type'] ?? null, str_contains($ultimaEq()['text']['body'] ?? '', 'Quantas?'), $sessaoEq($foneEq)['enquete'],
+], ['quantidade', 'text', true, null]);
+conferir('Quantidade 2: o "Anotado" vai como texto e "mais alguma coisa?" como enquete de duas opções', [
+    $dizEq('2'), str_contains($falsoWhats->enviadas[count($falsoWhats->enviadas) - 2]['text']['body'] ?? '', '2× Carbonara da casa (Inteiro) — R$ 79,80'), $enqueteEq()['name'] ?? null, count($enqueteEq()['options'] ?? []),
+], ['mais', true, 'Mais alguma coisa?', 2]);
+$maisEq = $enqueteEq();
+conferir('Voto em "pedir mais": volta ao menu; "Monte a sua massa", tamanho, massa e molho por voto', [
+    $dizEq('1', $maisEq['tag']), $dizEq($numeroEq($enqueteEq(), 'Monte a sua massa'), $enqueteEq()['tag']), $dizEq($numeroEq($enqueteEq(), 'Meio'), $enqueteEq()['tag']),
+    $dizEq($numeroEq($enqueteEq(), 'Nhoque'), $enqueteEq()['tag']), $dizEq($numeroEq($enqueteEq(), 'Pesto'), $enqueteEq()['tag']),
+], ['menu', 'monte_tamanho', 'monte_massa', 'monte_molho', 'monte_grupo']);
+
+// Ingredientes: múltipla com "Pronto"; o grupo com opções demais para uma enquete (12) segue como lista numerada.
+$proteinasEq = $enqueteEq();
+conferir('Proteínas: enquete de escolha múltipla, com "✅ Pronto (ou nenhum)" por último', [
+    $proteinasEq['name'] ?? null, $proteinasEq['multipla'] ?? null, end($proteinasEq['options']), count($proteinasEq['options']),
+], ['Proteínas: marque o que quiser e toque em ✅ Pronto', true, '✅ Pronto (ou nenhum)', 5]);
+conferir('Voto "0" (só o Pronto marcado) segue para o grupo seguinte', [$dizEq('0', $proteinasEq['tag']), $sessaoEq($foneEq)['etapa']], ['monte_grupo', 'monte_grupo']);
+$acompanhamentosEq = $ultimaEq();
+conferir('Acompanhamentos tem 12 ingredientes disponíveis (13 opções com o Pronto, mais que as 12 do WhatsApp): vai como lista numerada, sem enquete', [
+    $acompanhamentosEq['type'] ?? null, str_contains($acompanhamentosEq['text']['body'] ?? '', 'Acompanhamentos'), str_contains($acompanhamentosEq['text']['body'] ?? '', '12. Manjericão'), $sessaoEq($foneEq)['enquete'],
+], ['text', true, true, null]);
+conferir('Digitar "0" na lista numerada passa para os queijos, de novo em enquete', [$dizEq('0'), $enqueteEq()['multipla'] ?? null], ['monte_grupo', true]);
+conferir('Voto múltiplo "Parmesão + Pronto" chega como o número do queijo e vai à quantidade', [$dizEq($numeroEq($enqueteEq(), 'Parmesão'), $enqueteEq()['tag']), $sessaoEq($foneEq)['etapa']], ['quantidade', 'quantidade']);
+$dizEq('1');
+$dizEq('2', $enqueteEq()['tag']);   // "Fechar o pedido"
+$tipoEq = $enqueteEq();
+conferir('Fechar: entrega ou retirada em enquete; retirada leva ao nome e depois ao pagamento, com o aviso de quando se paga', [
+    $tipoEq['name'] ?? null, $dizEq($numeroEq($tipoEq, 'Retirada'), $tipoEq['tag']), $dizEq('1'), str_contains($falsoWhats->enviadas[count($falsoWhats->enviadas) - 2]['text']['body'] ?? '', 'O pagamento é feito na retirada.'),
+    $enqueteEq()['name'] ?? null, count($enqueteEq()['options'] ?? []),
+], ['Entrega ou retirada?', 'nome', 'pagamento', true, 'Como vai pagar?', 3]);
+conferir('Pix por voto leva ao resumo: o resumo vai como texto e "Confirmar o pedido?" como enquete', [
+    $dizEq($numeroEq($enqueteEq(), 'Pix'), $enqueteEq()['tag']), str_contains($falsoWhats->enviadas[count($falsoWhats->enviadas) - 2]['text']['body'] ?? '', 'Total: R$ 112,70'), $enqueteEq()['name'] ?? null,
+], ['resumo', true, 'Confirmar o pedido?']);
+conferir('Voto em "Confirmar pedido": o pedido é criado', $dizEq($numeroEq($enqueteEq(), 'Confirmar'), $enqueteEq()['tag']), 'pedido_criado');
+$pedidoEq = $pdoEq->query('SELECT origem, cliente_telefone, cliente_nome, tipo, total_centavos FROM pedidos ORDER BY id DESC LIMIT 1')->fetch();
+conferir('O pedido feito por enquete é o mesmo do passo a passo: origem WhatsApp, retirada, preço do servidor (2 carbonaras + a massa montada)', array_values($pedidoEq), ['whatsapp', $foneEq, 'Ana', 'retirada', 11270]);
+conferir('Terminado o pedido, a sessão some', $sessaoEq($foneEq), ['etapa' => null, 'enquete' => null]);
+
+// Falhas e arredores.
+$okEnvioEq = ['ok' => true, 'wamid' => 'teste.ok', 'erro' => null, 'transitorio' => false, 'janela_fechada' => false];
+$falsoWhats->respostas = [$okEnvioEq, ['ok' => false, 'wamid' => null, 'erro' => 'Conector 400: enquete inválida', 'transitorio' => false, 'janela_fechada' => false]];
+$antesEq = count($falsoWhats->enviadas);
+$foneRecusa = '5511966670002';
+$dizEq('Cardápio', null, $foneRecusa);
+conferir('Se o conector recusar a enquete (erro definitivo), o cliente recebe a lista numerada e a sessão fica sem tag', [
+    count($falsoWhats->enviadas) - $antesEq, $ultimaEq()['type'] ?? null, str_contains($ultimaEq()['text']['body'] ?? '', '1. Carbonara da casa'), $sessaoEq($foneRecusa)['enquete'],
+], [3, 'text', true, null]);
+$falsoWhats->respostas = [$okEnvioEq, ['ok' => false, 'wamid' => null, 'erro' => 'Conector 503: WhatsApp desconectado', 'transitorio' => true, 'janela_fechada' => false]];
+$antesEq = count($falsoWhats->enviadas);
+$dizEq('Cardápio', null, '5511966670003');
+conferir('Falha passageira (WhatsApp caído): não duplica nada em texto', [count($falsoWhats->enviadas) - $antesEq, $ultimaEq()['type'] ?? null], [2, 'poll']);
+$antesEq = count($falsoWhats->enviadas);
+conferir('Voto sem pedido em andamento: o bot fica em silêncio', [$dizEq('3', 'abc123def456', '5511966670004'), count($falsoWhats->enviadas) - $antesEq], ['silencio', 0]);
+
+// Enquetes só existem no canal QR e têm os limites do WhatsApp.
+$cortaEq = new ReflectionMethod(App\WhatsApp\FluxoPedido::class, 'enquete');
+conferir('Limites da enquete: 2 a 12 opções (na múltipla o Pronto conta), opção cortada em 100 caracteres, pergunta em 255', [
+    $cortaEq->invoke(null, 'P', ['a'], false), $cortaEq->invoke(null, 'P', array_fill(0, 12, 'x'), false) !== null, $cortaEq->invoke(null, 'P', array_fill(0, 13, 'x'), false),
+    $cortaEq->invoke(null, 'P', array_fill(0, 11, 'x'), true) !== null, $cortaEq->invoke(null, 'P', array_fill(0, 12, 'x'), true),
+    mb_strlen($cortaEq->invoke(null, 'P', [str_repeat('é', 150), 'b'], false)['opcoes'][0]), mb_substr($cortaEq->invoke(null, 'P', [str_repeat('é', 150), 'b'], false)['opcoes'][0], -1),
+    mb_strlen($cortaEq->invoke(null, str_repeat('p', 300), ['a', 'b'], false)['pergunta']),
+    $cortaEq->invoke(null, '*Monte* ~a~', ['*Negrito* ~tachado~', 'b'], false)['pergunta'], $cortaEq->invoke(null, 'P', ['*Negrito* ~tachado~', 'b'], false)['opcoes'][0],
+], [null, true, null, true, null, 100, '…', 255, 'Monte a', '1. Negrito tachado']);
+$opcoesRepetidas = $cortaEq->invoke(null, 'P', ['Pix', 'Pix'], false)['opcoes'];
+conferir('Rótulos iguais não repetem opção: o número na frente as distingue', count(array_unique($opcoesRepetidas)), 2);
+conferir('O corpo enviado ao Node: a enquete vai em "enquete" (texto vazio); o resto segue como texto', [
+    App\WhatsApp\MensageiroConector::corpo($foneEq, App\WhatsApp\WhatsApp::enquete('Qual?', ['1. A', '2. B'], true, 'abc123def456')),
+    App\WhatsApp\MensageiroConector::corpo($foneEq, App\WhatsApp\WhatsApp::texto('oi')),
+], [
+    ['telefone' => $foneEq, 'texto' => '', 'enquete' => ['tag' => 'abc123def456', 'pergunta' => 'Qual?', 'opcoes' => ['1. A', '2. B'], 'multipla' => true]],
+    ['telefone' => $foneEq, 'texto' => 'oi'],
+]);
+conferir('Enquete mandada como texto (reserva) vira a lista de opções com "Responda com o número"', App\WhatsApp\Conector::texto(App\WhatsApp\WhatsApp::enquete('Qual?', ['1. A', '2. B'], false, 'abc123def456')), "Qual?\n\n1. A\n2. B\n\nResponda com o número.");
+conferir('O voto chega do Node com a tag da enquete (marcado como voto); tag estranha é descartada', [
+    App\WhatsApp\Conector::normalizar(['id' => 'v1', 'telefone' => $foneEq, 'texto' => '2', 'enquete' => 'abc123def456']),
+    App\WhatsApp\Conector::normalizar(['id' => 'v2', 'telefone' => $foneEq, 'texto' => '2', 'enquete' => 'tag ruim!'])['enquete'],
+    App\WhatsApp\Conector::normalizar(['id' => 'v3', 'telefone' => $foneEq, 'texto' => '2'])['enquete'],
+], [['wamid' => 'qr.v1', 'telefone' => $foneEq, 'tipo' => 'poll_vote', 'texto' => '2', 'botao' => null, 'nome' => null, 'local' => null, 'enquete' => 'abc123def456'], null, null]);
+Env::definir('WHATSAPP_CANAL', '');
+$antesEq = count($falsoWhats->enviadas);
+$dizEq('Cardápio', null, '5511966670005');
+conferir('Fora do canal QR (Cloud API e simulador) nada vira enquete: segue a lista numerada de sempre', [count($falsoWhats->enviadas) - $antesEq, $ultimaEq()['type'] ?? null, str_contains($ultimaEq()['text']['body'] ?? '', '1. Carbonara da casa')], [1, 'text', true]);
+
+$falsoWhats->respostas = [];
+$pdoEq->exec('DELETE FROM whatsapp_sessoes');
+$pdoEq->exec('DELETE FROM whatsapp_envios_pendentes');
 Env::definir('APP_URL', '');
 App\WhatsApp\WhatsApp::usarMensageiro(null);
 ini_set('error_log', $logAntesWa);

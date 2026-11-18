@@ -110,7 +110,7 @@ final class Conversas
 
     /**
      * Mensagens de uma conversa, da mais antiga para a mais nova.
-     * @return list<array{id:int, direcao:string, tipo:string, em:string, texto:string, botoes:array<string,string>, link:?array, erro:?string, nome:?string, botao:?string}>
+     * @return list<array{id:int, direcao:string, tipo:string, em:string, texto:string, botoes:array<string,string>, link:?array, enquete:?array{opcoes:list<string>, multipla:bool}, erro:?string, nome:?string, botao:?string}>
      */
     public function mensagens(string $telefone, int $limite = 40): array
     {
@@ -128,6 +128,7 @@ final class Conversas
                 'texto' => (string) ($resumo['texto'] ?? ''),
                 'botoes' => is_array($resumo['botoes'] ?? null) ? $resumo['botoes'] : [],
                 'link' => is_array($resumo['link'] ?? null) ? $resumo['link'] : null,
+                'enquete' => is_array($resumo['enquete'] ?? null) ? $resumo['enquete'] : null,
                 'erro' => isset($resumo['erro']) ? (string) $resumo['erro'] : null,
                 'nome' => isset($resumo['nome']) ? (string) $resumo['nome'] : null,
                 'botao' => isset($resumo['botao']) ? (string) $resumo['botao'] : null,

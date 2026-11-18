@@ -93,6 +93,16 @@ final class WhatsApp
     }
 
     /**
+     * Enquete (só no canal QR, D85): o cliente escolhe votando. Na múltipla, a última opção é o "Pronto" que encerra a escolha.
+     * @param list<string> $opcoes
+     * @return array<string,mixed>
+     */
+    public static function enquete(string $pergunta, array $opcoes, bool $multipla, string $tag): array
+    {
+        return ['type' => 'poll', 'poll' => ['name' => $pergunta, 'options' => array_values($opcoes), 'multipla' => $multipla, 'tag' => $tag]];
+    }
+
+    /**
      * Template aprovado na Meta (o único tipo de mensagem permitido fora da janela de 24 h).
      * @param list<string> $parametros os {{1}}, {{2}}... do corpo do template
      * @return array<string,mixed>
@@ -109,12 +119,13 @@ final class WhatsApp
     /**
      * O que a mensagem diz, em forma simples: é o que fica no registro e o que a caixa de entrada e o simulador mostram.
      * @param array<string,mixed> $mensagem
-     * @return array{texto:string, botoes?:array<string,string>, link?:array{rotulo:string, url:string}, modelo?:string}
+     * @return array{texto:string, botoes?:array<string,string>, link?:array{rotulo:string, url:string}, modelo?:string, enquete?:array{opcoes:list<string>, multipla:bool}}
      */
     public static function resumo(array $mensagem): array
     {
         return match ($mensagem['type'] ?? '') {
             'text' => ['texto' => (string) ($mensagem['text']['body'] ?? '')],
+            'poll' => ['texto' => (string) ($mensagem['poll']['name'] ?? ''), 'enquete' => ['opcoes' => array_values($mensagem['poll']['options'] ?? []), 'multipla' => !empty($mensagem['poll']['multipla'])]],
             'interactive' => ($mensagem['interactive']['type'] ?? '') === 'cta_url'
                 ? ['texto' => (string) $mensagem['interactive']['body']['text'], 'link' => ['rotulo' => (string) $mensagem['interactive']['action']['parameters']['display_text'], 'url' => (string) $mensagem['interactive']['action']['parameters']['url']]]
                 : ['texto' => (string) $mensagem['interactive']['body']['text'], 'botoes' => array_column(array_column($mensagem['interactive']['action']['buttons'], 'reply'), 'title', 'id')],

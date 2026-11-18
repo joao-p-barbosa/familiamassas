@@ -39,9 +39,13 @@ function balaoHtml(m, { clicavel }) {
       </li>`;
   }
   const botoes = Object.entries(m.botoes ?? {});
+  // Enquete (canal QR): a pergunta e as opções como texto, para a conversa de teste continuar legível.
+  const enquete = m.enquete?.opcoes?.length
+    ? `<p><strong>📊 ${esc(m.texto)}</strong></p><ul style="margin: var(--e-1) 0; padding-left: 1.2em; list-style: none;">${m.enquete.opcoes.map((o) => `<li>${esc(o)}</li>`).join('')}</ul><p class="balao__apagado">${m.enquete.multipla ? 'Enquete: escolha vários e marque “Pronto”.' : 'Enquete: escolha uma opção.'}</p>`
+    : '';
   return `
     <li class="balao balao--loja">
-      <p>${esc(m.texto)}</p>
+      ${enquete || `<p>${esc(m.texto)}</p>`}
       ${m.link ? `<a class="balao__acao" href="${esc(m.link.url)}" target="_blank" rel="noopener">${icone('externo', 14)}${esc(m.link.rotulo)}</a>` : ''}
       ${botoes.length ? `<div class="balao__botoes">${botoes.map(([id, titulo]) => clicavel
         ? `<button type="button" class="balao__acao" data-botao="${esc(id)}">${esc(titulo)}</button>`
@@ -69,7 +73,7 @@ function conectorHtml(s) {
   const c = s.conector;
   const desde = c.desde ? ` desde ${hora(c.desde)}` : '';
   const explicacao = {
-    conectado: 'O número da loja está conectado. O bot só responde quando o cliente digita a palavra do pedido (a que você configura em Assistente, “Cardápio” por padrão): aí conduz o pedido passo a passo, até a confirmação, e o pedido cai no Kanban. “Acompanhar” mostra o pedido em andamento e “atendente” chama uma pessoa. Fora dessas palavras o bot fica em silêncio: a saudação é a do seu WhatsApp Business. A IA só entra para tirar uma dúvida no meio do pedido.',
+    conectado: 'O número da loja está conectado. O bot só responde quando o cliente digita a palavra do pedido (a que você configura em Assistente, “Cardápio” por padrão): aí conduz o pedido passo a passo, até a confirmação, e o pedido cai no Kanban. As escolhas (prato, tamanho, massa, molho, pagamento…) chegam como enquete: o cliente toca na opção, e nos ingredientes marca o que quiser e toca em “Pronto”. Digitar o número da opção também vale. “Acompanhar” mostra o pedido em andamento e “atendente” chama uma pessoa. Fora dessas palavras o bot fica em silêncio: a saudação é a do seu WhatsApp Business. A IA só entra para tirar uma dúvida no meio do pedido.',
     aguardando_qr: 'No celular da loja: WhatsApp → Aparelhos conectados → Conectar um aparelho, e aponte a câmera para o QR code abaixo. O código troca sozinho a cada poucos segundos. Use um número dedicado à loja.',
     desconectado: `O WhatsApp está desconectado${desde}. O conector tenta voltar sozinho; se o celular tiver desconectado o aparelho, aparece um QR code novo aqui.`,
     sem_sinal: `O conector não dá sinal${desde}. Ele reinicia sozinho; se passar de alguns minutos, veja os logs do serviço na Render.`,

@@ -8,9 +8,11 @@ const path = require('node:path');
 const fs = require('node:fs');
 const pino = require('pino');
 const QRCode = require('qrcode');
-const { default: makeWASocket, DisconnectReason, fetchLatestBaileysVersion, useMultiFileAuthState, Browsers, normalizeMessageContent } = require('@whiskeysockets/baileys');
+const crypto = require('node:crypto');
+const { default: makeWASocket, DisconnectReason, fetchLatestBaileysVersion, useMultiFileAuthState, Browsers, normalizeMessageContent, decryptPollVote } = require('@whiskeysockets/baileys');
 const { criarServidor } = require('./servidor');
 const { telefoneDe, textoDe, localDe, segundosDe } = require('./util');
+const { criarCofre, interpretar } = require('./enquete');
 
 const SEGREDO = process.env.CONECTOR_SEGREDO ?? '';
 const SITE = (process.env.CONECTOR_SITE_URL || `http://127.0.0.1:${process.env.PORT || 10000}`).replace(/\/$/, '');
@@ -54,10 +56,25 @@ function mudar(novo) {
 }
 
 // ---------- Envio (site → WhatsApp) ----------
+// As enquetes enviadas ficam guardadas por ~2 h: o voto do cliente chega cifrado com a chave de cada uma (D85).
+const enquetes = criarCofre();
+const identidades = () => [sock?.user?.id, sock?.user?.lid].filter(Boolean);
+
+async function enviarEnquete(telefone, enquete) {
+  const segredo = crypto.randomBytes(32);   // o Baileys guarda esta chave na enquete; a mesma fica aqui para decifrar os votos
+  const enviada = await sock.sendMessage(`${telefone}@s.whatsapp.net`, {
+    poll: { name: enquete.pergunta, values: enquete.opcoes, selectableCount: enquete.multipla ? enquete.opcoes.length : 1, messageSecret: segredo },
+  });
+  const id = enviada?.key?.id;
+  if (!id) throw new Error('o WhatsApp não devolveu o id da enquete');
+  enquetes.guardar({ id, segredo, tag: enquete.tag, opcoes: enquete.opcoes, multipla: enquete.multipla, telefone, criadores: identidades() });
+  console.log(`[conector] enquete enviada (${enquete.opcoes.length} opções, ${enquete.multipla ? 'múltipla' : 'única'})`);
+}
+
 const saida = criarServidor({
   segredo: SEGREDO,
   conectado: () => estado === 'conectado' && sock !== null,
-  enviar: (telefone, texto) => sock.sendMessage(`${telefone}@s.whatsapp.net`, { text: texto }),
+  enviar: (telefone, texto, enquete) => (enquete ? enviarEnquete(telefone, enquete) : sock.sendMessage(`${telefone}@s.whatsapp.net`, { text: texto })),
 });
 saida.servidor.listen(PORTA, '127.0.0.1', () => console.log(`[conector] ouvindo em 127.0.0.1:${PORTA}`));
 
@@ -125,6 +142,7 @@ async function conectar() {
   sock.ev.on('messages.upsert', async ({ messages }) => {
     // "append" também entra: o site ignora o que tem mais de 10 minutos e não repete o mesmo id.
     const lote = [];
+    const votos = [];   // enquetes cujo voto está neste lote: se o site não receber, elas voltam a valer
     for (const m of messages) {
       if (m.key.fromMe) continue;
       const tipoJid = (m.key.remoteJid ?? '').split('@')[1] ?? '?';
@@ -136,6 +154,14 @@ async function conectar() {
         // Sem o número na própria mensagem: o Baileys guarda o par LID → número.
         const pn = await sock.signalRepository?.lidMapping?.getPNForLID(m.key.remoteJid).catch(() => null);
         if (pn) telefone = telefoneDe({ remoteJid: pn.includes('@') ? pn : `${pn}@s.whatsapp.net` });
+      }
+      if (conteudo?.pollUpdateMessage) {   // voto numa enquete: vira o número da opção, como se o cliente tivesse digitado
+        const voto = votoDeEnquete(m, conteudo.pollUpdateMessage);
+        if (voto) {
+          lote.push(voto.mensagem);
+          votos.push(voto.entrada);
+        }
+        continue;
       }
       const texto = textoDe(conteudo);
       const local = localDe(conteudo);   // o pin da entrega, no pedido pelo chat
@@ -149,8 +175,35 @@ async function conectar() {
         : `sem texto (tipos: ${Object.keys(conteudo).join(', ')})`;
       console.log(`[conector] mensagem ignorada (@${tipoJid}): ${motivo}`);
     }
-    if (lote.length > 0) await postar('/api/conector/mensagens', { mensagens: lote }, 60_000);   // a resposta da IA pode levar alguns segundos
+    if (lote.length > 0) {
+      const entregue = await postar('/api/conector/mensagens', { mensagens: lote }, 60_000);   // a resposta da IA pode levar alguns segundos
+      if (!entregue) for (const e of votos) e.usada = false;
+    }
   });
+}
+
+/** O voto decifrado e convertido na mensagem que o site entende; null (com o motivo no log, sem conteúdo nem telefone) se não vale. */
+function votoDeEnquete(m, atualizacao) {
+  const criacaoId = atualizacao.pollCreationMessageKey?.id;
+  if (!criacaoId || !atualizacao.vote) {
+    console.log('[conector] voto de enquete ignorado: pacote sem a enquete ou sem o voto');
+    return null;
+  }
+  const chave = m.key;
+  const r = interpretar({
+    cofre: enquetes,
+    criacaoId,
+    voto: atualizacao.vote,
+    votantes: [chave.participant, chave.participantAlt, chave.remoteJid, chave.remoteJidAlt, chave.senderPn],
+    decifrar: decryptPollVote,
+  });
+  if (!r.ok) {
+    console.log(`[conector] voto de enquete ignorado: ${r.motivo}`);
+    return null;
+  }
+  r.entrada.usada = true;   // cada enquete vale uma vez só
+  console.log(`[conector] voto de enquete aceito (${r.entrada.multipla ? 'múltipla' : 'única'})`);
+  return { entrada: r.entrada, mensagem: { id: m.key.id, telefone: r.entrada.telefone, texto: r.texto, nome: m.pushName ?? null, em: segundosDe(m.messageTimestamp), enquete: r.entrada.tag } };
 }
 
 /** Reconecta com espera crescente (3 s, 6 s, ... até 60 s). */
