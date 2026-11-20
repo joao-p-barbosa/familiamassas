@@ -23,10 +23,15 @@ $estilos = ['painel'];
       <span class="campo__rotulo">Usuário</span>
       <input class="entrada" type="text" name="login" autocomplete="username" autocapitalize="none" spellcheck="false" required autofocus>
     </label>
-    <label class="campo">
-      <span class="campo__rotulo">Senha</span>
-      <input class="entrada" type="password" name="senha" autocomplete="current-password" required>
-    </label>
+    <div class="campo">
+      <label class="campo__rotulo" for="login-senha">Senha</label>
+      <div class="entrada-senha">
+        <input class="entrada" type="password" id="login-senha" name="senha" autocomplete="current-password" required>
+        <button type="button" class="botao botao--fantasma botao--icone" data-mostrar-senha aria-pressed="false" aria-label="Mostrar a senha">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>
+        </button>
+      </div>
+    </div>
     <p class="campo__erro" id="erro-login" role="alert" hidden></p>
     <button type="submit" class="botao botao--g botao--bloco">Entrar</button>
   </form>

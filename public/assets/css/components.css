@@ -188,6 +188,18 @@
   border-color: var(--cor-perigo);
   box-shadow: inset 0 0 0 1px var(--cor-perigo);
 }
+/* Senha escondida: as bolinhas crescem com o tamanho da letra e saíam grandes. Só enquanto está escondida (o olhinho troca
+   o tipo para "text" e a letra volta ao normal). No iPhone a letra não pode ficar abaixo de 16 px (o Safari dá zoom no campo). */
+.entrada[type="password"] {
+  font-size: 0.8125rem;
+  letter-spacing: 0.1em;
+}
+@supports (-webkit-touch-callout: none) {
+  .entrada[type="password"] {
+    font-size: 1rem;
+    letter-spacing: 0.02em;
+  }
+}
 .entrada:disabled {
   background: var(--cor-superficie-2);
   color: var(--cor-texto-desabilitado);
