@@ -22,7 +22,8 @@ final class PedidoService
     ];
 
     /** O cliente pede entrega ou retirada pelo cardápio. Mesa e pra viagem são feitos pela atendente, no salão. */
-    public const TIPOS_DO_CLIENTE = ['entrega', 'retirada'];
+    // "mesa" (D96): o cliente está no restaurante e pede pelo cardápio; vira um atendimento do Salão e a atendente leva à mesa.
+    public const TIPOS_DO_CLIENTE = ['entrega', 'retirada', 'mesa'];
     public const TIPOS_DO_SALAO = ['local', 'viagem'];
 
     public const ROTULOS = [
@@ -70,8 +71,9 @@ final class PedidoService
         // ---- Tipo ----
         $tipo = self::texto($dados['tipo'] ?? '', 20);
         if (!in_array($tipo, self::TIPOS_DO_CLIENTE, true) || $this->config->get("aceita_{$tipo}", '1') !== '1') {
-            $erros['tipo'] = 'Escolha entrega ou retirada.';
+            $erros['tipo'] = 'Escolha como quer receber o pedido.';
         }
+        $naMesa = $tipo === 'mesa';
 
         // ---- Cliente ----
         $cliente = is_array($dados['cliente'] ?? null) ? $dados['cliente'] : [];
@@ -82,7 +84,9 @@ final class PedidoService
         // Link do WhatsApp: se o token valer, o telefone vem dele (não do formulário) e a origem é "whatsapp".
         $telefoneDoToken = $this->token->validar(self::texto($dados['t'] ?? '', 200));
         $telefone = $telefoneDoToken ?? self::normalizarTelefone(self::texto($cliente['telefone'] ?? '', 30));
-        if ($telefone === null) {
+        if ($naMesa) {
+            $telefone ??= '';   // na mesa só o nome é pedido: a atendente chama pelo nome
+        } elseif ($telefone === null) {
             $erros['telefone'] = 'Informe um WhatsApp com DDD, por exemplo (11) 91234-5678.';
         }
 
@@ -101,7 +105,7 @@ final class PedidoService
         // ---- Pagamento ----
         $pagamento = is_array($dados['pagamento'] ?? null) ? $dados['pagamento'] : [];
         $forma = self::texto($pagamento['forma'] ?? '', 20);
-        if (!in_array($forma, ['pix', 'cartao', 'dinheiro'], true)) {
+        if (!$naMesa && !in_array($forma, ['pix', 'cartao', 'dinheiro'], true)) {
             $erros['pagamento'] = 'Escolha a forma de pagamento.';
         }
 
@@ -123,6 +127,20 @@ final class PedidoService
             throw ErroHttp::validacao($erros);
         }
         $this->conferirTotal($dados, $total);
+
+        if ($naMesa) {
+            // Abre a conta no Salão (sem mesa: só o nome) com este primeiro pedido. O pagamento é no fechamento da conta.
+            $criado = $this->atendimentos->abrir(
+                ['cliente_nome' => $nome, 'modalidade' => 'mesa', 'mesa' => null],
+                ['cliente_nome' => $nome, 'cliente_telefone' => $telefone, 'tipo' => 'local', 'mesa' => null, 'pagamento' => 'caixa', 'troco_para_centavos' => null,
+                 'observacoes' => '', 'subtotal_centavos' => $subtotal, 'taxa_entrega_centavos' => 0, 'total_centavos' => $subtotal,
+                 'origem' => $telefoneDoToken !== null ? 'whatsapp' : 'cardapio'],
+                $itens,
+                null,
+            );
+            $this->avisarCliente($criado['id']);
+            return ['id' => $criado['id'], 'codigo' => $criado['codigo']];
+        }
 
         $criado = $this->pedidos->criar([
             'cliente_nome' => $nome,

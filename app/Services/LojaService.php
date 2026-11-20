@@ -63,7 +63,7 @@ final class LojaService
     public function publica(): array
     {
         $c = $this->config;
-        // O cliente só pede entrega ou retirada. Mesa e pra viagem são registrados pela atendente, no salão.
+        // O cliente pede entrega, retirada ou mesa (D96: no restaurante, só com o nome). Pra viagem é registrado pela atendente.
         $tipos = [];
         foreach (PedidoService::TIPOS_DO_CLIENTE as $tipo) {
             if ($c->get("aceita_{$tipo}", '1') === '1') {

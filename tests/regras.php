@@ -166,7 +166,7 @@ conferir('Bacon, calabresa e presunto estão em Acompanhamentos', array_values(a
 conferir('Os vegetais também (nenhum grupo "Vegetais" sobrou)', [in_array('Brócolis', $grupos['Acompanhamentos'], true), isset($grupos['Vegetais'])], [true, false]);
 conferir('Queijos continuam como estavam', in_array('Muçarela', $grupos['Queijos'], true), true);
 conferir('A montagem não guarda mais "queijo ralado"', array_key_exists('queijo_ralado', $montar('Meio', 'Penne', 'Sugo', [])['montagem']), false);
-conferir('O cliente só vê entrega e retirada', (new LojaService())->publica()['tipos_pedido'], ['entrega', 'retirada']);
+conferir('O cliente vê entrega, retirada e mesa (D96)', (new LojaService())->publica()['tipos_pedido'], ['entrega', 'retirada', 'mesa']);
 
 echo "\nPEDIDO\n";
 $pedidos = new PedidoService();
@@ -360,6 +360,28 @@ $outro = $pedidos->criar($base)['id'];
 conferir('Primeira estação fica com a impressão', $repo->reivindicarImpressao($outro, 'estacao-a'), true);
 conferir('Segunda estação não imprime o mesmo pedido', $repo->reivindicarImpressao($outro, 'estacao-b'), false);
 conferir('Fica registrado quem imprimiu', $repo->porId($outro)['impresso_por'], 'estacao-a');
+
+echo "\nMESA PELO CARDÁPIO (D96)\n";
+$itensMesa = [['tipo' => 'simples', 'item_id' => $id('itens', 'Tiramisù'), 'quantidade' => 2]];
+(new ConfigRepository())->salvar(['funcionamento' => 'aberta', 'aceita_mesa' => '1']);   // o teste de Configurações acima regravou os tipos sem a mesa
+// Mesa pelo cardápio (D96): só o nome; vira um atendimento do Salão, sem mesa, pago no fechamento da conta.
+$pedidos = new PedidoService();
+$naMesa = (new App\Repositories\PedidoRepository())->porId($pedidos->criar(['tipo' => 'mesa', 'cliente' => ['nome' => 'Carla'], 'pagamento' => [], 'itens' => $itensMesa])['id']);
+$contaDaMesa = (new App\Repositories\AtendimentoRepository())->porId((int) $naMesa['atendimento_id']);
+conferir('Mesa pelo cardápio: só com o nome; pedido "local" na conta do Salão, sem telefone, pagamento na conta', [
+    $naMesa['tipo'], $naMesa['mesa'], $naMesa['cliente_telefone'], $naMesa['pagamento'], $naMesa['origem'], $naMesa['total_centavos'], $naMesa['atendimento_id'] !== null,
+    $contaDaMesa['modalidade'] ?? null, $contaDaMesa['cliente_nome'] ?? null, $contaDaMesa['status'] ?? null,
+], ['local', null, '', 'caixa', 'cardapio', 3380, true, 'mesa', 'Carla', 'aberto']);
+conferir('O pedido da mesa cai na coluna Salão do quadro (é de um atendimento) e a conta aparece no Salão', [
+    in_array((int) $naMesa['atendimento_id'], array_column((new AtendimentoService())->quadro()['atendimentos'] ?? [], 'id'), true),
+], [true]);
+conferir('Mesa sem nome é recusada', camposDoErro(fn () => $pedidos->criar(['tipo' => 'mesa', 'cliente' => ['nome' => ''], 'itens' => $itensMesa])), ['nome' => 'Diga seu nome para chamarmos você.']);
+(new ConfigRepository())->salvar(['aceita_mesa' => '0']);
+conferir('Mesa desligada em Configurações: some do cardápio e o pedido é recusado', [(new LojaService())->publica()['tipos_pedido'], array_keys(camposDoErro(fn () => $pedidos->criar(['tipo' => 'mesa', 'cliente' => ['nome' => 'Carla'], 'itens' => $itensMesa])))], [['entrega', 'retirada'], ['tipo']]);
+(new ConfigRepository())->salvar(['aceita_mesa' => '1']);
+
+Banco::conexao()->prepare('DELETE FROM pedidos WHERE id = ?')->execute([$naMesa['id']]);
+Banco::conexao()->prepare('DELETE FROM atendimentos WHERE id = ?')->execute([$naMesa['atendimento_id']]);
 
 echo "\nPERFIS E TELAS\n";
 conferir('Só existem os perfis proprietário (admin) e atendente', Sessao::PERFIS, ['admin', 'atendente']);

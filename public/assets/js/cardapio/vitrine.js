@@ -46,6 +46,9 @@ function desenharLoja() {
   if (loja.tipos_pedido.includes('retirada')) {
     partes.push(`<span>${icone('loja', 18)}Retirada em ${loja.tempo_retirada_min} min</span>`);
   }
+  if (loja.tipos_pedido.includes('mesa')) {
+    partes.push(`<span>${icone('talheres', 18)}Na mesa: pedimos só o seu nome</span>`);
+  }
   $('#loja-info').innerHTML = partes.join('');
 
   $('#avisos-topo').innerHTML = loja.aberta ? '' : `

@@ -5,7 +5,7 @@ import { icone } from '../shared/icones.js';
 import { reais, telefone as formatarTelefone, centavosDeTexto, textoDeCentavos, plural } from '../shared/formato.js';
 import { api } from '../shared/api.js';
 import { avisar } from '../shared/avisos.js';
-import { TIPOS, PAGAMENTOS, PAGAMENTOS_DO_CLIENTE, linhasMontagem, linkComoChegar } from '../shared/pedido.js';
+import { PAGAMENTOS, PAGAMENTOS_DO_CLIENTE, linhasMontagem, linkComoChegar } from '../shared/pedido.js';
 import { estado, totaisDoCarrinho, esvaziarCarrinho, recarregarCardapio } from './estado.js';
 import { escolherNoMapa } from './mapa.js';
 
@@ -26,8 +26,11 @@ dados.lat = null;
 dados.lng = null;
 let enviando = false;
 
-// O cliente pede entrega ou retirada. Mesa e pra viagem são feitos pela atendente, no salão.
-const ROTULO_TIPO = { entrega: 'Entrega', retirada: 'Retirar na loja' };
+// O cliente pede entrega, retirada ou mesa (D96: está no restaurante, só informa o nome e a atendente leva o pedido).
+// Pra viagem é feito pela atendente, no salão.
+const ROTULO_TIPO = { entrega: 'Entrega', retirada: 'Retirar na loja', mesa: 'Mesa' };
+const ICONE_TIPO = { entrega: 'moto', retirada: 'loja', mesa: 'talheres' };
+const naMesa = () => dados.tipo === 'mesa';
 
 export function abrirCheckout() {
   if (!estado.loja.tipos_pedido.includes(dados.tipo)) dados.tipo = estado.loja.tipos_pedido[0] ?? null;
@@ -86,7 +89,7 @@ function formularioHtml() {
             ${tipos.map((tipo) => `
               <label class="segmentado__item">
                 <input type="radio" name="tipo" value="${tipo}" ${dados.tipo === tipo ? 'checked' : ''}>
-                ${icone(TIPOS[tipo].icone, 18)}<span>${ROTULO_TIPO[tipo]}</span>
+                ${icone(ICONE_TIPO[tipo], 18)}<span>${ROTULO_TIPO[tipo]}</span>
               </label>`).join('')}
           </fieldset>
           <span class="campo__erro" id="erro-tipo" hidden></span>
@@ -97,15 +100,15 @@ function formularioHtml() {
           <h2 class="bloco__titulo">Seus dados</h2>
           <div class="bloco__grade">
             ${campo('nome', 'Nome', { extra: 'autocomplete="name" maxlength="80"' })}
-            ${campo('telefone', 'WhatsApp', {
+            <div id="campo-telefone" ${naMesa() ? 'hidden' : ''}>${campo('telefone', 'WhatsApp', {
               tipo: 'tel',
               extra: `autocomplete="tel-national" inputmode="numeric" placeholder="(11) 91234-5678" ${estado.whatsapp ? 'readonly' : ''}`,
               ajuda: estado.whatsapp ? 'É o número da conversa de onde você veio.' : 'Avisamos por aqui quando o pedido andar.',
-            })}
+            })}</div>
           </div>
         </section>
 
-        <section class="bloco">
+        <section class="bloco" id="bloco-pagamento" ${naMesa() ? 'hidden' : ''}>
           <h2 class="bloco__titulo">Pagamento</h2>
           <p class="bloco__nota">Você paga direto para a loja, ${dados.tipo === 'entrega' ? 'na entrega' : 'ao receber o pedido'}.</p>
           <fieldset class="grupo-opcoes grupo-opcoes--tres">
@@ -164,6 +167,9 @@ function camposDoTipo() {
       <p class="bloco__nota">${icone('loja', 16)}<span>Retire em: ${esc(loja.endereco || 'endereço da loja')}. Fica pronto em cerca de ${loja.tempo_retirada_min} min.</span></p>
       ${comoChegarHtml()}`;
   }
+  if (dados.tipo === 'mesa') {
+    return `<p class="bloco__nota">${icone('talheres', 16)}<span>Você está no restaurante: é só dizer o seu nome. A atendente leva o pedido até a sua mesa e você paga na conta, no fim.</span></p>`;
+  }
   return '';
 }
 
@@ -194,14 +200,14 @@ function validar() {
   const digitos = dados.telefone.replace(/\D/g, '').replace(/^55(?=\d{10,11}$)/, '');
   if (!dados.tipo) erros.tipo = 'Escolha como quer receber o pedido.';
   if (dados.nome.length < 2) erros.nome = 'Diga seu nome para chamarmos você.';
-  if (!/^[1-9]\d9?\d{8}$/.test(digitos)) erros.telefone = 'Informe o WhatsApp com DDD, por exemplo (11) 91234-5678.';
+  if (!naMesa() && !/^[1-9]\d9?\d{8}$/.test(digitos)) erros.telefone = 'Informe o WhatsApp com DDD, por exemplo (11) 91234-5678.';
   if (dados.tipo === 'entrega') {
     if (!dados.rua) erros.rua = 'Informe a rua.';
     if (!dados.numero) erros.numero = 'Informe o número (ou "s/n").';
     if (!dados.bairro) erros.bairro = 'Informe o bairro.';
   }
-  if (!dados.pagamento) erros.pagamento = 'Escolha a forma de pagamento.';
-  if (dados.pagamento === 'dinheiro' && dados.troco) {
+  if (!naMesa() && !dados.pagamento) erros.pagamento = 'Escolha a forma de pagamento.';
+  if (!naMesa() && dados.pagamento === 'dinheiro' && dados.troco) {
     const troco = centavosDeTexto(dados.troco);
     if (troco === null) erros.troco = 'Digite um valor, por exemplo 100,00.';
     else if (troco < totaisDoCarrinho(dados.tipo).total) erros.troco = 'O valor para troco precisa ser maior que o total do pedido.';
@@ -234,6 +240,7 @@ function revisaoHtml() {
   const onde = {
     entrega: `${esc(dados.rua)}, ${esc(dados.numero)}${dados.complemento ? ` · ${esc(dados.complemento)}` : ''}<br>${esc(dados.bairro)}${dados.referencia ? `<br>Ref.: ${esc(dados.referencia)}` : ''}${dados.lat !== null ? '<br><span class="resumo-dados__leve">Local marcado no mapa</span>' : ''}`,
     retirada: esc(loja.endereco || 'Na loja'),
+    mesa: 'A atendente leva até a sua mesa',
   }[dados.tipo];
   const minutos = dados.tipo === 'entrega' ? loja.tempo_entrega_min : loja.tempo_retirada_min;
 
@@ -263,8 +270,8 @@ function revisaoHtml() {
       <section class="bloco">
         <dl class="resumo-dados">
           <div><dt>${ROTULO_TIPO[dados.tipo]}</dt><dd>${onde}<br><span class="resumo-dados__leve">Cerca de ${minutos} min</span></dd></div>
-          <div><dt>Quem pede</dt><dd>${esc(dados.nome)}<br>${esc(formatarTelefone(dados.telefone))}</dd></div>
-          <div><dt>Pagamento</dt><dd>${PAGAMENTOS[dados.pagamento]}${troco ? `, troco para ${reais(troco)}` : ''}</dd></div>
+          <div><dt>Quem pede</dt><dd>${esc(dados.nome)}${naMesa() ? '' : `<br>${esc(formatarTelefone(dados.telefone))}`}</dd></div>
+          <div><dt>Pagamento</dt><dd>${naMesa() ? 'Na conta, no fim' : `${PAGAMENTOS[dados.pagamento]}${troco ? `, troco para ${reais(troco)}` : ''}`}</dd></div>
           ${dados.tipo === 'entrega' && dados.observacoes ? `<div><dt>Observações</dt><dd>${esc(dados.observacoes)}</dd></div>` : ''}
         </dl>
       </section>
@@ -293,9 +300,9 @@ async function confirmar(botao) {
       metodo: 'POST',
       corpo: {
         tipo: dados.tipo,
-        cliente: { nome: dados.nome, telefone: dados.telefone },
+        cliente: { nome: dados.nome, telefone: naMesa() ? '' : dados.telefone },
         endereco: { rua: dados.rua, numero: dados.numero, bairro: dados.bairro, complemento: dados.complemento, referencia: dados.referencia, lat: dados.lat, lng: dados.lng },
-        pagamento: { forma: dados.pagamento, troco_para_centavos: troco },
+        pagamento: naMesa() ? {} : { forma: dados.pagamento, troco_para_centavos: troco },
         observacoes: dados.tipo === 'entrega' ? dados.observacoes : '',
         itens: estado.carrinho.map(({ uid, ...linha }) => linha),
         total_esperado_centavos: t.total,
@@ -356,6 +363,8 @@ delegar(visaoCheckout, 'change', 'input[name="tipo"]', () => {
   lerFormulario();
   $('#campos-tipo').innerHTML = camposDoTipo();
   $('#bloco-observacoes').hidden = dados.tipo !== 'entrega';   // a observação do pedido só existe na entrega
+  $('#campo-telefone').hidden = naMesa();   // na mesa só o nome
+  $('#bloco-pagamento').hidden = naMesa();  // na mesa o pagamento é no fechamento da conta
   $('#checkout-total').textContent = reais(totaisDoCarrinho(dados.tipo).total);
 });
 

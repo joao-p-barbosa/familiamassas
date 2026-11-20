@@ -21,7 +21,8 @@ final class AtendimentoRepository
      * @param list<array<string,mixed>> $itens
      * @return array{atendimento_id:int, id:int, codigo:string}
      */
-    public function abrir(array $atendimento, array $pedido, array $itens, int $usuarioId): array
+    /** @param int|null $usuarioId quem abriu (null: o próprio cliente, pelo cardápio na mesa) */
+    public function abrir(array $atendimento, array $pedido, array $itens, ?int $usuarioId): array
     {
         return Banco::transacao(function (\PDO $pdo) use ($atendimento, $pedido, $itens, $usuarioId): array {
             $agora = Relogio::agora();

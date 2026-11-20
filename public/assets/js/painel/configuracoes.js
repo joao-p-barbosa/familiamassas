@@ -80,8 +80,9 @@ function desenhar() {
         <div style="display: grid;">
           ${liga('aceita_entrega', 'Entrega', c.aceita_entrega)}
           ${liga('aceita_retirada', 'Retirada na loja', c.aceita_retirada)}
+          ${liga('aceita_mesa', 'Mesa (o cliente pede no restaurante, só com o nome)', c.aceita_mesa)}
         </div>
-        <p class="campo__ajuda">Pedidos de mesa e pra viagem são registrados pela atendente, em "Pedido no salão".</p>
+        <p class="campo__ajuda">O pedido de mesa feito pelo cardápio cai no Salão, com o nome do cliente, para a atendente levar. Pra viagem continua sendo registrado pela atendente.</p>
         <span class="campo__erro" id="erro-aceita" hidden></span>
         <div class="bloco__grade">
           ${campo('taxa_entrega', 'Taxa de entrega (R$)', textoDeCentavos(c.taxa_entrega_centavos), { extra: 'inputmode="decimal"', ajuda: 'Use 0,00 para entrega grátis.' })}
@@ -189,7 +190,7 @@ conteudo.addEventListener('submit', async (e) => {
       corpo: {
         nome_loja: form.nome_loja.value, whatsapp_loja: form.whatsapp_loja.value, endereco_loja: form.endereco_loja.value,
         funcionamento: form.funcionamento.value, horarios,
-        aceita_entrega: form.aceita_entrega.checked, aceita_retirada: form.aceita_retirada.checked,
+        aceita_entrega: form.aceita_entrega.checked, aceita_retirada: form.aceita_retirada.checked, aceita_mesa: form.aceita_mesa.checked,
         taxa_entrega_centavos: taxa, area_entrega: form.area_entrega.value,
         tempo_entrega_min: form.tempo_entrega_min.value, tempo_retirada_min: form.tempo_retirada_min.value,
         tema: form.tema.value,

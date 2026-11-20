@@ -33,6 +33,7 @@ final class AdminConfigController
             'whatsapp_loja' => $c->get('whatsapp_loja'),
             'aceita_entrega' => $c->get('aceita_entrega', '1') === '1',
             'aceita_retirada' => $c->get('aceita_retirada', '1') === '1',
+            'aceita_mesa' => $c->get('aceita_mesa', '1') === '1',
             'polling_segundos' => $c->inteiro('polling_segundos', 5),
             'estado_agora' => (new LojaService())->estado(),
         ]);
@@ -86,7 +87,7 @@ final class AdminConfigController
             if ($whatsapp === '') { $erros['whatsapp_loja'] = 'Informe o número com DDD, por exemplo (11) 91234-5678.'; }
         }
 
-        $aceita = ['entrega' => !empty($d['aceita_entrega']), 'retirada' => !empty($d['aceita_retirada'])];
+        $aceita = ['entrega' => !empty($d['aceita_entrega']), 'retirada' => !empty($d['aceita_retirada']), 'mesa' => !empty($d['aceita_mesa'])];
         if (!in_array(true, $aceita, true)) { $erros['aceita'] = 'Deixe pelo menos um tipo de pedido ligado.'; }
 
         $valores = [
@@ -102,6 +103,7 @@ final class AdminConfigController
             'whatsapp_loja' => $whatsapp,
             'aceita_entrega' => $aceita['entrega'] ? '1' : '0',
             'aceita_retirada' => $aceita['retirada'] ? '1' : '0',
+            'aceita_mesa' => $aceita['mesa'] ? '1' : '0',
             'polling_segundos' => (string) $numero('polling_segundos', 3, 60, 'Informe de 3 a 60 segundos.'),
         ];
         if ($erros !== []) {
