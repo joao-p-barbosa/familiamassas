@@ -155,6 +155,56 @@ final class Assistente
             'custo_usd' => $custo, 'ms' => $ms, 'ferramentas' => $usadas, 'erro' => $erro];
     }
 
+    /**
+     * Lê uma resposta fora do formato no meio do pedido pelo WhatsApp e devolve o que o passo espera (D89).
+     * Uma chamada só, sem ferramentas e com resposta curta: custa uma fração de uma resposta normal.
+     * @param string $passo o que o cliente está fazendo ("escolhendo o tamanho do prato")
+     * @param string $esperado o formato que o passo lê, com as opções quando houver
+     * @return array{tipo:string, valor?:string, pergunta?:string}|null
+     *   tipo "resposta" (valor no formato do passo), "incompleto" (pergunta pelo que falta) ou "duvida"; null = IA indisponível ou falhou
+     */
+    public function interpretar(string $telefone, string $passo, string $esperado, string $texto): ?array
+    {
+        if ($this->indisponivel($telefone) !== null) {
+            return null;
+        }
+        $c = $this->repo->config();
+        $modelo = (string) $c['ia_modelo'];
+        $sistema = "Você lê a mensagem de um cliente que está fazendo um pedido de restaurante pelo WhatsApp, num passo a passo automático.\n"
+            . "Agora ele está {$passo}. O sistema só entende a resposta neste formato:\n{$esperado}\n\n"
+            . "Responda SÓ com um JSON, sem nenhum texto antes ou depois, num destes três formatos:\n"
+            . '{"tipo":"resposta","valor":"..."} quando der para tirar da mensagem a resposta do passo. O valor vai exatamente no formato pedido.' . "\n"
+            . '{"tipo":"incompleto","pergunta":"..."} quando o cliente respondeu ao passo, mas faltou alguma parte. A pergunta pede só o que falta, em uma frase curta e simpática.' . "\n"
+            . '{"tipo":"duvida"} quando a mensagem é uma pergunta, um pedido de outra coisa ou não tem a ver com o passo.' . "\n"
+            . 'Nunca invente um dado que o cliente não escreveu. Na dúvida entre duas opções, use "incompleto" e pergunte qual.';
+        $r = $this->api->conversar($modelo, [['role' => 'system', 'content' => $sistema], ['role' => 'user', 'content' => mb_substr($texto, 0, 600)]], [],
+            ['max_tokens' => 200, 'privacidade' => $c['ia_privacidade']]);
+        $custo = $r['custo_usd'] ?? ($r['tokens_in'] * 0.10 + $r['tokens_out'] * 0.50) / 1_000_000;
+        if (!$r['ok'] && $r['status'] === 402) {
+            $this->repo->marcarSemCredito();
+        } elseif ($r['ok']) {
+            $this->repo->limparSemCredito();
+        }
+        $json = $r['ok'] && preg_match('/\{.*\}/s', $r['texto'], $m) === 1 ? json_decode($m[0], true) : null;
+        $tipo = is_array($json) ? ($json['tipo'] ?? null) : null;
+        $valido = match ($tipo) {
+            'resposta' => is_string($json['valor'] ?? null) && trim($json['valor']) !== '',
+            'incompleto' => is_string($json['pergunta'] ?? null) && trim($json['pergunta']) !== '',
+            'duvida' => true,
+            default => false,
+        };
+        $erro = !$r['ok'] ? (string) $r['erro'] : (!$valido ? 'Interpretação fora do formato.' : null);
+        $this->repo->registrarUso('whatsapp', $telefone, $modelo, $r['tokens_in'], $r['tokens_out'], $custo, $r['ms'], ['interpretar'], $erro);
+        if ($erro !== null) {
+            return null;
+        }
+        return match ($tipo) {
+            'resposta' => ['tipo' => 'resposta', 'valor' => mb_substr(trim($json['valor']), 0, 300)],
+            'incompleto' => ['tipo' => 'incompleto', 'pergunta' => mb_substr(self::limpar($json['pergunta']), 0, 300)],
+            default => ['tipo' => 'duvida'],
+        };
+    }
+
     /** Últimas mensagens da conversa (sem a que acabou de chegar, que entra à parte), no formato do modelo. */
     private function historico(string $telefone, string $atual, int $memoria): array
     {

@@ -6,6 +6,9 @@ namespace App\Impressao;
 /**
  * O "programa da impressora" num arquivo só (D86): o dono baixa no painel e dá dois cliques no computador da impressora.
  * O arquivo já vem com o endereço do site e um código novo do agente, então não há nada para digitar. Ele:
+ *   0. se nenhuma impressora do Windows usa uma porta USB, instala o driver da QIA-8388 (impressora/driver/qia-8388.zip) e cria a
+ *      fila "QIA-8388" na porta USB (D90). Pede permissão de administrador uma vez; recusou, avisa e segue. O agente manda a
+ *      comanda em RAW (ESC/POS), então o driver só precisa existir para o Windows ter a fila: outra impressora USB também funciona;
  *   1. desliga o agente que estiver rodando neste computador;
  *   2. grava agente.ps1 e config.json em %LOCALAPPDATA%\ImpressoraDoPainel;
  *   3. cria o atalho na pasta Inicializar do Windows (abre sozinho, escondido, quando o computador liga);
@@ -25,6 +28,7 @@ final class Instalador
     public static function cmd(string $servidor, string $codigo, ?string $agente = null): string
     {
         $agente ??= (string) file_get_contents(RAIZ . '/impressora/agente.ps1');
+        $driver = base64_encode((string) file_get_contents(RAIZ . '/impressora/driver/qia-8388.zip'));
         $aspas = static fn (string $v): string => "'" . str_replace("'", "''", $v) . "'";
         $base64 = base64_encode($agente);
 
@@ -57,6 +61,33 @@ try {
     if ($env:IMPRESSORA_ATALHO_TESTE) { $inicializar = $env:IMPRESSORA_ATALHO_TESTE }
     Write-Host ''
     Write-Host '  Instalando o programa da impressora...'
+
+    # 0. A impressora no Windows: sem nenhuma fila numa porta USB, instala o driver da QIA-8388 e cria a fila (pede administrador)
+    $ProgressPreference = 'SilentlyContinue'
+    $temFila = @(Get-Printer -ErrorAction SilentlyContinue | Where-Object { $_.PortName -like 'USB*' }).Count -gt 0
+    if (-not $temFila -and -not $env:IMPRESSORA_PASTA_TESTE) {
+        $porta = Get-PrinterPort -ErrorAction SilentlyContinue | Where-Object { $_.Name -like 'USB*' } | Select-Object -First 1
+        if (-not $porta) {
+            Write-Host '  A impressora nao apareceu no USB. Ligue a impressora, conecte o cabo e abra este arquivo de novo.'
+        } else {
+            Write-Host '  Instalando a impressora no Windows. Se o Windows pedir permissao, clique em Sim.'
+            $pastaDriver = Join-Path $env:TEMP 'driver-impressora-painel'
+            Remove-Item $pastaDriver -Recurse -Force -ErrorAction SilentlyContinue
+            New-Item -ItemType Directory -Force -Path $pastaDriver | Out-Null
+            $zip = Join-Path $pastaDriver 'driver.zip'
+            [IO.File]::WriteAllBytes($zip, [Convert]::FromBase64String(__DRIVER__))
+            Expand-Archive -Path $zip -DestinationPath $pastaDriver -Force
+            $inf = Join-Path $pastaDriver 'labelprinter.inf'
+            $comandos = "pnputil /add-driver '$inf' | Out-Null; Add-PrinterDriver -Name 'LABEL'; Add-Printer -Name 'QIA-8388' -DriverName 'LABEL' -PortName '$($porta.Name)'"
+            $codificado = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($comandos))
+            try {
+                Start-Process -FilePath powershell -Verb RunAs -Wait -WindowStyle Hidden -ArgumentList '-NoProfile', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', $codificado
+            } catch {
+                Write-Host '  Sem a permissao, a impressora nao foi instalada no Windows. Abra este arquivo de novo e clique em Sim.'
+            }
+            if (Get-Printer -Name 'QIA-8388' -ErrorAction SilentlyContinue) { Write-Host '  Impressora instalada no Windows.' }
+        }
+    }
 
     # 1. Desliga o agente que ja estiver rodando (versao antiga ou instalacao anterior)
     Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe'" |
@@ -119,7 +150,7 @@ try {
     exit 1
 }
 PS;
-        $ps = strtr($ps, ['__SERVIDOR__' => $aspas($servidor), '__CODIGO__' => $aspas($codigo), '__AGENTE__' => $aspas($base64)]);
+        $ps = strtr($ps, ['__SERVIDOR__' => $aspas($servidor), '__CODIGO__' => $aspas($codigo), '__AGENTE__' => $aspas($base64), '__DRIVER__' => $aspas($driver)]);
         $texto = $cmd . "\n" . self::MARCADOR . "\n" . $ps . "\n";
         return str_replace("\n", "\r\n", str_replace("\r\n", "\n", $texto));
     }

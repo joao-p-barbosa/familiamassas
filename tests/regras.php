@@ -397,7 +397,19 @@ $gestao->atualizar($maria['id'], ['ativo' => true, 'perfil' => 'atendente', 'nom
 $_SESSION['usuario'] = ['id' => $maria['id'], 'nome' => 'Maria Souza', 'login' => 'maria.souza', 'perfil' => 'admin'];
 conferir('Perfil e nome trocados valem no próximo clique, sem entrar de novo', [Sessao::usuario()['perfil'], Sessao::usuario()['nome']], ['atendente', 'Maria S.']);
 unset($_SESSION['usuario']);
-Banco::conexao()->prepare('DELETE FROM usuarios WHERE id = ?')->execute([$maria['id']]);
+conferir('Login trocado: o novo entra, o antigo não; login de outra pessoa é recusado', [
+    $gestao->atualizar($maria['id'], ['login' => 'Maria.S'], $proprietario)['login'], $usuariosRepo->porLogin('maria.souza'), $usuariosRepo->porLogin('maria.s') !== null,
+    array_keys(camposDoErro(fn () => $gestao->atualizar($maria['id'], ['login' => 'admin'], $proprietario))),
+], ['maria.s', null, true, ['login']]);
+conferir('Ninguém exclui a si mesmo; o único proprietário ativo não é excluído', [
+    codigoDoErro(fn () => $gestao->apagar(1, $proprietario)), codigoDoErro(fn () => $gestao->apagar(1, ['id' => $maria['id'], 'perfil' => 'admin'])),
+], ['409 proprio_usuario', '409 ultimo_proprietario']);
+$pedidoDaMaria = (int) Banco::conexao()->query('SELECT id FROM pedidos ORDER BY id LIMIT 1')->fetchColumn();
+Banco::conexao()->prepare('UPDATE pedidos SET criado_por = ? WHERE id = ?')->execute([$maria['id'], $pedidoDaMaria]);
+$gestao->apagar($maria['id'], $proprietario);
+conferir('Excluir: a pessoa some e o pedido que ela registrou fica, sem o "registrado por"', [
+    $usuariosRepo->porId($maria['id']), Banco::conexao()->query("SELECT criado_por FROM pedidos WHERE id = {$pedidoDaMaria}")->fetchColumn(),
+], [null, null]);
 
 echo "\nACOMPANHAMENTO NA HOME (cookie)\n";
 $acompanhamento = new AcompanhamentoDoCliente();
@@ -1108,7 +1120,7 @@ $pdoFx->exec('DELETE FROM whatsapp_sessoes');
 Env::definir('OPENROUTER_API_KEY', $chaveIa);
 $repoIa->salvarConfig(['ia_ativo' => '1']);
 $pedidosIa = [];
-$filaIa = [$textoIa('Temos sim: a massa sem glúten custa R$ 5 a mais.')];
+$filaIa = [$textoIa('{"tipo":"duvida"}'), $textoIa('Temos sim: a massa sem glúten custa R$ 5 a mais.')];   // a IA primeiro tenta ler como resposta do passo (D89)
 $botFxIa = new App\WhatsApp\Bot(assistente: $assistenteIa);
 $botFxIa->receber(['wamid' => 'fx.ia.1', 'telefone' => '5511966660007', 'tipo' => 'text', 'texto' => 'cardapio', 'botao' => null, 'nome' => null]);
 $enviadasAntes = count($falsoWhats->enviadas);
@@ -1119,11 +1131,55 @@ conferir('Dúvida no meio do pedido: a IA responde e o bot repete a pergunta do 
     (new App\WhatsApp\FluxoPedido())->ativo('5511966660007'),
 ], ['ia', 2, 'Temos sim: a massa sem glúten custa R$ 5 a mais.', true, true]);
 conferir('A IA recebe a situação: está no meio de um pedido e não deve mandar link', [
-    str_contains((string) ($pedidosIa[0]['corpo']['messages'][0]['content'] ?? ''), 'SITUAÇÃO AGORA'), str_contains((string) ($pedidosIa[0]['corpo']['messages'][0]['content'] ?? ''), 'Não mande link do cardápio'),
+    str_contains((string) ($pedidosIa[1]['corpo']['messages'][0]['content'] ?? ''), 'SITUAÇÃO AGORA'), str_contains((string) ($pedidosIa[1]['corpo']['messages'][0]['content'] ?? ''), 'Não mande link do cardápio'),
 ], [true, true]);
 $pedidosIa = [];
 $botFxIa->receber(['wamid' => 'fx.ia.3', 'telefone' => '5511966660007', 'tipo' => 'text', 'texto' => '42', 'botao' => null, 'nome' => null]);
 conferir('Número errado não gasta IA: só repete a pergunta', count($pedidosIa), 0);
+
+// Resposta fora do formato (D89): a IA lê a mensagem e o pedido segue, sem pedir para o cliente refazer.
+$foneIa = '5511966660010';
+$dizIa = static function (string $texto) use ($botFxIa, $foneIa): string {
+    static $n = 0;
+    $n++;
+    return $botFxIa->receber(['wamid' => "fx.ia.int.{$n}", 'telefone' => $foneIa, 'tipo' => 'text', 'texto' => $texto, 'botao' => null, 'nome' => 'Carla Dias', 'local' => null]);
+};
+$etapaIa = static fn (): ?string => ($pdoFx->query("SELECT etapa FROM whatsapp_sessoes WHERE telefone = '{$foneIa}'")->fetchColumn() ?: null);
+$dizIa('cardapio');
+$dizIa($opcao('Bebidas e sobremesas'));
+$dizIa($opcao('Água mineral'));
+$pedidosIa = [];
+$filaIa = [$textoIa('{"tipo":"resposta","valor":"2"}')];
+conferir('Quantidade escrita por extenso ("duas, por favor"): a IA lê 2 e o pedido segue', [$dizIa('duas, por favor'), $etapaIa(), str_contains($tela(), '2× Água mineral')], ['ia_interpretou', 'mais', true]);
+conferir('A IA recebe o formato que o passo espera', str_contains((string) ($pedidosIa[0]['corpo']['messages'][0]['content'] ?? ''), 'um número inteiro de 1 a 20'), true);
+$dizIa('2');
+$dizIa($opcao('Entrega'));
+$dizIa('1');
+$dizIa('0');
+$filaIa = [$textoIa('{"tipo":"incompleto","pergunta":"Anotei a rua e o número! Qual é o bairro?"}')];
+conferir('Endereço sem o bairro e sem vírgulas: a IA pergunta só o que falta, e o passo continua o mesmo', [
+    $dizIa('moro na rua das flores numero 120 portao azul'), $tela(), $etapaIa(),
+], ['ia', 'Anotei a rua e o número! Qual é o bairro?', 'endereco']);
+$pedidosIa = [];
+$filaIa = [$textoIa('{"tipo":"resposta","valor":"Rua das Flores, 120, Vila Nova, portão azul"}')];
+conferir('Com o bairro, a IA junta as duas mensagens; o bot confirma o endereço e vai ao pagamento', [
+    $dizIa('vila nova'), str_contains((string) ($pedidosIa[0]['corpo']['messages'][1]['content'] ?? ''), 'rua das flores numero 120'), $etapaIa(),
+    str_contains($tela(), 'Anotei o endereço: Rua das Flores, 120, Vila Nova, portão azul.'),
+], ['ia_interpretou', true, 'pagamento', true]);
+$filaIa = [$textoIa('não sei')];
+conferir('Resposta da IA fora do JSON: o bot não trava, repete a pergunta', [$dizIa('cartao de credito sem contato'), $etapaIa()], ['ia', 'pagamento']);
+$repoIa->salvarConfig(['ia_ativo' => '0']);
+$dizIa('2');
+$dizIa('cardapio');
+$dizIa($opcao('Bebidas e sobremesas'));
+$dizIa($opcao('Água mineral'));
+$dizIa('1');
+$dizIa('2');
+$dizIa($opcao('Entrega'));
+$dizIa('1');
+$dizIa('0');
+conferir('IA desligada: endereço fora do formato recebe o formato de novo (como antes)', [$dizIa('rua das flores 120'), str_contains($tela(), 'Faltou alguma parte do endereço'), $etapaIa()], ['invalido', true, 'endereco']);
+$repoIa->salvarConfig(['ia_ativo' => '1']);
 
 $pdoFx->exec('DELETE FROM whatsapp_sessoes');
 $pdoFx->exec('DELETE FROM ia_uso');

@@ -130,6 +130,7 @@ final class FluxoPedido
         if ($resultado === false) {
             return $this->invalido($telefone, $s, $texto, $m['nome']);
         }
+        unset($s['parcial']);
         $this->perguntar($telefone, $s);
         return $s['etapa'];
     }
@@ -258,8 +259,7 @@ final class FluxoPedido
                 }
                 $partes = array_values(array_filter(array_map('trim', explode(',', $texto)), static fn (string $p): bool => $p !== ''));
                 if (count($partes) < 3) {
-                    $s['aviso'] = 'Faltou alguma parte. Separe por vírgulas: rua, número e bairro.';
-                    return true;
+                    return false;   // fora do formato: a IA tenta ler o endereço (D89); sem IA, o cliente recebe o formato de novo
                 }
                 $s['endereco'] = array_merge($s['endereco'] ?? [], [
                     'rua' => $partes[0], 'numero' => $partes[1], 'bairro' => $partes[2], 'complemento' => implode(', ', array_slice($partes, 3)),
@@ -361,10 +361,41 @@ final class FluxoPedido
         }
     }
 
-    /** O cliente digitou algo que o passo não entende. Número errado: repete a pergunta. Uma dúvida: a IA responde e o passo se repete. */
+    /**
+     * O cliente digitou algo que o passo não entende.
+     *   Texto fora do formato (D89): a IA lê a mensagem e devolve a resposta do passo ("duas" vira 2, um endereço sem vírgulas vira
+     *   "rua, número, bairro"), e o pedido segue. Se faltou alguma parte, a IA pergunta só o que falta e guarda o que já veio.
+     *   Uma dúvida: a IA responde e o passo se repete. Número errado, ou IA desligada: repete a pergunta.
+     */
     private function invalido(string $telefone, array $s, string $texto, ?string $nome): string
     {
         $temLetra = preg_match('/\pL/u', $texto) === 1;
+        $esperado = $temLetra ? $this->esperado($s) : null;
+        if ($esperado !== null) {
+            $lido = trim(($s['parcial'] ?? '') . "\n" . $texto);
+            $i = $this->assistente->interpretar($telefone, self::DESCRICAO_DO_PASSO[$s['etapa']] ?? 'fazendo o pedido', $esperado, $lido);
+            if (($i['tipo'] ?? null) === 'resposta') {
+                $antes = $s['etapa'];
+                $r = $this->passo($s, $i['valor'], null, $telefone);
+                if ($r === 'fim') {
+                    return $s['resultado'] ?? 'fim';
+                }
+                if ($r !== false) {
+                    unset($s['parcial']);
+                    if (in_array($antes, ['local', 'endereco'], true) && isset($s['endereco']['rua'])) {
+                        $e = $s['endereco'];
+                        $s['aviso'] = "Anotei o endereço: {$e['rua']}, {$e['numero']}, {$e['bairro']}" . ($e['complemento'] !== '' ? ", {$e['complemento']}" : '') . '.';
+                    }
+                    $this->perguntar($telefone, $s);
+                    return 'ia_interpretou';
+                }
+            } elseif (($i['tipo'] ?? null) === 'incompleto') {
+                $s['parcial'] = mb_substr($lido, -500);
+                $this->salvar($telefone, $s);
+                $this->enviar($telefone, $i['pergunta'], 'ia');
+                return 'ia';
+            }
+        }
         if ($temLetra && $this->assistente->indisponivel($telefone) === null) {
             $r = $this->assistente->responder($telefone, $texto, $nome, ['contexto' => 'O cliente está no meio de um pedido por aqui pelo WhatsApp, '
                 . (self::DESCRICAO_DO_PASSO[$s['etapa']] ?? 'fazendo o pedido') . '. Responda só a dúvida dele, em 1 ou 2 frases. Não mande link do cardápio nem peça para ele pedir pelo site: logo depois o sistema repete a pergunta do passo em que ele está.']);
@@ -374,9 +405,30 @@ final class FluxoPedido
                 return 'ia';
             }
         }
-        $s['aviso'] = $temLetra ? 'Não entendi. 🙂' : 'Essa opção não existe.';
+        $s['aviso'] = in_array($s['etapa'], ['local', 'endereco'], true) ? 'Faltou alguma parte do endereço. Separe por vírgulas: rua, número e bairro.'
+            : ($temLetra ? 'Não entendi. 🙂' : 'Essa opção não existe.');
         $this->perguntar($telefone, $s);
         return 'invalido';
+    }
+
+    /**
+     * O formato que o passo atual lê, para a IA traduzir a mensagem do cliente (D89). null: o passo não é interpretado pela IA
+     * (o "Confirmar pedido" é sempre escolha explícita do cliente).
+     */
+    private function esperado(array $s): ?string
+    {
+        $opcoes = implode("\n", array_map(static fn (int $i, string $r): string => ($i + 1) . '. ' . self::semMarcas($r), array_keys($s['rotulos'] ?? []), $s['rotulos'] ?? []));
+        $endereco = 'O endereço de entrega, separado por vírgulas: rua, número, bairro, complemento. Rua, número e bairro são obrigatórios; '
+            . 'o complemento (apartamento, bloco, ponto de referência) é opcional. Ex.: Rua das Flores, 120, Vila Nova, portão azul';
+        return match ($s['etapa']) {
+            'menu', 'prato_tamanho', 'monte_tamanho', 'monte_massa', 'monte_molho', 'simples', 'mais', 'tipo', 'pagamento'
+                => $opcoes !== '' ? "Só o número da opção escolhida (ex.: 2). As opções:\n{$opcoes}" : null,
+            'monte_grupo' => "Os números dos ingredientes escolhidos, separados por vírgula (ex.: 1, 3), ou 0 para nenhum deste grupo. As opções:\n{$opcoes}",
+            'quantidade' => 'Só a quantidade, um número inteiro de 1 a 20 (ex.: 2).',
+            'local', 'endereco' => $endereco,
+            'troco' => 'Para quanto o cliente quer troco, só o número em reais (ex.: 100), ou 0 se não precisa de troco.',
+            default => null,
+        };
     }
 
     // ---------- Perguntas ----------
@@ -585,6 +637,7 @@ final class FluxoPedido
                 break;
         }
 
+        $s['rotulos'] = $rotulos;   // o texto de cada opção, para a IA ler uma resposta fora do formato (D89)
         $enquete = $pergunta !== null && Conector::ativo() ? self::enquete($pergunta, $rotulos, $multipla) : null;
         if ($enquete !== null) {
             $s['enquete'] = $enquete['tag'];

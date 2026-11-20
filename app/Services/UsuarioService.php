@@ -8,9 +8,9 @@ use App\Core\Sessao;
 use App\Repositories\UsuarioRepository;
 
 /**
- * Gestão dos usuários do painel (tela Usuários, só o proprietário): criar, mudar nome, perfil e situação, e definir senha.
+ * Gestão dos usuários do painel (tela Usuários, só o proprietário): criar, mudar nome, login, perfil e situação, definir senha e excluir.
  * Regras: login único (letras minúsculas, números, ponto, hífen e sublinhado); senha com 8+ caracteres; o sistema nunca
- * fica sem um proprietário ativo; ninguém desativa nem rebaixa a si mesmo (para não se trancar para fora).
+ * fica sem um proprietário ativo; ninguém desativa, rebaixa nem exclui a si mesmo (para não se trancar para fora).
  */
 final class UsuarioService
 {
@@ -23,12 +23,7 @@ final class UsuarioService
     {
         $erros = [];
         $nome = self::nome($dados['nome'] ?? '', $erros);
-        $login = mb_strtolower(trim((string) ($dados['login'] ?? '')));
-        if (preg_match('/^[a-z0-9._-]{3,30}$/', $login) !== 1) {
-            $erros['login'] = 'Use de 3 a 30 caracteres: letras minúsculas, números, ponto, hífen ou sublinhado.';
-        } elseif ($this->usuarios->loginEmUso($login)) {
-            $erros['login'] = 'Já existe um usuário com este login.';
-        }
+        $login = $this->login($dados['login'] ?? '', null, $erros);
         $perfil = self::perfil($dados['perfil'] ?? '', $erros);
         $senha = (string) ($dados['senha'] ?? '');
         if (mb_strlen($senha) < 8) {
@@ -46,6 +41,7 @@ final class UsuarioService
         $atual = $this->usuarios->porId($id) ?? throw ErroHttp::naoEncontrado('Usuário não encontrado.');
         $erros = [];
         $nome = self::nome($dados['nome'] ?? $atual['nome'], $erros);
+        $login = $this->login($dados['login'] ?? $atual['login'], $id, $erros);
         $perfil = self::perfil($dados['perfil'] ?? $atual['perfil'], $erros);
         $ativo = array_key_exists('ativo', $dados) ? (bool) $dados['ativo'] : $atual['ativo'];
         if ($erros !== []) {
@@ -58,8 +54,32 @@ final class UsuarioService
         if ($deixaDeSerAdminAtivo && $this->usuarios->adminsAtivos() <= 1) {
             throw new ErroHttp(409, 'ultimo_proprietario', 'Este é o único proprietário ativo: crie ou ative outro antes.');
         }
-        $this->usuarios->atualizar($id, $nome, $perfil, $ativo);
+        $this->usuarios->atualizar($id, $nome, $login, $perfil, $ativo);
         return $this->usuarios->porId($id);
+    }
+
+    /** @param array{id:int} $quem quem está excluindo (não pode excluir a si mesmo) */
+    public function apagar(int $id, array $quem): void
+    {
+        $atual = $this->usuarios->porId($id) ?? throw ErroHttp::naoEncontrado('Usuário não encontrado.');
+        if ($id === $quem['id']) {
+            throw new ErroHttp(409, 'proprio_usuario', 'Você não pode excluir o seu próprio usuário.');
+        }
+        if ($atual['perfil'] === 'admin' && $atual['ativo'] && $this->usuarios->adminsAtivos() <= 1) {
+            throw new ErroHttp(409, 'ultimo_proprietario', 'Este é o único proprietário ativo: crie ou ative outro antes.');
+        }
+        $this->usuarios->apagar($id);
+    }
+
+    private function login(mixed $valor, ?int $id, array &$erros): string
+    {
+        $login = mb_strtolower(trim(is_string($valor) ? $valor : ''));
+        if (preg_match('/^[a-z0-9._-]{3,30}$/', $login) !== 1) {
+            $erros['login'] = 'Use de 3 a 30 caracteres: letras minúsculas, números, ponto, hífen ou sublinhado.';
+        } elseif ($this->usuarios->loginEmUso($login, $id)) {
+            $erros['login'] = 'Já existe um usuário com este login.';
+        }
+        return $login;
     }
 
     public function definirSenha(int $id, array $dados): void

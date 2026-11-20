@@ -691,11 +691,17 @@ dialog.folha[data-arrastando] {
   font-size: var(--texto-6);
 }
 .folha__corpo {
-  flex: 1;
+  /* 1 1 auto, e não "flex: 1" (base 0%): no Safari do iPhone a base 0% numa folha sem altura fixa (sacola, item)
+     encolhe o corpo a zero e só o topo aparece. Com auto ele mede o conteúdo e encolhe (rolando) quando passa da tela. */
+  flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: var(--e-5);
+}
+/* Folha sem rodapé (a sacola): o último botão não fica embaixo da barra de gestos do iPhone. */
+.folha__corpo:last-child {
+  padding-bottom: calc(var(--e-5) + env(safe-area-inset-bottom));
 }
 .folha__rodape {
   flex: none;

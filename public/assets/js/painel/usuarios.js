@@ -5,7 +5,7 @@ import { icone } from '../shared/icones.js';
 import { api } from '../shared/api.js';
 import { abrirFolha, fecharFolha } from '../shared/folha.js';
 import { avisar } from '../shared/avisos.js';
-import { recipienteDaTela, mostrarErro } from './casca.js';
+import { recipienteDaTela, mostrarErro, confirmar } from './casca.js';
 
 const conteudo = recipienteDaTela();
 const lateral = $('#folha-lateral');
@@ -38,6 +38,7 @@ function linhaHtml(u) {
       <div class="linha-cadastro__acoes">
         <button type="button" class="botao botao--fantasma botao--p" data-editar>${icone('editar', 16)}Editar<span class="so-leitor"> ${esc(u.nome)}</span></button>
         <button type="button" class="botao botao--fantasma botao--p" data-senha>${icone('olho-fechado', 16)}Trocar senha<span class="so-leitor"> de ${esc(u.nome)}</span></button>
+        ${souEu ? '' : `<button type="button" class="botao botao--perigo-suave botao--icone" data-apagar aria-label="Excluir ${esc(u.nome)}">${icone('lixeira', 18)}</button>`}
       </div>
     </li>`;
 }
@@ -51,7 +52,7 @@ function desenhar() {
     </div>
     <div class="cadastro">
       <div class="cadastro__topo">
-        <p class="cadastro__nota">${ativos === 1 ? '1 pessoa entra no painel.' : `${ativos} pessoas entram no painel.`} Quem sai da equipe é desativado: o histórico dos pedidos continua com o nome dela.</p>
+        <p class="cadastro__nota">${ativos === 1 ? '1 pessoa entra no painel.' : `${ativos} pessoas entram no painel.`} Quem sai da equipe pode ser desativado (volta quando quiser) ou excluído de vez.</p>
       </div>
       <ul class="lista-cadastro">${usuarios.map(linhaHtml).join('')}</ul>
     </div>`;
@@ -125,7 +126,8 @@ function corpoDoFormulario() {
       ${campoSenha('Senha inicial')}`;
   }
   return `${nome}
-    <p class="campo__ajuda">Login <strong>${esc(u.login)}</strong> (não muda).</p>
+    ${campo('login', 'Login', `<input class="entrada" type="text" name="login" value="${esc(u.login)}" maxlength="30" autocomplete="off" autocapitalize="none" spellcheck="false" aria-describedby="ajuda-login erro-login" required>`,
+      'É o que a pessoa digita para entrar. Mudou aqui, ela passa a entrar com o login novo.')}
     ${camposPerfil(u, souEu)}
     <label class="interruptor">
       <input type="checkbox" name="ativo" ${u.ativo ? 'checked' : ''} ${souEu ? 'disabled' : ''}>
@@ -173,11 +175,11 @@ function lerFormulario(form) {
     const perfil = form.querySelector('[name="perfil"]:checked');
     if (perfil && !perfil.disabled) valores.perfil = perfil.value;
   }
-  if (modo === 'novo') {
+  if (modo !== 'senha') {
     valores.login = form.login.value.trim().toLowerCase();
     if (!/^[a-z0-9._-]{3,30}$/.test(valores.login)) erros.login = 'Use de 3 a 30 caracteres: letras minúsculas, números, ponto, hífen ou sublinhado.';
-    if (!valores.perfil) erros.perfil = 'Escolha um perfil.';
   }
+  if (modo === 'novo' && !valores.perfil) erros.perfil = 'Escolha um perfil.';
   if (modo === 'editar' && !form.ativo.disabled) valores.ativo = form.ativo.checked;
   if (modo !== 'editar') {
     valores.senha = form.senha.value;
@@ -193,6 +195,23 @@ delegar(conteudo, 'click', '[data-editar]', (e, botao) => {
 });
 delegar(conteudo, 'click', '[data-senha]', (e, botao) => {
   abrirFormulario('senha', usuarios.find((u) => u.id === Number(botao.closest('[data-id]').dataset.id)));
+});
+
+delegar(conteudo, 'click', '[data-apagar]', async (e, botao) => {
+  const usuario = usuarios.find((u) => u.id === Number(botao.closest('[data-id]').dataset.id));
+  const sim = await confirmar({
+    titulo: `Excluir ${usuario.nome}?`,
+    texto: `O login ${usuario.login} deixa de existir e não dá para desfazer. Os pedidos que a pessoa registrou continuam no histórico. Se ela pode voltar, prefira desativar em “Editar”.`,
+    confirmar: 'Excluir', perigo: true,
+  });
+  if (!sim) return;
+  try {
+    await api(`/api/admin/usuarios/${usuario.id}`, { metodo: 'DELETE' });
+    avisar(`${usuario.nome} excluído`);
+    await carregar();
+  } catch (erro) {
+    mostrarErro(erro);
+  }
 });
 
 delegar(lateral, 'click', '[data-mostrar-senha]', (e, botao) => {

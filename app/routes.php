@@ -84,6 +84,7 @@ return static function (Roteador $r): void {
     $r->get('/api/admin/usuarios', $usuarios->listar(...));
     $r->post('/api/admin/usuarios', $usuarios->criar(...));
     $r->put('/api/admin/usuarios/{id}', $usuarios->atualizar(...));
+    $r->delete('/api/admin/usuarios/{id}', $usuarios->apagar(...));
     $r->post('/api/admin/usuarios/{id}/senha', $usuarios->senha(...));
 
     // ---------- WhatsApp (Cloud API) ----------

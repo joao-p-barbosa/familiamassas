@@ -27,11 +27,19 @@ final class AdminUsuarioController
         Resposta::json((new UsuarioRepository())->porId($criado['id']), 201);
     }
 
-    /** PUT /api/admin/usuarios/{id}  {nome?, perfil?, ativo?} */
+    /** PUT /api/admin/usuarios/{id}  {nome?, login?, perfil?, ativo?} */
     public function atualizar(Requisicao $req): void
     {
         $eu = Sessao::exigir($req, ['admin'], true);
         Resposta::json((new UsuarioService())->atualizar((int) $req->parametro('id'), $req->json(), $eu));
+    }
+
+    /** DELETE /api/admin/usuarios/{id}: exclui (a pessoa sai do painel no próximo clique). */
+    public function apagar(Requisicao $req): void
+    {
+        $eu = Sessao::exigir($req, ['admin'], true);
+        (new UsuarioService())->apagar((int) $req->parametro('id'), $eu);
+        Resposta::json(['ok' => true]);
     }
 
     /** POST /api/admin/usuarios/{id}/senha  {senha}: define a senha (a pessoa troca depois com o proprietário, se quiser). */

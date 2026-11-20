@@ -249,3 +249,10 @@ Como testar:
 4. "Montar meu prato": massa, molho, ingredientes (os pagos mostram "+ R$") e o tamanho por último, com o preço do prato montado.
 5. WhatsApp ("Cardápio"): mesma ordem no Monte; no prato da casa só aparecem os tamanhos com preço.
 6. Impressora › Trocar a impressora › papel **5,8 cm** › imprimir o teste.
+
+## iPhone, WhatsApp com IA, driver da impressora e usuários (2026-11-20, tarde)
+
+- **Sacola no iPhone**: o corpo das folhas sem altura fixa (sacola, item) usava `flex: 1`, que o Safari encolhe a zero; agora `1 1 auto`. Varredura em 320, 360, 375, 390, 430, 768 e 1366 px (Chrome): nada passa da largura e o "Fechar pedido" aparece em todas. Falta conferir num iPhone de verdade.
+- **WhatsApp** (D89): resposta fora do formato é lida pela IA e o pedido segue. Só vale com o assistente ligado (Painel › Assistente).
+- **Impressora** (D90): o `instalar-impressora.cmd` instala o driver e a fila quando o Windows ainda não tem a impressora.
+- **Usuários** (D91): excluir e trocar o login.

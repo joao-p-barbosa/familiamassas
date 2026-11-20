@@ -57,9 +57,15 @@ final class UsuarioRepository
             [$nome, $login, $hash, $perfil, Relogio::agora()]);
     }
 
-    public function atualizar(int $id, string $nome, string $perfil, bool $ativo): void
+    public function atualizar(int $id, string $nome, string $login, string $perfil, bool $ativo): void
     {
-        Banco::conexao()->prepare('UPDATE usuarios SET nome = ?, perfil = ?, ativo = ? WHERE id = ?')->execute([$nome, $perfil, $ativo ? 1 : 0, $id]);
+        Banco::conexao()->prepare('UPDATE usuarios SET nome = ?, login = ?, perfil = ?, ativo = ? WHERE id = ?')->execute([$nome, $login, $perfil, $ativo ? 1 : 0, $id]);
+    }
+
+    /** Pedidos e contas do salão que a pessoa registrou ficam sem o "registrado por" (ON DELETE SET NULL); o resto do histórico não muda. */
+    public function apagar(int $id): void
+    {
+        Banco::conexao()->prepare('DELETE FROM usuarios WHERE id = ?')->execute([$id]);
     }
 
     private function converter(array $linha): array

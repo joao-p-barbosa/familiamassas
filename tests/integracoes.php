@@ -604,12 +604,28 @@ $cmd = Instalador::cmd('https://loja.exemplo.com', $novo, "# agente\r\nWrite-Hos
 $marca = strrpos($cmd, Instalador::MARCADOR . "\r\n");
 conferir('Instalador: só ASCII e quebra de linha CRLF (o cmd lê assim)', [preg_match('/[^\x00-\x7F]/', $cmd), preg_match("/(?<!\r)\n/", $cmd)], [0, 0]);
 conferir('Instalador: já vem com o endereço e o código (nada para digitar)', [str_contains($cmd, "\$servidor = 'https://loja.exemplo.com'"), str_contains($cmd, "\$codigo = '{$novo}'")], [true, true]);
-preg_match("/FromBase64String\('([^']+)'\)/", $cmd, $b64);
+preg_match('/WriteAllBytes\(\$script, \[Convert\]::FromBase64String\(\'([^\']+)\'\)/', $cmd, $b64);
 conferir('Instalador: o agente vai inteiro dentro dele', base64_decode($b64[1] ?? ''), "# agente\r\nWrite-Host 'oi'\r\n");
 conferir('Instalador: o cmd para antes do PowerShell e o PowerShell começa no marcador', [$marca !== false, strpos($cmd, 'exit /b 1') < $marca, substr_count($cmd, Instalador::MARCADOR)], [true, true, 1]);
 conferir('Instalador: abre sozinho com o Windows, escondido', [str_contains($cmd, "GetFolderPath('Startup')"), str_contains($cmd, '-WindowStyle Hidden')], [true, true]);
 conferir('Instalador: aspas simples no endereço não quebram o script', str_contains(Instalador::cmd("https://x.com/a'b", 'c', 'x'), "'https://x.com/a''b'"), true);
 conferir('Instalador de verdade: leva o agente.ps1 do repositório', str_contains(Instalador::cmd('https://x', 'c'), base64_encode((string) file_get_contents(dirname(__DIR__) . '/impressora/agente.ps1'))), true);
+preg_match('/WriteAllBytes\(\$zip, \[Convert\]::FromBase64String\(\'([^\']+)\'\)/', $cmd, $zipDriver);
+$arquivoZip = tempnam(sys_get_temp_dir(), 'drv');
+file_put_contents($arquivoZip, base64_decode($zipDriver[1] ?? ''));
+$listaZip = [];
+$zipAberto = new ZipArchive();
+if ($zipAberto->open($arquivoZip) === true) {
+    for ($i = 0; $i < $zipAberto->numFiles; $i++) {
+        $listaZip[] = $zipAberto->getNameIndex($i);
+    }
+    $zipAberto->close();
+}
+@unlink($arquivoZip);
+sort($listaZip);
+conferir('Instalador (D90): leva o driver da QIA-8388 (inf, catálogo assinado e DLLs) e cria a fila só quando nenhuma impressora usa USB', [
+    $listaZip, str_contains($cmd, "Add-Printer -Name 'QIA-8388' -DriverName 'LABEL'"), str_contains($cmd, '-Verb RunAs'),
+], [['LABELCORE.DLL', 'LABELUI.DLL', 'LabelPrinter.GPD', 'LabelPrinter.INI', 'labelprinter.inf', 'printer.cat'], true, true]);
 $agente->revogar();
 
 echo "\nOS DOIS ESQUEMAS TÊM AS TABELAS NOVAS\n";
