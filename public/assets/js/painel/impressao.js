@@ -41,7 +41,11 @@ export function comandaHtml(pedido, { largura = ajustes.comanda_largura_mm, comP
     return `
       <div class="comanda__item">
         <p class="comanda__item-nome"><span>${item.quantidade}x ${esc(item.nome)}</span>${comPreco ? `<span>${reais(item.preco_unit_centavos * item.quantidade)}</span>` : ''}</p>
-        ${m ? `
+        ${m && item.checklist ? `
+        <div class="comanda__lista">${item.checklist.map((secao) => `
+          <p class="comanda__secao">${esc(secao.titulo)}</p>
+          ${secao.opcoes.map((o) => `<p class="comanda__opcao" ${o.marcada ? 'data-marcada' : ''}><span class="comanda__quadrado" aria-hidden="true"></span>${esc(o.nome)}</p>`).join('')}`).join('')}
+        </div>` : m ? `
         <ul class="comanda__montagem">
           <li><b>${esc(m.tamanho.nome)}</b>${m.tamanho.descricao ? ` (${esc(m.tamanho.descricao)})` : ''}</li>
           <li>Massa: <b>${esc(m.massa.nome)}</b></li>

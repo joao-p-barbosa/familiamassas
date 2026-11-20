@@ -11,13 +11,13 @@
   background: #ffffff;
   color: #000000;
   font-family: Arial, Helvetica, sans-serif;
-  font-size: 12pt;
+  font-size: 13.5pt;
   line-height: 1.25;
   overflow-wrap: anywhere;
 }
 .comanda--58 {
   --largura: 48mm; /* área útil do papel de 58 mm */
-  font-size: 10.5pt;
+  font-size: 12pt;
 }
 .comanda * {
   margin: 0;
@@ -68,6 +68,29 @@
   gap: 2mm;
   font-size: 1.15em;
   font-weight: 900;
+}
+/* Lista de marcar do prato montado (D95): todas as opções, a escolhida com o quadrado cheio e em negrito. */
+.comanda__secao {
+  margin-top: 2mm;
+  font-weight: 700;
+  text-align: center;
+}
+.comanda__opcao {
+  display: flex;
+  align-items: center;
+  gap: 1.5mm;
+}
+.comanda__opcao[data-marcada] {
+  font-weight: 700;
+}
+.comanda__quadrado {
+  flex: none;
+  width: 0.7em;
+  height: 0.7em;
+  border: 0.35mm solid #000000;
+}
+.comanda__opcao[data-marcada] .comanda__quadrado {
+  background: #000000;
 }
 .comanda__montagem {
   margin-top: 0.5mm;

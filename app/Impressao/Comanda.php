@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Impressao;
 
 use App\Core\Relogio;
+use App\Repositories\CardapioRepository;
 
 /**
  * A comanda como uma lista de linhas, para o agente de impressão desenhar (D80). É o mesmo conteúdo da comanda do navegador
@@ -11,6 +12,11 @@ use App\Core\Relogio;
  * Cada linha: {"t": texto, "e": estilo, "a": alinhamento, "d": texto à direita (opcional)}.
  *   estilos: loja | numero | caixa (tipo do pedido, em destaque) | destaque | negrito | normal | pequeno | linha (separador) | espaco
  *   alinhamento: e (esquerda, padrão) | c (centro)
+ *
+ * Prato montado (D95): a cozinha recebe uma lista de marcar, como o panfleto. Cada seção (Tamanho, Massa, Ingredientes por grupo,
+ * Molho) traz TODAS as opções do cardápio; a escolhida sai com um quadrado cheio e em negrito, as outras com o quadrado vazio.
+ * A linha leva o símbolo também como texto ("■ ", "□ ") para o agente v3, que não desenha quadrados e imprime o texto.
+ *   c: cheia | vazia (marca da opção)   n: o nome, sem o símbolo
  */
 final class Comanda
 {
@@ -21,13 +27,14 @@ final class Comanda
     /**
      * @param array<string,mixed> $pedido como o PedidoRepository devolve (com itens e, se do iFood, o bloco "ifood")
      * @param array{nome_loja:string, com_preco:bool, reimpressao?:bool} $opcoes
-     * @return list<array{t:string, e:string, a?:string, d?:string}>
+     * @return list<array{t:string, e:string, a?:string, d?:string, c?:string, n?:string}>
      */
     public static function linhas(array $pedido, array $opcoes): array
     {
         $l = [];
         $ifood = is_array($pedido['ifood'] ?? null) ? $pedido['ifood'] : null;
         $comPreco = $opcoes['com_preco'];
+        $catalogo = null;
 
         $l[] = ['t' => (string) $opcoes['nome_loja'], 'e' => 'loja', 'a' => 'c'];
         $l[] = ['t' => '#' . $pedido['id'], 'e' => 'numero', 'a' => 'c'];
@@ -80,18 +87,16 @@ final class Comanda
             $l[] = $linha;
             $m = $item['montagem'];
             if (is_array($m)) {
-                $nomes = static fn (array $lista): string => implode(', ', array_map(static fn (array $i): string => (string) $i['nome'], $lista));
-                $l[] = ['t' => '  ' . $m['tamanho']['nome'] . (!empty($m['tamanho']['descricao']) ? ' (' . $m['tamanho']['descricao'] . ')' : ''), 'e' => 'normal'];
-                $l[] = ['t' => '  Massa: ' . $m['massa']['nome'], 'e' => 'negrito'];
-                $l[] = ['t' => '  Molho: ' . $m['molho']['nome'], 'e' => 'negrito'];
-                if (!empty($m['inclusos'])) {
-                    $l[] = ['t' => '  Ingredientes: ' . $nomes($m['inclusos']), 'e' => 'normal'];
-                }
-                if (!empty($m['extras'])) {
-                    $l[] = ['t' => '  EXTRAS: ' . $nomes($m['extras']), 'e' => 'negrito'];
-                }
-                if (empty($m['inclusos']) && empty($m['extras'])) {
-                    $l[] = ['t' => '  Sem ingredientes', 'e' => 'normal'];
+                $catalogo ??= (new CardapioRepository())->publico();
+                foreach ($item['checklist'] ?? self::checklist($m, $catalogo) as $secao) {
+                    $l[] = ['t' => mb_strtoupper($secao['titulo']), 'e' => 'negrito', 'a' => 'c'];
+                    foreach ($secao['opcoes'] as $opcao) {
+                        // t traz o símbolo como texto (agente antigo imprime assim); c e n são para o agente novo desenhar o quadrado.
+                        $l[] = $opcao['marcada']
+                            ? ['t' => '■ ' . $opcao['nome'], 'e' => 'negrito', 'c' => 'cheia', 'n' => $opcao['nome']]
+                            : ['t' => '□ ' . $opcao['nome'], 'e' => 'normal', 'c' => 'vazia', 'n' => $opcao['nome']];
+                    }
+                    $l[] = ['t' => '', 'e' => 'espaco'];
                 }
             }
             if (($item['observacoes'] ?? '') !== '') {
@@ -129,6 +134,76 @@ final class Comanda
             }
         }
         return $l;
+    }
+
+    /**
+     * A lista de marcar de um prato montado: todas as opções do cardápio, a escolhida com marcada=true.
+     * Ordem do panfleto da cozinha: tamanho, massa, ingredientes (um bloco por grupo; os grupos "Tempero..." por último) e molho.
+     * A escolha é achada pelo id e, na falta dele, pelo nome. O que foi pedido mas não está mais no cardápio (apagado ou oculto
+     * depois do pedido) entra no fim da seção, marcado: a cozinha nunca deixa de ver o que o cliente pediu.
+     * @param array<string,mixed> $m a montagem gravada no item do pedido
+     * @param array<string,mixed>|null $catalogo CardapioRepository::publico()
+     * @return list<array{titulo:string, opcoes:list<array{nome:string, marcada:bool}>}>
+     */
+    public static function checklist(array $m, ?array $catalogo = null): array
+    {
+        $catalogo ??= (new CardapioRepository())->publico();
+        // A mesma opção: mesmo id ou, na falta dele, mesmo nome.
+        $igual = static fn (array $escolhido, array $opcao): bool => (isset($escolhido['id']) && $escolhido['id'] === $opcao['id'])
+            || mb_strtolower(trim((string) $escolhido['nome'])) === mb_strtolower(trim((string) $opcao['nome']));
+        $secao = static function (string $titulo, array $lista, array $escolhidos) use ($igual): array {
+            $opcoes = [];
+            foreach ($lista as $o) {
+                $opcoes[] = ['nome' => (string) $o['nome'], 'marcada' => array_filter($escolhidos, static fn (array $e): bool => $igual($e, $o)) !== []];
+            }
+            foreach ($escolhidos as $e) {
+                if (array_filter($lista, static fn (array $o): bool => $igual($e, $o)) === []) {
+                    $opcoes[] = ['nome' => (string) $e['nome'], 'marcada' => true];
+                }
+            }
+            return ['titulo' => $titulo, 'opcoes' => $opcoes];
+        };
+        $um = static fn (mixed $v): array => is_array($v) && isset($v['nome']) ? [$v] : [];
+        $visiveis = static fn (array $l): array => array_values(array_filter($l, static fn (array $o): bool => ($o['estado'] ?? 'disponivel') !== 'oculto'));
+
+        $secoes = [
+            $secao('Tamanho', $visiveis($catalogo['tamanhos'] ?? []), $um($m['tamanho'] ?? null)),
+            $secao('Massa', $visiveis($catalogo['massas'] ?? []), $um($m['massa'] ?? null)),
+        ];
+        $escolhidos = array_merge($m['inclusos'] ?? [], $m['extras'] ?? []);
+        $grupos = [];
+        foreach ($visiveis($catalogo['ingredientes'] ?? []) as $i) {
+            $grupos[(string) $i['grupo']][] = $i;
+        }
+        $ehTempero = static fn (string $g): bool => str_starts_with(mb_strtolower(trim($g)), 'tempero');
+        $ordem = array_merge(array_filter(array_keys($grupos), static fn (string $g): bool => !$ehTempero($g)), array_filter(array_keys($grupos), $ehTempero));
+        $restantes = $escolhidos;   // o que não caiu em nenhum grupo (apagado ou oculto depois do pedido) vai para "Outros"
+        foreach ($ordem as $grupo) {
+            $doGrupo = array_values(array_filter($escolhidos, static fn (array $e): bool => array_filter($grupos[$grupo], static fn (array $o): bool => $igual($e, $o)) !== []));
+            $restantes = array_values(array_filter($restantes, static fn (array $e): bool => array_filter($grupos[$grupo], static fn (array $o): bool => $igual($e, $o)) === []));
+            $secoes[] = $secao($grupo, $grupos[$grupo], $doGrupo);
+        }
+        if ($restantes !== []) {
+            $secoes[] = $secao('Outros', [], $restantes);
+        }
+        $secoes[] = $secao('Molho', $visiveis($catalogo['molhos'] ?? []), $um($m['molho'] ?? null));
+        return $secoes;
+    }
+
+    /** Põe a lista de marcar em cada prato montado do pedido (para a comanda impressa pelo navegador, que não conhece o cardápio). */
+    public static function comChecklist(?array $pedido): ?array
+    {
+        if ($pedido === null) {
+            return null;
+        }
+        $catalogo = null;
+        foreach ($pedido['itens'] ?? [] as $i => $item) {
+            if (is_array($item['montagem'] ?? null)) {
+                $catalogo ??= (new CardapioRepository())->publico();
+                $pedido['itens'][$i]['checklist'] = self::checklist($item['montagem'], $catalogo);
+            }
+        }
+        return $pedido;
     }
 
     /** Comanda de teste (botão da tela Impressora): um pedido de exemplo com as partes que mais ocupam papel. */

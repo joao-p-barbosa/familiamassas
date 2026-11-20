@@ -105,6 +105,6 @@ final class AdminPedidoController
         }
         $pedidos->registrarEstacao($estacao, mb_substr(trim((string) ($dados['estacao_nome'] ?? 'Estação')), 0, 60) ?: 'Estação');
         $ficouComEla = $pedidos->reivindicarImpressao($id, $estacao);
-        Resposta::json(['imprimir' => $manual || $ficouComEla, 'pedido' => $pedidos->porId($id)]);
+        Resposta::json(['imprimir' => $manual || $ficouComEla, 'pedido' => Comanda::comChecklist($pedidos->porId($id))]);
     }
 }

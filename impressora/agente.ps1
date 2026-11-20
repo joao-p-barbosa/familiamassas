@@ -40,7 +40,7 @@ if ($Instalar) {
     Write-Host ''
     exit 0
 }
-$VERSAO = 3
+$VERSAO = 4
 $LOG = Join-Path $PSScriptRoot 'agente.log'
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 Add-Type -AssemblyName System.Drawing
@@ -271,6 +271,8 @@ function Escolhida($ajustes, $lista) {
 # ---------------------------------------------------------------- desenho da comanda
 # Unidades em milimetros. Estilos da linha (app/Impressao/Comanda.php): loja, numero, caixa, destaque, negrito, normal,
 # pequeno, linha (separador), espaco.
+# Lista de marcar (v4, D95): a linha traz c = 'cheia' | 'vazia' e n = o texto sem o simbolo. O agente desenha o quadrado (cheio ou so
+# o contorno) do tamanho da letra e escreve o texto ao lado. Agente antigo ignora c e n e imprime t, que ja traz o simbolo como texto.
 function Fonte([string]$estilo, [double]$base) {
     $negrito = [System.Drawing.FontStyle]::Bold
     $normal = [System.Drawing.FontStyle]::Regular
@@ -286,8 +288,8 @@ function Fonte([string]$estilo, [double]$base) {
 }
 
 function Tamanho-Base($ajustes) {
-    $base = 10.0
-    if ($ajustes.largura_mm -le 58) { $base = 8.0 } elseif ($ajustes.largura_mm -ge 100) { $base = 11.0 }
+    $base = 11.5
+    if ($ajustes.largura_mm -le 58) { $base = 9.0 } elseif ($ajustes.largura_mm -ge 100) { $base = 12.5 }
     switch ($ajustes.fonte) { 'p' { $base *= 0.85 } 'g' { $base *= 1.2 } }
     return $base
 }
@@ -310,7 +312,13 @@ function Linha($g, $linha, [double]$x, [double]$y, [double]$largura, [double]$ba
     if ($linha.a -eq 'c') { $formato.Alignment = [System.Drawing.StringAlignment]::Center }
     $texto = [string]$linha.t
     $direita = [string]$linha.d
-    $larguraTexto = $largura
+    $marca = [string]$linha.c
+    $recuo = 0.0
+    if ($marca) {
+        $texto = [string]$linha.n
+        $recuo = $fonte.GetHeight($g) + 1.8   # o quadrado tem o tamanho da letra
+    }
+    $larguraTexto = $largura - $recuo
     $folga = 0.0
     if ($estilo -eq 'caixa') { $folga = 1.2 }
     if ($direita) {
@@ -320,8 +328,19 @@ function Linha($g, $linha, [double]$x, [double]$y, [double]$largura, [double]$ba
     $tam = $g.MeasureString($texto, $fonte, [System.Drawing.SizeF]::new([single]($larguraTexto - 2 * $folga), [single]1000), $formato)
     $altura = [double]$tam.Height + 2 * $folga
     if ($desenhar) {
-        $area = New-Object System.Drawing.RectangleF([single]($x + $folga), [single]($y + $folga), [single]($larguraTexto - 2 * $folga), [single]($altura - 2 * $folga))
+        $area = New-Object System.Drawing.RectangleF([single]($x + $folga + $recuo), [single]($y + $folga), [single]($larguraTexto - 2 * $folga), [single]($altura - 2 * $folga))
         $g.DrawString($texto, $fonte, [System.Drawing.Brushes]::Black, $area, $formato)
+        if ($marca) {
+            $lado = $fonte.GetHeight($g) * 0.62
+            $topo = $y + ($fonte.GetHeight($g) - $lado) / 2 + 0.2
+            if ($marca -eq 'cheia') {
+                $g.FillRectangle([System.Drawing.Brushes]::Black, [single]$x, [single]$topo, [single]$lado, [single]$lado)
+            } else {
+                $contorno = New-Object System.Drawing.Pen([System.Drawing.Color]::Black, [single]0.4)
+                $g.DrawRectangle($contorno, [single]($x + 0.2), [single]($topo + 0.2), [single]($lado - 0.4), [single]($lado - 0.4))
+                $contorno.Dispose()
+            }
+        }
         if ($direita) {
             $formatoD = New-Object System.Drawing.StringFormat
             $formatoD.Alignment = [System.Drawing.StringAlignment]::Far

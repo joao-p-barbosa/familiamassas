@@ -492,6 +492,40 @@ $comPreco = $texto(Comanda::linhas($comum, ['nome_loja' => 'Família Massas', 'c
 conferir('Comanda comum com preço: total e pagamento', [str_contains($comPreco, 'TOTAL | R$ 24,90'), str_contains($comPreco, 'Pix'), str_contains($comPreco, '(11) 91234-5678')], [true, true, true]);
 conferir('Comanda de teste tem acentos (o agente precisa imprimi-los)', str_contains($texto(Comanda::teste(['nome_loja' => 'X', 'com_preco' => true])), 'ação, pão'), true);
 
+echo "\nCOMANDA COMO LISTA DE MARCAR (D95)\n";
+$catalogoComanda = (new App\Repositories\CardapioRepository())->publico();
+$idDe = static fn (string $lista, string $nome): int => array_column($catalogoComanda[$lista], 'id', 'nome')[$nome];
+$montagemLista = [
+    'tamanho' => ['id' => $idDe('tamanhos', 'Meio'), 'nome' => 'Meio'], 'massa' => ['id' => $idDe('massas', 'Nhoque'), 'nome' => 'Nhoque'],
+    'molho' => ['id' => $idDe('molhos', 'Pesto'), 'nome' => 'Pesto'],
+    'inclusos' => [['id' => $idDe('ingredientes', 'Milho'), 'nome' => 'Milho']], 'extras' => [['id' => $idDe('ingredientes', 'Carne seca'), 'nome' => 'Carne seca']],
+];
+$secoes = Comanda::checklist($montagemLista, $catalogoComanda);
+$marcadas = static fn (array $secoes): array => array_map(static fn (array $s): array => [$s['titulo'], array_column(array_filter($s['opcoes'], static fn (array $o): bool => $o['marcada']), 'nome'), count($s['opcoes'])], $secoes);
+conferir('Lista de marcar: todas as opções de cada seção, só a escolhida marcada, na ordem do panfleto (molho por último)', $marcadas($secoes), [
+    ['Tamanho', ['Meio'], 2], ['Massa', ['Nhoque'], 6], ['Proteínas', ['Carne seca'], 4], ['Acompanhamentos', ['Milho'], 13], ['Queijos', [], 4], ['Molho', ['Pesto'], 6],
+]);
+$orfa = $montagemLista;
+$orfa['massa'] = ['id' => 99999, 'nome' => 'Rondelli'];
+$orfa['extras'] = [['id' => 88888, 'nome' => 'Trufa']];
+$secoesOrfas = $marcadas(Comanda::checklist($orfa, $catalogoComanda));
+conferir('O que o cliente pediu e saiu do cardápio continua na comanda, marcado (a cozinha nunca perde o pedido)', [$secoesOrfas[1][1], $secoesOrfas[1][2], end($secoesOrfas)[0], $secoesOrfas[count($secoesOrfas) - 2]], [['Rondelli'], 7, 'Molho', ['Outros', ['Trufa'], 1]]);
+Banco::conexao()->exec("INSERT INTO ingredientes (nome, grupo, preco_extra_centavos, ordem) VALUES ('Orégano', 'Tempero (quanto quiser)', 0, 999)");
+$comTempero = array_column(Comanda::checklist($montagemLista), 'titulo');
+conferir('Grupo "Tempero..." do cardápio sai depois dos ingredientes e antes do molho', array_slice($comTempero, -3), ['Queijos', 'Tempero (quanto quiser)', 'Molho']);
+Banco::conexao()->exec("DELETE FROM ingredientes WHERE nome = 'Orégano'");
+$linhasLista = Comanda::linhas(['id' => 7, 'tipo' => 'retirada', 'mesa' => null, 'origem' => 'cardapio', 'criado_em' => '2026-11-20T12:00:00Z', 'cliente_nome' => 'Ana', 'cliente_telefone' => '',
+    'observacoes' => '', 'taxa_entrega_centavos' => 0, 'total_centavos' => 0, 'pagamento' => 'pix', 'troco_para_centavos' => null,
+    'itens' => [['nome' => 'Monte seu prato', 'quantidade' => 2, 'preco_unit_centavos' => 0, 'observacoes' => '', 'montagem' => $montagemLista]]], ['nome_loja' => 'X', 'com_preco' => false]);
+$opcoesImpressas = array_values(array_filter($linhasLista, static fn (array $l): bool => isset($l['c'])));
+$nhoque = array_values(array_filter($opcoesImpressas, static fn (array $l): bool => $l['n'] === 'Nhoque'))[0];
+$penne = array_values(array_filter($opcoesImpressas, static fn (array $l): bool => $l['n'] === 'Penne'))[0];
+conferir('Linhas da comanda: escolhida com quadrado cheio e negrito, as outras vazias; o símbolo vai também no texto (agente antigo)', [
+    $nhoque['t'], $nhoque['c'], $nhoque['e'], $penne['t'], $penne['c'], $penne['e'], count($opcoesImpressas), str_contains($texto($linhasLista), '2x Monte seu prato'),
+], ['■ Nhoque', 'cheia', 'negrito', '□ Penne', 'vazia', 'normal', 35, true]);
+$semMarcadas = array_filter($opcoesImpressas, static fn (array $l): bool => $l['c'] === 'cheia');
+conferir('Cinco quadrados cheios: tamanho, massa, o ingrediente sem custo, a proteína paga e o molho', count($semMarcadas), 5);
+
 echo "\nAGENTE DE IMPRESSÃO\n";
 $agente = new AgenteImpressao();
 $antes = $pedidoComum();   // pedido de antes do agente existir: não pode sair impresso de repente
