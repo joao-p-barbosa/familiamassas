@@ -1371,6 +1371,14 @@ a.balao__acao {
     overflow: visible;
   }
 }
+/* Atendente: só a coluna Salão, na largura toda, com os cartões lado a lado quando há espaço (D93). */
+.quadro--salao {
+  grid-template-columns: minmax(0, 1fr);
+}
+.quadro--salao .coluna__lista {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 19rem), 1fr));
+  align-items: start;
+}
 /* Cor sutil para separar Mesa de Pra viagem: um filete à esquerda e um fundo levemente tingido. */
 .cartao-pedido[data-modalidade="local"] {
   border-left: 4px solid var(--cor-info);

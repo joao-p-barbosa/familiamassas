@@ -15,14 +15,14 @@ final class PainelController
 {
     /**
      * Quem pode abrir cada tela e em que grupo do menu lateral ela fica.
-     * admin = proprietário (tudo); atendente = Salão (as contas dos clientes), pedidos e cardápio (só marca esgotado).
+     * admin = proprietário (tudo); atendente = só Pedidos (o quadro, o Salão e os produtos do atendimento; D92).
      * 'oculta' = a tela existe mas não tem item no menu; 'menu_ativo' = qual item do menu fica marcado quando ela está aberta.
      * O painel é uma SPA (public/assets/js/painel/app.js): esta lista também diz ao roteador do navegador o que cada perfil abre.
      */
     public const TELAS = [
         'pedidos'       => ['titulo' => 'Pedidos',                 'grupo' => 'Operação', 'perfis' => ['admin', 'atendente']],
         'atendimento'   => ['titulo' => 'Produtos do atendimento', 'grupo' => 'Operação', 'perfis' => ['admin', 'atendente'], 'oculta' => true, 'menu_ativo' => 'pedidos'],
-        'cardapio'      => ['titulo' => 'Cardápio',                'grupo' => 'Loja',     'perfis' => ['admin', 'atendente']],
+        'cardapio'      => ['titulo' => 'Cardápio',                'grupo' => 'Loja',     'perfis' => ['admin']],
         'usuarios'      => ['titulo' => 'Usuários',                'grupo' => 'Loja',     'perfis' => ['admin']],
         'configuracoes' => ['titulo' => 'Configurações',           'grupo' => 'Loja',     'perfis' => ['admin']],
         'whatsapp'      => ['titulo' => 'WhatsApp',                'grupo' => 'Loja',     'perfis' => ['admin']],

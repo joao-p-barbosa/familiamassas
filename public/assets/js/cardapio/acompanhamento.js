@@ -7,6 +7,7 @@ import { api } from '../shared/api.js';
 import { STATUS, TIPOS, encerrado } from '../shared/pedido.js';
 import { animacaoStatus } from './animacao-status.js';
 import { previsaoDoPedido, trilhaHtml } from './status-pedido.js';
+import { botaoSomHtml, alternarSomDeStatus, somDeStatusLigado, tocarStatus } from './som-status.js';
 
 const INTERVALO = 10_000;
 const raiz = $('#acompanhamento');
@@ -36,20 +37,22 @@ function cartaoHtml(p) {
 
 function desenhar() {
   raiz.hidden = pedidos.length === 0;
-  raiz.innerHTML = pedidos.map(cartaoHtml).join('');
+  raiz.innerHTML = pedidos.map(cartaoHtml).join('') + (pedidos.some((p) => !encerrado(p.status)) ? botaoSomHtml() : '');
 }
 
 async function consultar() {
-  if (document.visibilityState !== 'visible') return;
+  if (document.visibilityState !== 'visible' && !somDeStatusLigado()) return;
   const andando = pedidos.filter((p) => !encerrado(p.status));
   if (andando.length === 0) return;
   let mudou = false;
+  let novaEtapa = null;   // a etapa que vira som (uma só, para duas melodias não tocarem por cima uma da outra)
   await Promise.all(andando.map(async (p) => {
     try {
       const { itens, ...novo } = await api(`/api/pedidos/${encodeURIComponent(p.codigo)}`);
       if (novo.status !== p.status) {
         Object.assign(p, novo);
         mudou = true;
+        novaEtapa ??= p.status;
         anuncio.textContent = `Pedido ${p.numero}: ${STATUS[p.status].cliente}`;
       }
     } catch (erro) {
@@ -60,8 +63,15 @@ async function consultar() {
       // Sem internet: mantém o que está na tela e tenta de novo no próximo ciclo.
     }
   }));
+  if (novaEtapa) tocarStatus(novaEtapa);
   if (mudou) desenhar();
 }
+
+delegar(raiz, 'click', '[data-som-status]', () => {
+  alternarSomDeStatus();
+  desenhar();
+  raiz.querySelector('[data-som-status]')?.focus();
+});
 
 delegar(raiz, 'click', '[data-dispensar]', async (e, botao) => {
   const codigo = botao.closest('[data-codigo]').dataset.codigo;

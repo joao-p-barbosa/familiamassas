@@ -22,12 +22,14 @@ import { navegar, limparConsulta } from './roteador.js';
 
 const conteudo = recipienteDaTela();   // o contêiner desta tela (criado pelo roteador)
 
-const COLUNAS = [
+const TODAS_AS_COLUNAS = [
   { id: 'novo', titulo: 'Novos', status: ['novo'], vazio: 'Pedido novo aparece aqui sozinho.' },
   { id: 'em_preparo', titulo: 'Em preparo', status: ['em_preparo'], vazio: 'Nada em preparo.' },
   { id: 'pronto', titulo: 'Prontos', status: ['pronto', 'saiu_entrega', 'aguardando_retirada'], vazio: 'Nenhum pedido esperando.' },
   { id: 'salao', titulo: 'Salão', salao: true, vazio: 'Pedido feito pela atendente (mesa ou pra viagem) aparece aqui.' },
 ];
+// A atendente vê só o Kanban do Salão (D93); o proprietário vê as quatro colunas.
+const COLUNAS = ehAdmin ? TODAS_AS_COLUNAS : TODAS_AS_COLUNAS.filter((c) => c.salao);
 
 /** Pedido feito pela atendente no salão (Mesa ou Pra viagem). */
 const doSalao = (p) => p.origem === 'balcao' || p.atendimento_id != null;
@@ -105,7 +107,7 @@ function montarTela() {
     </div>
     <div id="fechamento"></div>
     <div class="cabecalho-tela">${ferramentasHtml()}</div>
-    <div class="quadro quadro--quatro" id="quadro">
+    <div class="quadro ${ehAdmin ? 'quadro--quatro' : 'quadro--salao'}" id="quadro">
       ${COLUNAS.map((c) => `
         <section class="coluna" data-coluna="${c.id}" aria-labelledby="coluna-${c.id}">
           <header class="coluna__topo">
@@ -122,6 +124,7 @@ function montarTela() {
 
 // ---------- Fechamento do dia ----------
 function desenharFechamento() {
+  if (!ehAdmin) return;   // o resumo do dia soma todos os pedidos (inclusive entrega); a atendente vê só o Salão
   const f = fonte.fechamento;
   const alvo = $('#fechamento');
   if (!f || !alvo) return;

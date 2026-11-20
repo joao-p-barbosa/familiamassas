@@ -364,7 +364,7 @@ conferir('Fica registrado quem imprimiu', $repo->porId($outro)['impresso_por'], 
 echo "\nPERFIS E TELAS\n";
 conferir('Só existem os perfis proprietário (admin) e atendente', Sessao::PERFIS, ['admin', 'atendente']);
 conferir('Os dois perfis entram no quadro de pedidos (o salão é uma coluna dele)', [PainelController::telaInicial('atendente'), PainelController::telaInicial('admin')], ['/painel/pedidos', '/painel/pedidos']);
-conferir('Menu da atendente: pedidos e cardápio', array_keys(PainelController::menuDo('atendente')), ['pedidos', 'cardapio']);
+conferir('Menu da atendente: só pedidos (D92); o cardápio é do proprietário', [array_keys(PainelController::menuDo('atendente')), PainelController::TELAS['cardapio']['perfis']], [['pedidos'], ['admin']]);
 conferir('Menu do proprietário: pedidos, cardápio, usuários, configurações, WhatsApp, assistente, iFood e impressora', array_keys(PainelController::menuDo('admin')), ['pedidos', 'cardapio', 'usuarios', 'configuracoes', 'whatsapp', 'assistente', 'ifood', 'impressora']);
 conferir('"Produtos do atendimento" é uma tela de apoio: fora do menu, mas a atendente a abre', [isset(PainelController::menuDo('atendente')['atendimento']), PainelController::TELAS['atendimento']['perfis']], [false, ['admin', 'atendente']]);
 conferir('Cozinha, Salão e Histórico do salão não são mais telas', [isset(PainelController::TELAS['cozinha']), isset(PainelController::TELAS['salao']), isset(PainelController::TELAS['historico'])], [false, false, false]);

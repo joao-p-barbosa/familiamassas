@@ -1,12 +1,13 @@
 // Acompanhamento do pedido: mostra a etapa atual com a animação do status e consulta o servidor a cada 10 s
 // até o pedido encerrar. O endereço da página tem o código do pedido, então atualizar a página não perde nada.
-import { $, esc, dadosDaPagina } from '../shared/dom.js';
+import { $, esc, dadosDaPagina, delegar } from '../shared/dom.js';
 import { icone } from '../shared/icones.js';
 import { reais, hora } from '../shared/formato.js';
 import { api } from '../shared/api.js';
 import { STATUS, TIPOS, PAGAMENTOS, encerrado, linhasMontagem, linkComoChegar } from '../shared/pedido.js';
 import { animacaoStatus } from './animacao-status.js';
 import { previsaoDoPedido, trilhaHtml, posicaoDoPedido } from './status-pedido.js';
+import { botaoSomHtml, alternarSomDeStatus, somDeStatusLigado, tocarStatus } from './som-status.js';
 
 const INTERVALO = 10_000;
 const raiz = $('#acompanhar');
@@ -79,6 +80,7 @@ function desenhar() {
       ${zap ? `<a class="botao botao--secundario botao--g" href="${esc(zap)}" target="_blank" rel="noopener">${icone('conversa', 20)}Falar com a loja no WhatsApp</a>` : ''}
       <a class="botao ${encerrado(atual) ? '' : 'botao--fantasma'} botao--g" href="/">${encerrado(atual) ? 'Fazer outro pedido' : 'Voltar ao cardápio'}</a>
     </div>
+    ${encerrado(atual) ? '' : botaoSomHtml()}
     ${encerrado(atual) ? '' : `<p class="acompanhar__vivo" role="status">${icone(semConexao ? 'alerta' : 'recarregar', 16)}<span>${semConexao ? 'Sem conexão. Tentando de novo…' : 'Esta página atualiza sozinha.'}</span></p>`}`;
 
   document.title = `Pedido #${pedido.numero} · ${pedido.rotulo}`;
@@ -89,12 +91,15 @@ raiz.addEventListener('toggle', (e) => {
 }, true);
 
 async function consultar() {
-  if (document.visibilityState !== 'visible' || encerrado(pedido.status)) return;
+  // Com o aviso sonoro ligado, continua consultando com a aba em segundo plano: o som é justamente para quem olha outra coisa.
+  if ((document.visibilityState !== 'visible' && !somDeStatusLigado()) || encerrado(pedido.status)) return;
   try {
     const novo = await api(`/api/pedidos/${encodeURIComponent(pedido.codigo)}`);
-    const mudou = novo.status !== pedido.status || semConexao;
+    const statusMudou = novo.status !== pedido.status;
+    const mudou = statusMudou || semConexao;
     pedido = novo;
     semConexao = false;
+    if (statusMudou) tocarStatus(novo.status);
     if (mudou) desenhar();
   } catch {
     if (!semConexao) {
@@ -103,6 +108,12 @@ async function consultar() {
     }
   }
 }
+
+delegar(raiz, 'click', '[data-som-status]', () => {
+  alternarSomDeStatus();
+  desenhar();
+  raiz.querySelector('[data-som-status]')?.focus();
+});
 
 desenhar();
 setInterval(consultar, INTERVALO);

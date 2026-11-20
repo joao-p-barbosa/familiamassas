@@ -1064,6 +1064,18 @@
   color: var(--cor-perigo);
   font-weight: 600;
 }
+.aviso-som {
+  display: grid;
+  justify-items: start;
+  gap: var(--e-1);
+  margin-top: var(--e-4);
+}
+.aviso-som .campo__ajuda {
+  margin: 0;
+}
+.meus-pedidos .aviso-som {
+  margin-top: 0;
+}
 .acompanhar__vivo {
   display: inline-flex;
   align-items: center;

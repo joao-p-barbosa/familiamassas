@@ -1,11 +1,13 @@
 // Alerta sonoro de pedido novo. O navegador só deixa tocar som depois de um toque/clique na página,
 // por isso existe o botão "Som" (o toque nele libera o áudio).
 import { guardado } from '../shared/dom.js';
+import { ehAdmin } from './casca.js';
 
 const CHAVE = 'fm_som_v1';
 let contexto = null;
 
-export const somLigado = () => guardado.ler(CHAVE, false) === true;
+// A atendente não ouve som nenhum no painel (D94): nem o de pedido novo, nem os avisos de queda e de impressora.
+export const somLigado = () => ehAdmin && guardado.ler(CHAVE, false) === true;
 
 /** Liga/desliga. Precisa ser chamado dentro de um clique (é o que libera o áudio). */
 export function alternarSom() {

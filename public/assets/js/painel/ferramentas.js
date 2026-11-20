@@ -5,15 +5,15 @@ import { hora } from '../shared/formato.js';
 import { avisar } from '../shared/avisos.js';
 import { somLigado, alternarSom } from './som.js';
 import { estacao, definirEstacaoAtiva } from './impressao.js';
-import { ajustes } from './casca.js';
+import { ajustes, ehAdmin } from './casca.js';
 
 export function ferramentasHtml() {
   return `
     <div class="ferramentas">
       <span class="conexao" id="conexao" role="status"></span>
-      <button type="button" class="botao botao--secundario botao--p" id="botao-som" aria-pressed="${somLigado()}">
+      ${ehAdmin ? `<button type="button" class="botao botao--secundario botao--p" id="botao-som" aria-pressed="${somLigado()}">
         ${icone(somLigado() ? 'som' : 'som-mudo', 18)}<span>Som de pedido novo</span>
-      </button>
+      </button>` : ''}
       ${ajustes.impressao_modo === 'agente'
         ? `<span class="selo ferramentas__estacao">${icone('impressora', 14)}Comandas pelo computador da loja</span>`
         : `<label class="interruptor ferramentas__estacao">
@@ -26,7 +26,7 @@ export function ferramentasHtml() {
 
 /** @param {{ conectado: boolean, ultimaSincronia: Date|null }} fonte  @param {() => void} aoLigarEstacao */
 export function ligarFerramentas(fonte, aoLigarEstacao) {
-  $('#botao-som').addEventListener('click', (e) => {
+  $('#botao-som')?.addEventListener('click', (e) => {
     const ligado = alternarSom();
     e.currentTarget.setAttribute('aria-pressed', String(ligado));
     e.currentTarget.firstElementChild.outerHTML = icone(ligado ? 'som' : 'som-mudo', 18);

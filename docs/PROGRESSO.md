@@ -41,7 +41,7 @@ Cliente                                Painel (/painel), com menu lateral retrá
 /                cardápio               /painel/login          entrar             (os dois perfis caem em /painel/pedidos)
   ├ seus pedidos (acompanhamento)       /painel/pedidos        Kanban + Salão     admin, atendente
   ├ Monte seu prato (folha, 6 passos)   /painel/atendimento    produtos da conta  admin, atendente (fora do menu)
-  ├ item pronto (folha)                 /painel/cardapio       cadastro           admin, atendente (só admin edita)
+  ├ item pronto (folha)                 /painel/cardapio       cadastro           admin (D92)
   ├ carrinho (lateral / folha)          /painel/usuarios       usuários e senhas  admin
                                         /painel/configuracoes  loja               admin
   └ fechar pedido → mapa → revisão      /painel/whatsapp       integração         admin
@@ -256,3 +256,8 @@ Como testar:
 - **WhatsApp** (D89): resposta fora do formato é lida pela IA e o pedido segue. Só vale com o assistente ligado (Painel › Assistente).
 - **Impressora** (D90): o `instalar-impressora.cmd` instala o driver e a fila quando o Windows ainda não tem a impressora.
 - **Usuários** (D91): excluir e trocar o login.
+
+## Atendente só com o Salão e som por status (2026-11-20, noite)
+
+- **Atendente** (D92, D93, D94): menu só com Pedidos, quadro só com o Salão e sem som no painel.
+- **Som por status** (D94): na página do pedido e na Home, o botão "Avisar com som quando o status mudar" liga uma melodia diferente para cada etapa. Para testar: faça um pedido pelo cardápio, toque no botão, deixe a página aberta e mude a etapa no painel.
