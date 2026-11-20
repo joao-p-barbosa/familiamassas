@@ -88,6 +88,52 @@ final class AdminCardapioController
         Resposta::json(['ok' => true]);
     }
 
+    /**
+     * PUT /api/admin/cardapio-precos   corpo: {"monte": {tamanho_id: centavos}, "pratos": {item_id: {tamanho_id: centavos|null}}}
+     * A tabela de preços (D87): "Monte sua massa" e cada prato da casa em cada tamanho. null num prato = tamanho não vendido.
+     */
+    public function precos(Requisicao $req): void
+    {
+        Sessao::exigir($req, ['admin'], true);
+        $d = $req->json();
+        $cardapio = $this->repo->completo();
+        $tamanhos = array_column($cardapio['tamanhos'], 'id');
+        $pratos = array_column(array_filter($cardapio['itens'], static fn (array $i): bool => $i['tipo'] === 'prato_casa'), 'id');
+        $erros = [];
+        $valor = static function (mixed $v, string $campo, bool $vazioPode) use (&$erros): ?int {
+            if ($vazioPode && ($v === null || $v === '')) {
+                return null;
+            }
+            if (!is_numeric($v) || (int) $v < 0 || (int) $v > 1_000_000) {
+                $erros[$campo] = 'Informe um valor em reais, de 0 a 10.000.';
+                return null;
+            }
+            return (int) $v;
+        };
+        $monte = [];
+        foreach ((array) ($d['monte'] ?? []) as $tamanhoId => $v) {
+            if (in_array((int) $tamanhoId, $tamanhos, true)) {
+                $monte[(int) $tamanhoId] = $valor($v, "monte.{$tamanhoId}", false) ?? 0;
+            }
+        }
+        $porPrato = [];
+        foreach ((array) ($d['pratos'] ?? []) as $itemId => $porTamanho) {
+            if (!in_array((int) $itemId, $pratos, true) || !is_array($porTamanho)) {
+                continue;
+            }
+            foreach ($porTamanho as $tamanhoId => $v) {
+                if (in_array((int) $tamanhoId, $tamanhos, true)) {
+                    $porPrato[(int) $itemId][(int) $tamanhoId] = $valor($v, "pratos.{$itemId}.{$tamanhoId}", true);
+                }
+            }
+        }
+        if ($erros !== []) {
+            throw ErroHttp::validacao($erros);
+        }
+        Banco::transacao(fn () => $this->repo->definirPrecos($monte, $porPrato));
+        Resposta::json($this->repo->completo());
+    }
+
     /** POST /api/admin/upload (multipart, campo "imagem"). A foto já chega reduzida pelo navegador. */
     public function upload(Requisicao $req): void
     {
@@ -174,12 +220,9 @@ final class AdminCardapioController
                 $v['sigla'] = mb_strtoupper($texto('sigla', 3));
                 if ($v['sigla'] === '') { $erros['sigla'] = 'Informe a sigla (P, M, G...).'; }
                 $v['descricao'] = $texto('descricao', 60);
-                $v['preco_centavos'] = $dinheiro('preco_centavos', true);
-                $inclusos = $d['inclusos'] ?? $atual['inclusos'] ?? null;
-                if (!is_numeric($inclusos) || (int) $inclusos < 0 || (int) $inclusos > 20) {
-                    $erros['inclusos'] = 'Informe quantos ingredientes estão inclusos (0 a 20).';
-                }
-                $v['inclusos'] = (int) $inclusos;
+                // O preço fica na aba Preços (D87); um tamanho novo nasce com R$ 0 até ser preenchido lá.
+                $v['preco_centavos'] = isset($d['preco_centavos']) ? $dinheiro('preco_centavos', false) : (int) ($atual['preco_centavos'] ?? 0);
+                $v['inclusos'] = 0;
                 break;
             case 'massas':
                 $v['descricao'] = $texto('descricao', 100);
@@ -209,7 +252,7 @@ final class AdminCardapioController
                 }
                 $v['imagem'] = $imagem ?: null;
                 if ($v['tipo'] === 'prato_casa') {
-                    $v['preco_centavos'] = 0;   // o preço vem da montagem (tamanho + acréscimos)
+                    $v['preco_centavos'] = 0;   // o preço é fixo por tamanho, na aba Preços (item_precos, D87)
                     $v['massa_id'] = (int) ($d['massa_id'] ?? $atual['massa_id'] ?? 0);
                     $v['molho_id'] = (int) ($d['molho_id'] ?? $atual['molho_id'] ?? 0);
                     if (!$existe('massas', $v['massa_id'])) { $erros['massa_id'] = 'Escolha a massa do prato.'; }

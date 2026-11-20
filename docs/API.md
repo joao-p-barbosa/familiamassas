@@ -92,7 +92,8 @@ Toda escrita exige o cabeçalho `X-CSRF-Token` (o valor está na `<meta name="cs
 | `POST /api/admin/usuarios` | **admin** | `{nome, login, perfil: "admin" \| "atendente", senha}` → `201` com o usuário. `login`: 3 a 30 caracteres `[a-z0-9._-]` (vira minúsculas), único; `nome` 2+ letras; `senha` 8+ caracteres. Erros por campo em `422 validacao`. |
 | `PUT /api/admin/usuarios/{id}` | **admin** | `{nome?, perfil?, ativo?}` → o usuário. O login não muda. Desativar ou rebaixar o próprio usuário → `409 proprio_usuario`; deixar a loja sem proprietário ativo → `409 ultimo_proprietario`. Quem é desativado sai do painel no próximo clique; perfil e nome novos valem sem entrar de novo (a sessão confere o usuário no banco a cada requisição). |
 | `POST /api/admin/usuarios/{id}/senha` | **admin** | `{senha}` (8+ caracteres): define a senha nova. A antiga deixa de valer na hora. Substitui o antigo `POST /api/admin/senha` ("Minha senha"). |
-| `GET /api/admin/cardapio` | todos | Cardápio completo, inclusive ocultos; itens trazem `ingrediente_ids`. |
+| `GET /api/admin/cardapio` | todos | Cardápio completo, inclusive ocultos; itens trazem `ingrediente_ids` e `precos` (`[{tamanho_id, preco_centavos}]`, só prato da casa). |
+| `PUT /api/admin/cardapio-precos` | admin | Tabela de preços (D87): `{monte: {tamanho_id: centavos}, pratos: {item_id: {tamanho_id: centavos\|null}}}`. `null` = o prato não é vendido nesse tamanho. Devolve o cardápio completo. |
 | `POST /api/admin/cardapio/{recurso}` | admin | Cria. `recurso`: `categorias`, `itens`, `tamanhos`, `massas`, `molhos`, `ingredientes`. |
 | `PUT /api/admin/cardapio/{recurso}/{id}` | admin | Edita (só os campos enviados). Itens aceitam `ingrediente_ids`. |
 | `PATCH /api/admin/cardapio/{recurso}/{id}/estado` | admin, atendente* | `{estado}`. *A atendente só alterna disponível/esgotado (não oculta). |

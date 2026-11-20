@@ -36,8 +36,13 @@ final class CardapioRepository
         foreach ($pdo->query('SELECT item_id, ingrediente_id FROM item_ingredientes ORDER BY ingrediente_id') as $linha) {
             $porItem[(int) $linha['item_id']][] = (int) $linha['ingrediente_id'];
         }
+        $precos = [];
+        foreach ($pdo->query('SELECT item_id, tamanho_id, preco_centavos FROM item_precos ORDER BY tamanho_id') as $linha) {
+            $precos[(int) $linha['item_id']][] = ['tamanho_id' => (int) $linha['tamanho_id'], 'preco_centavos' => (int) $linha['preco_centavos']];
+        }
         foreach ($dados['itens'] as &$item) {
             $item['ingrediente_ids'] = $porItem[$item['id']] ?? [];
+            $item['precos'] = $precos[$item['id']] ?? [];   // prato da casa: preço fixo por tamanho (D87)
         }
         return $dados;
     }
@@ -111,6 +116,31 @@ final class CardapioRepository
         $insere = $pdo->prepare('INSERT INTO item_ingredientes (item_id, ingrediente_id) VALUES (?, ?)');
         foreach (array_unique($ingredienteIds) as $ingredienteId) {
             $insere->execute([$itemId, $ingredienteId]);
+        }
+    }
+
+    /**
+     * Grava a tabela de preços (D87): o "Monte sua massa" em cada tamanho e cada prato da casa em cada tamanho.
+     * Valor null num prato = aquele tamanho não é vendido para ele.
+     * @param array<int,int> $monte tamanho_id => centavos
+     * @param array<int,array<int,?int>> $pratos item_id => [tamanho_id => centavos|null]
+     */
+    public function definirPrecos(array $monte, array $pratos): void
+    {
+        $pdo = Banco::conexao();
+        $tamanho = $pdo->prepare('UPDATE tamanhos SET preco_centavos = ? WHERE id = ?');
+        foreach ($monte as $tamanhoId => $centavos) {
+            $tamanho->execute([$centavos, $tamanhoId]);
+        }
+        $apaga = $pdo->prepare('DELETE FROM item_precos WHERE item_id = ? AND tamanho_id = ?');
+        $insere = $pdo->prepare('INSERT INTO item_precos (item_id, tamanho_id, preco_centavos) VALUES (?, ?, ?)');
+        foreach ($pratos as $itemId => $porTamanho) {
+            foreach ($porTamanho as $tamanhoId => $centavos) {
+                $apaga->execute([$itemId, $tamanhoId]);
+                if ($centavos !== null) {
+                    $insere->execute([$itemId, $tamanhoId, $centavos]);
+                }
+            }
         }
     }
 

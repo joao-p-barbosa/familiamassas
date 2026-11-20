@@ -82,7 +82,7 @@ function destaqueHtml() {
     <section class="destaque" id="secao-monte" data-secao="monte" aria-labelledby="titulo-monte">
       <div class="destaque__texto">
         <${comLoja ? 'h1' : 'h2'} class="destaque__titulo" id="titulo-monte">Monte seu prato</${comLoja ? 'h1' : 'h2'}>
-        <p class="destaque__passos">Tamanho, massa, molho e os ingredientes que você quiser.</p>
+        <p class="destaque__passos">Massa, molho, os ingredientes que você quiser e o tamanho.</p>
         ${minimo !== null ? `<p class="destaque__preco">A partir de <strong class="numero">${reais(minimo)}</strong></p>` : ''}
       </div>
       <div class="destaque__formas" aria-hidden="true">${massas.map((x) => iconeMassa(x.nome, 44)).join('')}</div>
@@ -93,7 +93,7 @@ function destaqueHtml() {
 function desenharSecoes() {
   const c = estado.cardapio;
   const termo = semAcento(busca.trim());
-  const casa = (item) => (item.tipo === 'prato_casa' ? 'Escolha o tamanho e troque o que quiser.' : '');
+  const casa = (item) => (item.tipo === 'prato_casa' ? 'Escolha o tamanho: o prato vem pronto, do jeito da casa.' : '');
   const secoes = c.categorias
     .map((categoria) => ({
       categoria,

@@ -112,15 +112,16 @@ $montar = static fn (string $tamanho, string $massa, string $molho, array $ingre
 $nomes = static fn (array $lista): array => array_column($lista, 'nome');
 
 // Os mesmos casos são conferidos em JavaScript (tests/preco.test.mjs) a partir deste arquivo.
+// D87: base do tamanho + acréscimos + cada ingrediente com preço (os de preço 0 vêm sem custo). Seed: Bacon 3, Gorgonzola 3,
+// Carne moída 5, Picadinho 5, Carne seca 7, Camarão 9; o resto 0.
 $casos = [
     ['Meio sem ingredientes custa só a base', 'Meio', 'Penne', 'Sugo', [], 2490, []],
-    ['Meio com 3 ingredientes (o limite): nada extra', 'Meio', 'Penne', 'Sugo', ['Picadinho de frango', 'Bacon', 'Brócolis'], 2490, []],
-    ['Meio com 4: o mais barato vira extra', 'Meio', 'Penne', 'Sugo', ['Picadinho de frango', 'Bacon', 'Brócolis', 'Milho'], 2790, ['Milho']],
-    ['Inteiro, bolonhesa (+3,00), 8 ingredientes: 2 extras', 'Inteiro', 'Penne', 'Bolonhesa', ['Picadinho de frango', 'Bacon', 'Camarão', 'Muçarela', 'Brócolis', 'Milho', 'Ervilha', 'Champignon'], 4890, ['Milho', 'Ervilha']],
-    ['Mesma montagem em outra ordem de clique: mesmo preço', 'Inteiro', 'Penne', 'Bolonhesa', ['Champignon', 'Ervilha', 'Milho', 'Brócolis', 'Muçarela', 'Camarão', 'Bacon', 'Picadinho de frango'], 4890, ['Milho', 'Ervilha']],
-    ['Inteiro, nhoque (+4,00), quatro queijos (+5,00), 6 ingredientes: tudo incluso', 'Inteiro', 'Nhoque', 'Quatro queijos', ['Picadinho de frango', 'Bacon', 'Brócolis', 'Milho', 'Muçarela', 'Camarão'], 4890, []],
-    ['Camarão (o mais caro) nunca é o extra quando há mais baratos', 'Meio', 'Espaguete', 'Sugo', ['Camarão', 'Milho', 'Ervilha', 'Brócolis'], 2790, ['Ervilha']],
-    ['Ingrediente repetido conta uma vez só', 'Meio', 'Penne', 'Sugo', ['Bacon', 'Bacon', 'Bacon', 'Bacon'], 2490, []],
+    ['Ingredientes sem preço não mudam o valor', 'Meio', 'Penne', 'Sugo', ['Brócolis', 'Milho', 'Muçarela', 'Ervilha', 'Champignon'], 2490, []],
+    ['Carne seca soma o preço dela', 'Meio', 'Penne', 'Sugo', ['Carne seca', 'Milho'], 3190, ['Carne seca']],
+    ['Inteiro, bolonhesa (+3,00), camarão e bacon: os dois somam', 'Inteiro', 'Penne', 'Bolonhesa', ['Camarão', 'Brócolis', 'Bacon', 'Milho'], 5490, ['Camarão', 'Bacon']],
+    ['Mesma montagem em outra ordem de clique: mesmo preço e mesma ordem', 'Inteiro', 'Penne', 'Bolonhesa', ['Milho', 'Bacon', 'Brócolis', 'Camarão'], 5490, ['Camarão', 'Bacon']],
+    ['Inteiro, nhoque (+4,00), quatro queijos (+5,00), sem ingrediente pago', 'Inteiro', 'Nhoque', 'Quatro queijos', ['Brócolis', 'Muçarela'], 4890, []],
+    ['Ingrediente repetido conta uma vez só', 'Meio', 'Penne', 'Sugo', ['Bacon', 'Bacon', 'Bacon', 'Bacon'], 2790, ['Bacon']],
 ];
 
 echo "\nPREÇO DO MONTE SEU PRATO\n";
@@ -135,6 +136,22 @@ file_put_contents(__DIR__ . '/casos-preco.json', json_encode(['cardapio' => $car
 
 conferir('Ingrediente esgotado (Palmito) é recusado', codigoDoErro(fn () => $montar('Meio', 'Penne', 'Sugo', $ing('Palmito'))), '409 esgotado');
 conferir('Montagem sem tamanho é recusada', codigoDoErro(fn () => $preco->montar($cardapio, ['massa_id' => 1, 'molho_id' => 1])), '422 montagem_invalida');
+
+echo "\nPRATO DA CASA E TABELA DE PREÇOS (D87)\n";
+$carbonara = $id('itens', 'Carbonara da casa');
+$casaInteiro = $preco->montar($cardapio, ['item_id' => $carbonara, 'tamanho_id' => $id('tamanhos', 'Inteiro'), 'massa_id' => $id('massas', 'Nhoque'), 'ingrediente_ids' => $ing('Camarão')]);
+conferir('Prato da casa: preço fixo da tabela; massa e ingredientes mandados pelo cliente são ignorados (a receita é a da casa)', [
+    $casaInteiro['preco_centavos'], $casaInteiro['montagem']['massa']['nome'], $nomes($casaInteiro['montagem']['inclusos']), $casaInteiro['montagem']['extras'],
+], [3990, 'Espaguete', ['Bacon', 'Parmesão'], []]);
+$repoPrecos = new CardapioRepository();
+Banco::transacao(fn () => $repoPrecos->definirPrecos([$id('tamanhos', 'Meio') => 3000], [$carbonara => [$id('tamanhos', 'Meio') => 3500, $id('tamanhos', 'Inteiro') => null]]));
+$cardapioPrecos = $repoPrecos->publico();
+conferir('A tabela grava o Monte sua massa e o prato; tamanho em branco deixa de ser vendido para o prato', [
+    $preco->montar($cardapioPrecos, ['tamanho_id' => $id('tamanhos', 'Meio'), 'massa_id' => $id('massas', 'Penne'), 'molho_id' => $id('molhos', 'Sugo'), 'ingrediente_ids' => $ing('Carne seca')])['preco_centavos'],
+    $preco->montar($cardapioPrecos, ['item_id' => $carbonara, 'tamanho_id' => $id('tamanhos', 'Meio')])['preco_centavos'],
+    codigoDoErro(fn () => $preco->montar($cardapioPrecos, ['item_id' => $carbonara, 'tamanho_id' => $id('tamanhos', 'Inteiro')])),
+], [3700, 3500, '409 esgotado']);
+Banco::transacao(fn () => $repoPrecos->definirPrecos([$id('tamanhos', 'Meio') => 2490], [$carbonara => [$id('tamanhos', 'Meio') => 2490, $id('tamanhos', 'Inteiro') => 3990]]));
 
 echo "\nCARDÁPIO\n";
 conferir('Dois tamanhos: Meio e Inteiro', array_column($cardapio['tamanhos'], 'nome'), ['Meio', 'Inteiro']);
@@ -744,7 +761,7 @@ $repoIa->salvarConfig(['ia_texto_livre' => 'Fechamos no Natal.', 'ia_tom' => 'be
 $promptIa = $assistenteIa->prompt(null, true, 'Ana Souza');
 conferir('O prompt traz a loja, o cardápio, os horários e a situação de agora', [
     str_contains($promptIa, (new ConfigRepository())->get('nome_loja')), str_contains($promptIa, 'Carbonara'), str_contains($promptIa, 'Quarta: 11:00 às 23:00'),
-    str_contains($promptIa, 'Situação agora: Aberto'), str_contains($promptIa, 'Tamanhos do "Monte seu prato"'),
+    str_contains($promptIa, 'Situação agora: Aberto'), str_contains($promptIa, 'Tamanhos do "Monte sua massa"'),
 ], [true, true, true, true, true]);
 conferir('O prompt traz as perguntas ativas, o fluxo e o texto livre; a pergunta desligada não entra', [
     str_contains($promptIa, 'Sim, Pix, cartão e dinheiro.'), str_contains($promptIa, 'Resposta que não deve aparecer.'),
@@ -1016,20 +1033,23 @@ conferir('Prato da casa: escolhe o prato e o tamanho, com o preço de cada taman
 conferir('Tamanho escolhido: pergunta a quantidade', $diz($opcao('Inteiro')), 'quantidade');
 conferir('Quantidade 2: anota com o preço do servidor (2 × R$ 39,90)', [$diz('2'), str_contains($tela(), '2× Carbonara da casa (Inteiro) — R$ 79,80')], ['mais', true]);
 $diz('1');
-conferir('Monte a sua massa: tamanho, massa e molho, com os acréscimos', [
-    $diz($opcao('Monte a sua massa')), $diz($opcao('Meio')), str_contains($tela(), 'Nhoque (+R$ 4,00)'), $diz($opcao('Nhoque')), $diz($opcao('Pesto')),
-], ['monte_tamanho', 'monte_massa', true, 'monte_molho', 'monte_grupo']);
+conferir('Monte a sua massa (D87): massa e molho primeiro, com os acréscimos', [
+    $diz($opcao('Monte a sua massa')), str_contains($tela(), 'Nhoque (+R$ 4,00)'), $diz($opcao('Nhoque')), $diz($opcao('Pesto')),
+], ['monte_massa', true, 'monte_molho', 'monte_grupo']);
 $proteinas = $opcao('Picadinho de frango') . ', ' . $opcao('Camarão');
-conferir('Ingredientes por grupo: vários de uma vez, 0 para nenhum, e o resumo de quantos inclusos já foram', [
-    $diz($proteinas), $diz('0'), str_contains($tela(), 'Você já escolheu 2 de 3 inclusos'), $diz($opcao('Parmesão')),
-], ['monte_grupo', 'monte_grupo', true, 'quantidade']);
-conferir('A massa montada entra com o preço calculado pelo servidor (Meio R$ 24,90 + nhoque R$ 4 + pesto R$ 4; 3 ingredientes dentro dos inclusos)', [
-    $diz('1'), str_contains($tela(), '1× Monte a sua massa (Meio): Nhoque, molho Pesto'), str_contains($tela(), 'R$ 32,90'), str_contains($tela(), '3 itens, R$ 112,70'),
+conferir('Ingredientes por grupo: vários de uma vez, 0 para nenhum; o que tem preço mostra o valor e o resto vem sem preço', [
+    str_contains($tela(), 'Camarão (+R$ 9,00)'), $diz($proteinas), $diz('0'), str_contains($tela(), 'Parmesão') && !str_contains($tela(), 'Parmesão (+'), $diz($opcao('Parmesão')),
+], [true, 'monte_grupo', 'monte_grupo', true, 'monte_tamanho']);
+conferir('O tamanho vem por último, com o preço do prato montado em cada tamanho (Meio R$ 24,90 + 4 + 4 + picadinho 5 + camarão 9)', [
+    str_contains($tela(), 'Por último, o tamanho'), str_contains($tela(), 'R$ 46,90'), $diz($opcao('Meio')),
+], [true, true, 'quantidade']);
+conferir('A massa montada entra com o preço calculado pelo servidor', [
+    $diz('1'), str_contains($tela(), '1× Monte a sua massa (Meio): Nhoque, molho Pesto'), str_contains($tela(), 'R$ 46,90'), str_contains($tela(), '3 itens, R$ 126,70'),
 ], ['mais', true, true, true]);
 conferir('Opção que não existe: o bot avisa e repete a pergunta, sem sair do passo', [$diz('99'), str_contains($tela(), 'Essa opção não existe'), str_contains($tela(), 'Fechar o pedido')], ['invalido', true, true]);
 conferir('Fechar: entrega ou retirada, e o nome (com o atalho do nome do WhatsApp)', [$diz('2'), $diz($opcao('Entrega')), str_contains($tela(), 'responda 1 para usar *Ana*'), $diz('1')], ['tipo', 'nome', true, 'local']);
 conferir('Entrega: o pin da localização e depois o endereço escrito', [$diz('', ['lat' => -22.95, 'lng' => -43.21]), str_contains($tela(), 'Recebi a localização'), $diz('Rua das Flores, 120, Vila Nova, portão azul')], ['endereco', true, 'pagamento']);
-$totalFx = 7980 + 3290 + $taxaFx;
+$totalFx = 7980 + 4690 + $taxaFx;
 conferir('Dinheiro: troco menor que o total é recusado; troco maior leva ao resumo com o total e o endereço', [
     $diz('3'), $diz('50'), str_contains($tela(), 'maior que o total'), $diz('R$ 200'),
     str_contains($tela(), 'Total: R$ ' . number_format($totalFx / 100, 2, ',', '.')), str_contains($tela(), 'Rua das Flores, 120, Vila Nova, portão azul'), str_contains($tela(), 'troco para R$ 200,00'),
@@ -1041,7 +1061,7 @@ conferir('O pedido entra no Kanban com origem WhatsApp, o telefone da conversa, 
     $pedidoFx['origem'], $pedidoFx['cliente_telefone'], $pedidoFx['cliente_nome'], $pedidoFx['tipo'], $pedidoFx['status'], (float) $pedidoFx['entrega_lat'],
     $pedidoFx['endereco_rua'], $pedidoFx['endereco_numero'], $pedidoFx['endereco_bairro'], $pedidoFx['endereco_complemento'], $pedidoFx['pagamento'], (int) $pedidoFx['troco_para_centavos'], (int) $pedidoFx['total_centavos'],
 ], ['whatsapp', $foneFx, 'Ana', 'entrega', 'novo', -22.95, 'Rua das Flores', '120', 'Vila Nova', 'portão azul', 'dinheiro', 20000, $totalFx]);
-conferir('Os itens do pedido: 2 carbonaras inteiras e a massa montada, com o preço do servidor', [count($itensFx), $itensFx[0]['quantidade'], (int) $itensFx[0]['preco_unit_centavos'], (int) $itensFx[1]['preco_unit_centavos']], [2, 2, 3990, 3290]);
+conferir('Os itens do pedido: 2 carbonaras inteiras e a massa montada, com o preço do servidor', [count($itensFx), $itensFx[0]['quantidade'], (int) $itensFx[0]['preco_unit_centavos'], (int) $itensFx[1]['preco_unit_centavos']], [2, 2, 3990, 4690]);
 conferir('O cliente recebe na hora o "Recebemos seu pedido" (o mesmo aviso de status do cardápio digital) e o pedido em andamento some', [
     str_contains($tela(), "Recebemos seu pedido #{$pedidoFx['id']}"), $pdoFx->query("SELECT COUNT(*) FROM whatsapp_sessoes WHERE telefone = '{$foneFx}'")->fetchColumn(), count(array_filter((new App\Repositories\PedidoRepository())->paraPainel(null), static fn (array $p): bool => (int) $p['id'] === (int) $pedidoFx['id'])),
 ], [true, 0, 1]);
@@ -1152,7 +1172,7 @@ $resultadoEq = $dizEq('Cardápio');
 $menuEq = $enqueteEq();
 $contextoEq = $falsoWhats->enviadas[count($falsoWhats->enviadas) - 2] ?? [];
 conferir('Canal QR: "Cardápio" manda o contexto como texto e as escolhas como enquete de escolha única', [
-    $resultadoEq, $contextoEq['type'] ?? null, str_contains($contextoEq['text']['body'] ?? '', 'Tamanhos:'), $menuEq['name'] ?? null, $menuEq['multipla'] ?? null,
+    $resultadoEq, $contextoEq['type'] ?? null, str_contains($contextoEq['text']['body'] ?? '', 'Monte a sua massa: Meio'), $menuEq['name'] ?? null, $menuEq['multipla'] ?? null,
     str_starts_with($menuEq['options'][0] ?? '', '1. '), str_contains(implode('|', $menuEq['options'] ?? []), 'Carbonara da casa'), count($menuEq['options'] ?? []) <= 12,
 ], ['menu', 'text', true, 'O que vai ser?', false, true, true, true]);
 conferir('A sessão guarda a tag da enquete que está valendo', $sessaoEq($foneEq), ['etapa' => 'menu', 'enquete' => $menuEq['tag']]);
@@ -1176,10 +1196,10 @@ conferir('Quantidade 2: o "Anotado" vai como texto e "mais alguma coisa?" como e
     $dizEq('2'), str_contains($falsoWhats->enviadas[count($falsoWhats->enviadas) - 2]['text']['body'] ?? '', '2× Carbonara da casa (Inteiro) — R$ 79,80'), $enqueteEq()['name'] ?? null, count($enqueteEq()['options'] ?? []),
 ], ['mais', true, 'Mais alguma coisa?', 2]);
 $maisEq = $enqueteEq();
-conferir('Voto em "pedir mais": volta ao menu; "Monte a sua massa", tamanho, massa e molho por voto', [
-    $dizEq('1', $maisEq['tag']), $dizEq($numeroEq($enqueteEq(), 'Monte a sua massa'), $enqueteEq()['tag']), $dizEq($numeroEq($enqueteEq(), 'Meio'), $enqueteEq()['tag']),
+conferir('Voto em "pedir mais": volta ao menu; "Monte a sua massa", massa e molho por voto', [
+    $dizEq('1', $maisEq['tag']), $dizEq($numeroEq($enqueteEq(), 'Monte a sua massa'), $enqueteEq()['tag']),
     $dizEq($numeroEq($enqueteEq(), 'Nhoque'), $enqueteEq()['tag']), $dizEq($numeroEq($enqueteEq(), 'Pesto'), $enqueteEq()['tag']),
-], ['menu', 'monte_tamanho', 'monte_massa', 'monte_molho', 'monte_grupo']);
+], ['menu', 'monte_massa', 'monte_molho', 'monte_grupo']);
 
 // Ingredientes: múltipla com "Pronto"; o grupo com opções demais para uma enquete (12) segue como lista numerada.
 $proteinasEq = $enqueteEq();
@@ -1192,7 +1212,8 @@ conferir('Acompanhamentos tem 12 ingredientes disponíveis (13 opções com o Pr
     $acompanhamentosEq['type'] ?? null, str_contains($acompanhamentosEq['text']['body'] ?? '', 'Acompanhamentos'), str_contains($acompanhamentosEq['text']['body'] ?? '', '12. Manjericão'), $sessaoEq($foneEq)['enquete'],
 ], ['text', true, true, null]);
 conferir('Digitar "0" na lista numerada passa para os queijos, de novo em enquete', [$dizEq('0'), $enqueteEq()['multipla'] ?? null], ['monte_grupo', true]);
-conferir('Voto múltiplo "Parmesão + Pronto" chega como o número do queijo e vai à quantidade', [$dizEq($numeroEq($enqueteEq(), 'Parmesão'), $enqueteEq()['tag']), $sessaoEq($foneEq)['etapa']], ['quantidade', 'quantidade']);
+conferir('Voto múltiplo "Parmesão + Pronto" chega como o número do queijo e vai ao tamanho (o último passo)', [$dizEq($numeroEq($enqueteEq(), 'Parmesão'), $enqueteEq()['tag']), $sessaoEq($foneEq)['etapa'], $enqueteEq()['name'] ?? null], ['monte_tamanho', 'monte_tamanho', 'Por último, o tamanho:']);
+conferir('Tamanho por voto vai à quantidade', $dizEq($numeroEq($enqueteEq(), 'Meio'), $enqueteEq()['tag']), 'quantidade');
 $dizEq('1');
 $dizEq('2', $enqueteEq()['tag']);   // "Fechar o pedido"
 $tipoEq = $enqueteEq();
@@ -1471,7 +1492,7 @@ foreach ([['A1', 'Mesa 5', 'local', '5', 'pix', 'concluido', 'balcao'], ['A2', '
 }
 
 $aplicadas = App\Core\Banco::migrar($antigo, $arquivoAntigo);
-conferir('Banco da versão 1 recebe as migrações 002 a 007', $aplicadas, [2, 3, 4, 5, 6, 7]);
+conferir('Banco da versão 1 recebe as migrações 002 a 008', $aplicadas, [2, 3, 4, 5, 6, 7, 8]);
 conferir('A versão do banco passa a ser a atual', (int) $antigo->query('PRAGMA user_version')->fetchColumn(), App\Core\Banco::VERSAO_DO_ESQUEMA);
 conferir('Uma cópia do banco antigo foi guardada antes de mexer', count(glob($pastaMigracao . '/backups/antigo-antes-da-v2-*.sqlite') ?: []), 1);
 conferir('Rodar de novo não faz nada', App\Core\Banco::migrar($antigo, $arquivoAntigo), []);

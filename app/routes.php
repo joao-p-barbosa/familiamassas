@@ -61,6 +61,7 @@ return static function (Roteador $r): void {
 
     $r->get('/api/admin/cardapio', static fn ($req) => $cardapio()->listar($req));
     $r->post('/api/admin/upload', static fn ($req) => $cardapio()->upload($req));
+    $r->put('/api/admin/cardapio-precos', static fn ($req) => $cardapio()->precos($req));
     $r->post('/api/admin/cardapio/{recurso}', static fn ($req) => $cardapio()->criar($req));
     $r->put('/api/admin/cardapio/{recurso}/{id}', static fn ($req) => $cardapio()->atualizar($req));
     $r->patch('/api/admin/cardapio/{recurso}/{id}/estado', static fn ($req) => $cardapio()->estado($req));

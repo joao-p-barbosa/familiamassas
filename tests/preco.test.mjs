@@ -20,9 +20,14 @@ for (const caso of casos) {
 
 console.log('\n"A PARTIR DE"');
 conferir('Monte seu prato: menor tamanho disponível', precoMinimo(cardapio), 2490);
-const nhoque = cardapio.massas.find((m) => m.nome === 'Nhoque').id;
-const queijos = cardapio.molhos.find((m) => m.nome === 'Quatro queijos').id;
-conferir('Prato da casa com nhoque e quatro queijos: base + acréscimos', precoMinimo(cardapio, { massa_id: nhoque, molho_id: queijos }), 2490 + 400 + 500);
+const nhoque = cardapio.itens.find((i) => i.nome === 'Nhoque quatro queijos');
+conferir('Prato da casa: o menor preço da tabela dele (D87)', precoMinimo(cardapio, nhoque), 3390);
+
+console.log('\nPRATO DA CASA (PREÇO FIXO POR TAMANHO)');
+const inteiro = cardapio.tamanhos.find((t) => t.nome === 'Inteiro').id;
+const fixo = calcularMontagem(cardapio, { item_id: nhoque.id, tamanho_id: inteiro, ingrediente_ids: [999] });
+conferir('Preço do Inteiro vem da tabela; ingrediente mandado pelo cliente é ignorado', [fixo.preco, fixo.extras.length, fixo.completa], [4890, 0, true]);
+conferir('Tamanho sem preço na tabela não fecha o prato', calcularMontagem(cardapio, { item_id: nhoque.id, tamanho_id: 999 }).completa, false);
 
 console.log(falhas === 0 ? '\nTodos os testes passaram.' : `\n${falhas} teste(s) falharam.`);
 process.exit(falhas === 0 ? 0 : 1);

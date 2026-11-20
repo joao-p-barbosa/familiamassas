@@ -1188,6 +1188,29 @@ a.balao__acao {
 .tabela tr[data-erro] td {
   color: var(--cor-perigo);
 }
+/* Preços dos pratos (D87): uma linha por prato, uma coluna por tamanho. */
+.tabela-precos {
+  display: grid;
+  gap: var(--e-4);
+  justify-items: start;
+}
+.tabela-precos .tabela-rolagem {
+  justify-self: stretch;
+}
+.tabela-precos tbody th {
+  color: var(--cor-texto);
+  font-size: var(--texto-3);
+  white-space: normal;
+  vertical-align: middle;
+}
+.tabela-precos td:last-child {
+  min-width: 0;
+}
+.tabela-precos .entrada {
+  width: 7.5rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
 .fila-avisos {
   display: grid;
   gap: var(--e-2);

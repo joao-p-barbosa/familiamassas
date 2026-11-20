@@ -60,11 +60,13 @@ return static function (PDO $pdo): void {
 
     // ---------- Monte seu prato ----------
     // Duas porções: a descrição é o que o cliente lê para escolher, então diz quanto serve e quanto pesa.
+    // O preço é o do "Monte sua massa" naquele tamanho; os pratos da casa têm preço próprio (item_precos, D87).
+    $tamanhos = [];
     foreach ([
         ['Meio',    'MEI', 'Meia porção · serve 1 pessoa · 300 g',    2490, 3],
         ['Inteiro', 'INT', 'Porção inteira · serve 2 pessoas · 550 g', 3990, 6],
     ] as $i => [$nome, $sigla, $descricao, $preco, $inclusos]) {
-        $inserir('tamanhos', compact('nome', 'sigla', 'descricao', 'inclusos') + ['preco_centavos' => $preco, 'ordem' => $i]);
+        $tamanhos[$nome] = $inserir('tamanhos', compact('nome', 'sigla', 'descricao', 'inclusos') + ['preco_centavos' => $preco, 'ordem' => $i]);
     }
 
     $massas = [];
@@ -93,16 +95,17 @@ return static function (PDO $pdo): void {
 
     $ingredientes = [];
     $ordem = 0;
+    // Preço de cada ingrediente: somado ao "Monte sua massa" (D87); 0 = vem sem custo.
     // Três grupos: Proteínas, Acompanhamentos (bacon, calabresa, presunto e todos os vegetais) e Queijos.
     // Não há "queijo ralado por cima". Os grupos aparecem na ordem em que estão aqui.
     foreach ([
         'Proteínas' => [['Carne moída', 500], ['Picadinho de frango', 500], ['Carne seca', 700], ['Camarão', 900]],
         'Acompanhamentos' => [
-            ['Bacon', 500], ['Calabresa', 400], ['Presunto', 400],
-            ['Brócolis', 300], ['Champignon', 400], ['Milho', 300], ['Ervilha', 300], ['Tomate-cereja', 300], ['Azeitona preta', 300],
-            ['Palmito', 400], ['Cebola roxa', 300], ['Alho frito', 300], ['Manjericão', 300],
+            ['Bacon', 300], ['Calabresa', 0], ['Presunto', 0],
+            ['Brócolis', 0], ['Champignon', 0], ['Milho', 0], ['Ervilha', 0], ['Tomate-cereja', 0], ['Azeitona preta', 0],
+            ['Palmito', 0], ['Cebola roxa', 0], ['Alho frito', 0], ['Manjericão', 0],
         ],
-        'Queijos' => [['Muçarela', 400], ['Requeijão cremoso', 400], ['Parmesão', 400], ['Gorgonzola', 500]],
+        'Queijos' => [['Muçarela', 0], ['Requeijão cremoso', 0], ['Parmesão', 0], ['Gorgonzola', 300]],
     ] as $grupo => $lista) {
         foreach ($lista as [$nome, $preco]) {
             $ingredientes[$nome] = $inserir('ingredientes', compact('nome', 'grupo') + ['preco_extra_centavos' => $preco, 'ordem' => $ordem++]);
@@ -117,18 +120,22 @@ return static function (PDO $pdo): void {
     $sobremesa = $inserir('categorias', ['nome' => 'Sobremesas', 'ordem' => 2]);
 
     foreach ([
-        ['Carbonara da casa',     'Espaguete, molho branco, bacon e parmesão', 'Espaguete', 'Branco',         ['Bacon', 'Parmesão']],
-        ['Penne à bolonhesa',     'Penne, bolonhesa e muçarela',               'Penne',     'Bolonhesa',      ['Muçarela']],
-        ['Talharim ao pesto',     'Talharim, pesto, tomate-cereja e parmesão', 'Talharim',  'Pesto',          ['Tomate-cereja', 'Parmesão']],
-        ['Nhoque quatro queijos', 'Nhoque de batata, quatro queijos e alho frito', 'Nhoque', 'Quatro queijos', ['Alho frito']],
-        ['Fusilli rosé com frango', 'Fusilli, rosé, picadinho de frango, milho e requeijão', 'Fusilli', 'Rosé',   ['Picadinho de frango', 'Milho', 'Requeijão cremoso']],
-    ] as $i => [$nome, $descricao, $massa, $molho, $lista]) {
+        ['Carbonara da casa',     'Espaguete, molho branco, bacon e parmesão', 'Espaguete', 'Branco',         ['Bacon', 'Parmesão'], 2490, 3990],
+        ['Penne à bolonhesa',     'Penne, bolonhesa e muçarela',               'Penne',     'Bolonhesa',      ['Muçarela'], 2790, 4290],
+        ['Talharim ao pesto',     'Talharim, pesto, tomate-cereja e parmesão', 'Talharim',  'Pesto',          ['Tomate-cereja', 'Parmesão'], 2890, 4390],
+        ['Nhoque quatro queijos', 'Nhoque de batata, quatro queijos e alho frito', 'Nhoque', 'Quatro queijos', ['Alho frito'], 3390, 4890],
+        ['Fusilli rosé com frango', 'Fusilli, rosé, picadinho de frango, milho e requeijão', 'Fusilli', 'Rosé',   ['Picadinho de frango', 'Milho', 'Requeijão cremoso'], 2490, 3990],
+    ] as $i => [$nome, $descricao, $massa, $molho, $lista, $meio, $inteiro]) {
+        $precos = ['Meio' => $meio, 'Inteiro' => $inteiro];   // preço fixo do prato em cada tamanho (D87)
         $id = $inserir('itens', [
             'categoria_id' => $casa, 'tipo' => 'prato_casa', 'nome' => $nome, 'descricao' => $descricao,
             'massa_id' => $massas[$massa], 'molho_id' => $molhos[$molho], 'ordem' => $i,
         ]);
         foreach ($lista as $ingrediente) {
             $inserir('item_ingredientes', ['item_id' => $id, 'ingrediente_id' => $ingredientes[$ingrediente]]);
+        }
+        foreach ($precos as $tamanho => $preco) {
+            $inserir('item_precos', ['item_id' => $id, 'tamanho_id' => $tamanhos[$tamanho], 'preco_centavos' => $preco]);
         }
     }
 

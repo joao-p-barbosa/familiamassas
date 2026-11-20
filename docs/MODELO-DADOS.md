@@ -19,7 +19,8 @@ Esquema completo em `data/schema.sqlite.sql`; dados iniciais em `data/seed.php`.
 | `molhos` | `nome`, `descricao`, `acrescimo_centavos`, `cor`, `estado`, `ordem` | `cor` é a bolinha do montador. |
 | `ingredientes` | `nome`, `grupo`, `preco_extra_centavos`, `estado`, `ordem` | Preço cobrado só quando passa dos inclusos (D12). Três grupos, nesta ordem (D47): **Proteínas** (Carne moída, Picadinho de frango, Carne seca, Camarão), **Acompanhamentos** (Bacon, Calabresa, Presunto e todos os vegetais) e **Queijos**. O grupo é só organização: o preço e a montagem não dependem dele; a ordem (`ordem`) só desempata ingredientes de mesmo preço. |
 | `itens` | `categoria_id`, `tipo` (`simples` \| `prato_casa`), `nome`, `descricao`, `preco_centavos`, `imagem`, `massa_id`, `molho_id`, `estado`, `ordem` | `simples` tem preço fixo; `prato_casa` usa a regra do montador (D14). |
-| `item_ingredientes` | `item_id`, `ingrediente_id` | Ingredientes sugeridos de um prato da casa. |
+| `item_ingredientes` | `item_id`, `ingrediente_id` | Receita de um prato da casa (massa e molho ficam em `itens`). |
+| `item_precos` | `item_id`, `tamanho_id`, `preco_centavos` | Preço fixo de um prato da casa em cada tamanho (D87). Sem linha = tamanho não vendido para o prato. |
 
 `estado` dos itens do cardápio: `disponivel` · `esgotado` (aparece desabilitado) · `oculto` (some).
 

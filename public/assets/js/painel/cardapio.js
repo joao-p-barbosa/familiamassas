@@ -1,4 +1,4 @@
-// Cadastro do cardápio (Etapa 5): itens, categorias, tamanhos, massas, molhos e ingredientes.
+// Cadastro do cardápio (Etapa 5): itens, categorias, preços dos pratos (D87), tamanhos, massas, molhos e ingredientes.
 // O interruptor de cada linha marca "esgotado" na hora. Só o administrador cria, edita, ordena e apaga.
 import { $, esc, delegar } from '../shared/dom.js';
 import { icone } from '../shared/icones.js';
@@ -12,6 +12,7 @@ const conteudo = recipienteDaTela();   // o contêiner desta tela (criado pelo r
 
 const ABAS = [
   { id: 'itens', titulo: 'Itens', um: 'item', novo: 'Novo item' },
+  { id: 'precos', titulo: 'Preços dos pratos', soAdmin: true },
   { id: 'categorias', titulo: 'Categorias', um: 'categoria', novo: 'Nova categoria', soAdmin: true },
   { id: 'tamanhos', titulo: 'Tamanhos', um: 'tamanho', novo: 'Novo tamanho' },
   { id: 'massas', titulo: 'Massas', um: 'massa', novo: 'Nova massa' },
@@ -44,17 +45,17 @@ function metaDe(r) {
   switch (aba) {
     case 'itens':
       return r.tipo === 'prato_casa'
-        ? `Prato da casa · ${nomeDe('massas', r.massa_id)} + ${nomeDe('molhos', r.molho_id)}${r.ingrediente_ids.length ? ` + ${plural(r.ingrediente_ids.length, 'ingrediente', 'ingredientes')}` : ''}`
+        ? `Prato da casa · ${r.precos.length ? r.precos.map((p) => `${nomeDe('tamanhos', p.tamanho_id)} ${reais(p.preco_centavos)}`).join(' · ') : 'sem preço: preencha em “Preços dos pratos”'}`
         : reais(r.preco_centavos);
     case 'categorias':
       return plural(dados.itens.filter((i) => i.categoria_id === r.id).length, 'item', 'itens');
     case 'tamanhos':
-      return [r.sigla, r.descricao, reais(r.preco_centavos), plural(r.inclusos, 'ingrediente incluso', 'ingredientes inclusos')].filter(Boolean).join(' · ');
+      return [r.sigla, r.descricao].filter(Boolean).join(' · ');
     case 'massas':
     case 'molhos':
       return [r.descricao, acrescimo(r.acrescimo_centavos)].filter(Boolean).join(' · ');
     case 'ingredientes':
-      return `extra ${reais(r.preco_extra_centavos)}`;
+      return r.preco_extra_centavos ? `+ ${reais(r.preco_extra_centavos)} no Monte sua massa` : 'sem custo';
   }
   return '';
 }
@@ -92,8 +93,40 @@ function linhaHtml({ registro: r }, posicao, total) {
     </li>`;
 }
 
+// ---------- Preços dos pratos (D87): uma linha por prato, uma coluna por tamanho ----------
+function precosHtml() {
+  const tamanhos = dados.tamanhos.filter((t) => t.estado !== 'oculto');
+  const pratos = dados.itens.filter((i) => i.tipo === 'prato_casa');
+  const celula = (nome, rotulo, centavos) => `
+    <td><input class="entrada" type="text" inputmode="decimal" placeholder="—" name="${nome}" aria-label="${esc(rotulo)}"
+      value="${centavos === null || centavos === undefined ? '' : textoDeCentavos(centavos)}"></td>`;
+  return `
+    <form id="form-precos" class="tabela-precos" novalidate>
+      <p class="cadastro__nota">O preço de cada prato em cada tamanho. No “Monte sua massa” é o preço base: o acréscimo da massa e do molho e os ingredientes com preço somam a ele. No prato da casa é o preço final; deixe em branco o tamanho que ele não vende.</p>
+      <div class="tabela-rolagem"><table class="tabela">
+        <thead><tr><th scope="col">Prato</th>${tamanhos.map((t) => `<th scope="col">${esc(t.nome)} (R$)</th>`).join('')}</tr></thead>
+        <tbody>
+          <tr><th scope="row">Monte sua massa</th>${tamanhos.map((t) => celula(`monte.${t.id}`, `Monte sua massa, ${t.nome}`, t.preco_centavos)).join('')}</tr>
+          ${pratos.map((p) => `<tr><th scope="row">${esc(p.nome)}</th>${tamanhos.map((t) => celula(`pratos.${p.id}.${t.id}`, `${p.nome}, ${t.nome}`, p.precos.find((x) => x.tamanho_id === t.id)?.preco_centavos)).join('')}</tr>`).join('')}
+        </tbody>
+      </table></div>
+      ${pratos.length ? '' : '<p class="cadastro__nota">Nenhum prato da casa ainda: crie na aba Itens, com o tipo “Prato da casa”.</p>'}
+      <p class="campo__erro" id="erro-precos" hidden></p>
+      <button type="submit" class="botao botao--g">Salvar preços</button>
+    </form>`;
+}
+
 function desenhar() {
   const info = ABAS.find((a) => a.id === aba);
+  if (aba === 'precos') {
+    conteudo.innerHTML = `
+      <div class="cabecalho-tela"><h1 class="cabecalho-tela__titulo">Cardápio</h1></div>
+      <div class="abas" role="tablist" aria-label="Cadastros do cardápio">
+        ${ABAS.map((a) => `<button type="button" class="chip" role="tab" data-aba="${a.id}" aria-selected="${a.id === aba}">${a.titulo}</button>`).join('')}
+      </div>
+      <div class="cadastro" role="tabpanel">${precosHtml()}</div>`;
+    return;
+  }
   const linhas = linhasDaAba();
   const grupos = [...new Set(linhas.map((l) => l.grupo))];
   const lista = linhas.length === 0
@@ -171,10 +204,7 @@ function camposDoRecurso(recurso, r) {
           ${campoTexto('sigla', 'Sigla', r?.sigla, { extra: 'maxlength="3"', ajuda: 'Abreviação de até 3 letras.' })}
           ${campoTexto('descricao', 'Descrição', r?.descricao, { extra: 'maxlength="60" placeholder="Meia porção · serve 1 pessoa · 300 g"', ajuda: 'Quanto serve e quanto pesa. É o que o cliente lê para escolher entre Meio e Inteiro.', opcional: true })}
         </div>
-        <div class="formulario__par">
-          ${campoPreco('preco_centavos', 'Preço base (R$)', r?.preco_centavos)}
-          ${campoTexto('inclusos', 'Ingredientes inclusos', r?.inclusos ?? '', { extra: 'inputmode="numeric" maxlength="2"', ajuda: 'Acima disso, cada um é cobrado como extra.' })}
-        </div>${estado}`;
+        <p class="cadastro__nota">O preço de cada prato neste tamanho fica na aba “Preços dos pratos”.</p>${estado}`;
     case 'massas':
       return `${nome}${campoTexto('descricao', 'Descrição', r?.descricao, { extra: 'maxlength="100"', opcional: true })}
         ${campoPreco('acrescimo_centavos', 'Acréscimo (R$)', r?.acrescimo_centavos ?? 0, 'Deixe 0,00 se não muda o preço do prato.')}${estado}`;
@@ -193,7 +223,7 @@ function camposDoRecurso(recurso, r) {
       return `${nome}
         <div class="formulario__par">
           ${campoTexto('grupo', 'Grupo', r?.grupo ?? grupos[0] ?? '', { extra: 'maxlength="40" list="lista-grupos"', ajuda: 'Ex.: Proteínas, Vegetais, Queijos.' })}
-          ${campoPreco('preco_extra_centavos', 'Preço como extra (R$)', r?.preco_extra_centavos, 'Cobrado só quando passa dos inclusos.')}
+          ${campoPreco('preco_extra_centavos', 'Preço a mais (R$)', r?.preco_extra_centavos ?? 0, 'Somado ao Monte sua massa. Deixe 0,00 se vem sem custo.')}
         </div>
         <datalist id="lista-grupos">${grupos.map((g) => `<option value="${esc(g)}">`).join('')}</datalist>${estado}`;
     }
@@ -204,10 +234,10 @@ function camposDoRecurso(recurso, r) {
         ${campoSelecao('categoria_id', 'Categoria', dados.categorias.map((c) => [c.id, c.nome]), r?.categoria_id)}
         ${nome}
         ${campoTexto('descricao', 'Descrição', r?.descricao, { extra: 'maxlength="160"', opcional: true })}
-        ${campoSelecao('tipo', 'Tipo', [['simples', 'Item pronto, com preço fixo (bebida, sobremesa)'], ['prato_casa', 'Prato da casa (montagem sugerida)']], tipo)}
+        ${campoSelecao('tipo', 'Tipo', [['simples', 'Item pronto, com preço fixo (bebida, sobremesa)'], ['prato_casa', 'Prato da casa (receita fixa, preço por tamanho)']], tipo)}
         <div data-so="simples" ${tipo === 'simples' ? '' : 'hidden'}>${campoPreco('preco_centavos', 'Preço (R$)', r?.preco_centavos)}</div>
         <div class="formulario" data-so="prato_casa" ${tipo === 'prato_casa' ? '' : 'hidden'}>
-          <p class="cadastro__nota">O cliente escolhe o tamanho e pode trocar o que quiser. O preço segue a regra do “Monte seu prato”.</p>
+          <p class="cadastro__nota">O cliente só escolhe o tamanho; a receita não muda. O preço de cada tamanho fica na aba “Preços dos pratos”.</p>
           <div class="formulario__par">
             ${campoSelecao('massa_id', 'Massa', dados.massas.map((x) => [x.id, x.nome]), r?.massa_id)}
             ${campoSelecao('molho_id', 'Molho', dados.molhos.map((x) => [x.id, x.nome]), r?.molho_id)}
@@ -286,8 +316,6 @@ function lerFormulario(form) {
     case 'tamanhos':
       v.sigla = form.sigla.value.trim();
       v.descricao = form.descricao.value.trim();
-      v.preco_centavos = dinheiro('preco_centavos');
-      v.inclusos = form.inclusos.value.trim();
       break;
     case 'massas':
       v.descricao = form.descricao.value.trim();
@@ -433,6 +461,43 @@ delegar(lateral, 'change', '#arquivo-foto', async (e, entrada) => {
 delegar(lateral, 'click', '[data-tirar-foto]', () => {
   editando.imagem = null;
   desenharFoto();
+});
+
+conteudo.addEventListener('submit', async (e) => {
+  if (e.target.id !== 'form-precos') return;
+  e.preventDefault();
+  const corpo = { monte: {}, pratos: {} };
+  let invalido = null;
+  for (const entrada of e.target.querySelectorAll('input[name]')) {
+    const [grupo, a, b] = entrada.name.split('.');
+    const vazio = entrada.value.trim() === '';
+    const centavos = vazio ? null : centavosDeTexto(entrada.value);
+    entrada.setAttribute('aria-invalid', String(!vazio && centavos === null || grupo === 'monte' && vazio));
+    if ((!vazio && centavos === null) || (grupo === 'monte' && vazio)) invalido ??= entrada;
+    if (grupo === 'monte') corpo.monte[a] = centavos;
+    else (corpo.pratos[a] ??= {})[b] = centavos;
+  }
+  const erro = $('#erro-precos');
+  erro.hidden = !invalido;
+  erro.textContent = invalido ? `Confira “${invalido.getAttribute('aria-label')}”: digite um valor, por exemplo 30,00.` : '';
+  if (invalido) {
+    invalido.focus();
+    return;
+  }
+  const botao = e.target.querySelector('button[type="submit"]');
+  botao.setAttribute('aria-busy', 'true');
+  try {
+    dados = await api('/api/admin/cardapio-precos', { metodo: 'PUT', corpo });
+    desenhar();
+    avisar('Preços salvos');
+  } catch (falha) {
+    botao.removeAttribute('aria-busy');
+    mostrarErro(falha);
+  }
+});
+delegar(conteudo, 'focusout', '#form-precos input', (e, entrada) => {
+  const valor = centavosDeTexto(entrada.value);
+  if (valor !== null) entrada.value = textoDeCentavos(valor);
 });
 
 lateral.addEventListener('submit', async (e) => {

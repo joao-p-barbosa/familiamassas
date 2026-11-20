@@ -289,7 +289,7 @@ final class Assistente
         $l = ['CARDÁPIO (preços em reais). O prato é montado pelo cliente no link do cardápio.'];
 
         if ($d['tamanhos'] !== []) {
-            $l[] = 'Tamanhos do "Monte seu prato": ' . implode('; ', array_map(static fn (array $t): string => "{$t['nome']}" . ($t['descricao'] !== '' ? " ({$t['descricao']})" : '') . ': ' . self::reais($t['preco_centavos']) . ", inclui {$t['inclusos']} ingrediente(s)" . $marca($t), $d['tamanhos'])) . '.';
+            $l[] = 'Tamanhos do "Monte sua massa" (preço base): ' . implode('; ', array_map(static fn (array $t): string => "{$t['nome']}" . ($t['descricao'] !== '' ? " ({$t['descricao']})" : '') . ': ' . self::reais($t['preco_centavos']) . $marca($t), $d['tamanhos'])) . '.';
         }
         if ($d['massas'] !== []) {
             $l[] = 'Massas: ' . implode('; ', array_map(static fn (array $m): string => $m['nome'] . $mais($m['acrescimo_centavos']) . $marca($m), $d['massas'])) . '.';
@@ -305,10 +305,11 @@ final class Assistente
             $l[] = "Ingredientes ({$grupo}): " . implode('; ', $nomes) . '.';
         }
         if ($grupos !== []) {
-            $l[] = 'Cada tamanho já inclui alguns ingredientes; o acréscimo entre parênteses só é cobrado quando o cliente passa desse número.';
+            $l[] = 'No "Monte sua massa", o ingrediente sem valor entre parênteses vem sem custo; o que tem valor é somado ao preço base.';
         }
 
         $ingredientes = array_column($d['ingredientes'], 'nome', 'id');
+        $tamanhos = array_column($d['tamanhos'], 'nome', 'id');
         $massas = array_column($d['massas'], 'nome', 'id');
         $molhos = array_column($d['molhos'], 'nome', 'id');
         foreach ($d['categorias'] as $categoria) {
@@ -324,7 +325,8 @@ final class Assistente
                         isset($molhos[$i['molho_id']]) ? 'molho ' . $molhos[$i['molho_id']] : null,
                         $i['ingrediente_ids'] !== [] ? 'com ' . implode(', ', array_map(static fn (int $id): string => $ingredientes[$id] ?? '', $i['ingrediente_ids'])) : null,
                     ]);
-                    $l[] = "- {$i['nome']} (prato da casa" . ($comp !== [] ? ': ' . implode(', ', $comp) : '') . '; o preço depende do tamanho escolhido)' . ($i['descricao'] !== '' ? " — {$i['descricao']}" : '') . $marca($i);
+                    $precos = implode(', ', array_map(static fn (array $p): string => ($tamanhos[$p['tamanho_id']] ?? '') . ' ' . self::reais($p['preco_centavos']), $i['precos']));
+                    $l[] = "- {$i['nome']} (prato da casa, receita fixa" . ($comp !== [] ? ': ' . implode(', ', $comp) : '') . ')' . ($precos !== '' ? ": {$precos}" : '') . ($i['descricao'] !== '' ? " — {$i['descricao']}" : '') . $marca($i);
                 } else {
                     $l[] = "- {$i['nome']}: " . self::reais($i['preco_centavos']) . ($i['descricao'] !== '' ? " — {$i['descricao']}" : '') . $marca($i);
                 }

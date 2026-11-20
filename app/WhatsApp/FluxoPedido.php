@@ -150,7 +150,7 @@ final class FluxoPedido
                 }
                 [$tipo, $id] = $escolhida;
                 $s['atual'] = $tipo === 'prato' ? ['item_id' => $id] : [];
-                $s['etapa'] = ['prato' => 'prato_tamanho', 'monte' => 'monte_tamanho', 'simples' => 'simples', 'fechar' => 'tipo'][$tipo];
+                $s['etapa'] = ['prato' => 'prato_tamanho', 'monte' => 'monte_massa', 'simples' => 'simples', 'fechar' => 'tipo'][$tipo];
                 return true;
 
             case 'prato_tamanho':
@@ -158,14 +158,9 @@ final class FluxoPedido
                 if ($escolhida === null) {
                     return false;
                 }
+                // O tamanho é o último passo dos dois: o prato da casa tem receita fixa (D87) e o "Monte" já escolheu o resto.
                 $s['atual']['tamanho_id'] = $escolhida;
-                if ($etapa === 'prato_tamanho') {   // o prato da casa já vem com massa, molho e ingredientes
-                    $prato = $this->itemDoCardapio($s['atual']['item_id']);
-                    $s['atual'] += ['massa_id' => $prato['massa_id'], 'molho_id' => $prato['molho_id'], 'ingrediente_ids' => $prato['ingrediente_ids']];
-                    $s['etapa'] = 'quantidade';
-                } else {
-                    $s['etapa'] = 'monte_massa';
-                }
+                $s['etapa'] = 'quantidade';
                 return true;
 
             case 'monte_massa':
@@ -192,7 +187,7 @@ final class FluxoPedido
                 }
                 $s['grupo']++;
                 if ($s['grupo'] >= count($this->grupos())) {
-                    $s['etapa'] = 'quantidade';
+                    $s['etapa'] = 'monte_tamanho';
                 }
                 return true;
 
@@ -442,7 +437,7 @@ final class FluxoPedido
                     $lista(['fechar', null], '*Fechar o pedido* (' . self::itensTexto($s['carrinho']) . ', ' . self::reais($this->total($s, false)) . ')');
                 }
                 $linhas[] = '';
-                $tamanhos = 'Tamanhos: ' . implode(' · ', array_map(static fn (array $t): string => "{$t['nome']} " . self::reais($t['preco_centavos']), $this->disponiveis($catalogo['tamanhos'])));
+                $tamanhos = 'Monte a sua massa: ' . implode(' · ', array_map(static fn (array $t): string => "{$t['nome']} " . self::reais($t['preco_centavos']), $this->disponiveis($catalogo['tamanhos'])));
                 $linhas[] = $tamanhos;
                 $linhas[] = 'A qualquer momento: *cancelar* ou *atendente*.';
                 $contexto = ['🍝 *Cardápio*', ...($esgotados !== [] ? ['Esgotado hoje: ' . implode(', ', $esgotados) . '.'] : []), '', $tamanhos, 'A qualquer momento: *cancelar* ou *atendente*.'];
@@ -452,43 +447,43 @@ final class FluxoPedido
             case 'prato_tamanho':
                 $prato = $this->itemDoCardapio($s['atual']['item_id']);
                 $linhas[] = "*{$prato['nome']}*. Qual tamanho?";
+                $precos = array_column($prato['precos'], 'preco_centavos', 'tamanho_id');
                 foreach ($this->disponiveis($catalogo['tamanhos']) as $t) {
-                    $preco = $this->precoMontado($catalogo, ['tamanho_id' => $t['id'], 'massa_id' => $prato['massa_id'], 'molho_id' => $prato['molho_id'], 'ingrediente_ids' => $prato['ingrediente_ids']]);
-                    $lista($t['id'], "{$t['nome']}" . ($t['descricao'] !== '' ? " ({$t['descricao']})" : '') . ' — ' . self::reais($preco));
+                    if (isset($precos[$t['id']])) {   // tamanho sem preço cadastrado não é vendido para este prato
+                        $lista($t['id'], "{$t['nome']}" . ($t['descricao'] !== '' ? " ({$t['descricao']})" : '') . ' — ' . self::reais($precos[$t['id']]));
+                    }
                 }
                 $pergunta = "{$prato['nome']}: qual tamanho?";
                 break;
 
             case 'monte_tamanho':
-                $linhas[] = '*Monte a sua massa* 🍝 Primeiro, o tamanho:';
+                $linhas[] = 'Por último, o tamanho:';
                 foreach ($this->disponiveis($catalogo['tamanhos']) as $t) {
-                    $lista($t['id'], "{$t['nome']} — " . self::reais($t['preco_centavos']) . " (inclui {$t['inclusos']} ingredientes)");
+                    $preco = $this->precoMontado($catalogo, ['tamanho_id' => $t['id']] + $s['atual']);
+                    $lista($t['id'], "{$t['nome']}" . ($t['descricao'] !== '' ? " ({$t['descricao']})" : '') . ' — ' . self::reais($preco));
                 }
-                $pergunta = 'Monte a sua massa 🍝 Primeiro, o tamanho:';
+                $pergunta = 'Por último, o tamanho:';
                 break;
 
             case 'monte_massa':
             case 'monte_molho':
                 $massa = $s['etapa'] === 'monte_massa';
-                $linhas[] = $massa ? 'Qual massa?' : 'Qual molho?';
+                $titulo = $massa ? 'Monte a sua massa 🍝 Primeiro, qual massa?' : 'Qual molho?';
+                $linhas[] = $massa ? '*Monte a sua massa* 🍝 Primeiro, qual massa?' : $titulo;
                 foreach ($this->disponiveis($catalogo[$massa ? 'massas' : 'molhos']) as $o) {
                     $lista($o['id'], $o['nome'] . ($o['acrescimo_centavos'] > 0 ? ' (+' . self::reais($o['acrescimo_centavos']) . ')' : ''));
                 }
-                $pergunta = $massa ? 'Qual massa?' : 'Qual molho?';
+                $pergunta = $titulo;
                 break;
 
             case 'monte_grupo':
                 $grupo = $this->grupos()[$s['grupo']];
-                $tamanho = array_column($catalogo['tamanhos'], null, 'id')[$s['atual']['tamanho_id']] ?? ['inclusos' => 0];
-                $escolhidos = count($s['atual']['ingrediente_ids']);
                 $linhas[] = "*{$grupo}* — pode escolher vários (ex.: 1, 3) ou 0 para nenhum.";
                 if ($s['grupo'] === 0) {
-                    $ambos("Seu tamanho inclui {$tamanho['inclusos']} ingredientes; a partir daí, cada um custa o valor ao lado.");
-                } elseif ($escolhidos > 0) {
-                    $ambos("Você já escolheu {$escolhidos} de {$tamanho['inclusos']} inclusos.");
+                    $ambos('Escolha quantos quiser. Os que têm preço ao lado são cobrados à parte.');
                 }
                 foreach ($this->disponiveis(array_filter($catalogo['ingredientes'], static fn (array $i): bool => $i['grupo'] === $grupo)) as $i) {
-                    $lista($i['id'], $i['nome'] . ' (+' . self::reais($i['preco_extra_centavos']) . ' se for extra)');
+                    $lista($i['id'], $i['nome'] . ($i['preco_extra_centavos'] > 0 ? ' (+' . self::reais($i['preco_extra_centavos']) . ')' : ''));
                 }
                 $pergunta = "{$grupo}: marque o que quiser e toque em ✅ Pronto";
                 $multipla = true;
@@ -697,8 +692,8 @@ final class FluxoPedido
         $nome = isset($atual['item_id'])
             ? $this->itemDoCardapio($atual['item_id'])['nome'] . " ({$m['tamanho']['nome']})"
             : "Monte a sua massa ({$m['tamanho']['nome']}): {$m['massa']['nome']}, molho {$m['molho']['nome']}" . ($ingredientes !== [] ? ', ' . implode(', ', $ingredientes) : '');
-        return ['payload' => ['tipo' => 'montado', 'item_id' => $atual['item_id'] ?? null, 'tamanho_id' => $atual['tamanho_id'], 'massa_id' => $atual['massa_id'],
-            'molho_id' => $atual['molho_id'], 'ingrediente_ids' => $atual['ingrediente_ids'], 'quantidade' => $quantidade, 'observacoes' => ''],
+        return ['payload' => ['tipo' => 'montado', 'item_id' => $atual['item_id'] ?? null, 'tamanho_id' => $atual['tamanho_id'], 'massa_id' => $atual['massa_id'] ?? null,
+            'molho_id' => $atual['molho_id'] ?? null, 'ingrediente_ids' => $atual['ingrediente_ids'] ?? [], 'quantidade' => $quantidade, 'observacoes' => ''],
             'nome' => $nome, 'preco' => $montado['preco_centavos'], 'quantidade' => $quantidade];
     }
 

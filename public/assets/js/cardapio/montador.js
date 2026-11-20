@@ -1,22 +1,27 @@
-// "Monte seu prato": tamanho → massa → molho → ingredientes → finalização → revisão.
+// "Monte seu prato": massa → molho → ingredientes → tamanho → finalização → revisão.
+// Prato da casa (receita fixa, D87): tamanho → finalização → revisão.
 // As escolhas ficam em `m.escolha` e nunca se perdem ao ir e voltar entre os passos.
 import { $, $$, esc, delegar } from '../shared/dom.js';
 import { icone, iconeMassa, iconePorcao } from '../shared/icones.js';
 import { reais, acrescimo, plural } from '../shared/formato.js';
-import { calcularMontagem } from '../shared/preco.js';
+import { calcularMontagem, precoDoPrato } from '../shared/preco.js';
 import { abrirFolha, fecharFolha } from '../shared/folha.js';
 import { avisar } from '../shared/avisos.js';
 import { estado, adicionarAoCarrinho, atualizarLinha } from './estado.js';
 
-const PASSOS = [
-  { id: 'tamanho', rotulo: 'Tamanho', titulo: 'Qual o tamanho?' },
-  { id: 'massa', rotulo: 'Massa', titulo: 'Escolha a massa' },
-  { id: 'molho', rotulo: 'Molho', titulo: 'Escolha o molho' },
-  { id: 'ingredientes', rotulo: 'Ingredientes', titulo: 'Escolha os ingredientes' },
-  { id: 'final', rotulo: 'Finalização', titulo: 'Para finalizar' },
-  { id: 'revisao', rotulo: 'Revisão', titulo: 'Confira seu prato' },
-];
-const REVISAO = PASSOS.length - 1;
+const PASSO = {
+  tamanho: { id: 'tamanho', rotulo: 'Tamanho', titulo: 'Qual o tamanho?' },
+  massa: { id: 'massa', rotulo: 'Massa', titulo: 'Escolha a massa' },
+  molho: { id: 'molho', rotulo: 'Molho', titulo: 'Escolha o molho' },
+  ingredientes: { id: 'ingredientes', rotulo: 'Ingredientes', titulo: 'Escolha os ingredientes' },
+  final: { id: 'final', rotulo: 'Finalização', titulo: 'Para finalizar' },
+  revisao: { id: 'revisao', rotulo: 'Revisão', titulo: 'Confira seu prato' },
+};
+const PASSOS_MONTE = ['massa', 'molho', 'ingredientes', 'tamanho', 'final', 'revisao'].map((id) => PASSO[id]);
+const PASSOS_CASA = ['tamanho', 'final', 'revisao'].map((id) => PASSO[id]);
+let PASSOS = PASSOS_MONTE;   // trocado a cada abertura: prato da casa tem menos passos
+let REVISAO = PASSOS.length - 1;
+const indice = (id) => PASSOS.findIndex((p) => p.id === id);
 
 const dialogo = $('#folha-montador');
 const escolhaVazia = () => ({ tamanho_id: null, massa_id: null, molho_id: null, ingrediente_ids: [], observacoes: '', quantidade: 1 });
@@ -30,7 +35,9 @@ export function limparRascunho() {
 }
 
 const disponivel = (o) => o && o.estado === 'disponivel';
-const calculo = () => calcularMontagem(estado.cardapio, m.escolha);
+const calculo = (escolha = m.escolha) => calcularMontagem(estado.cardapio, { ...escolha, item_id: m.itemCasa?.id ?? null });
+/** Tamanho que pode ser pedido agora: disponível e, no prato da casa, com preço cadastrado. */
+const tamanhoVende = (t) => disponivel(t) && (!m.itemCasa || precoDoPrato(m.itemCasa, t.id) !== null);
 
 /**
  * @param {{ itemCasa?: object, linha?: object }} opcoes
@@ -38,18 +45,14 @@ const calculo = () => calcularMontagem(estado.cardapio, m.escolha);
  */
 export function abrirMontador({ itemCasa = null, linha = null } = {}) {
   const c = estado.cardapio;
+  const casa = linha ? (linha.item_id ? c.itens.find((i) => i.id === linha.item_id) ?? null : null) : itemCasa;
+  PASSOS = casa ? PASSOS_CASA : PASSOS_MONTE;
+  REVISAO = PASSOS.length - 1;
   if (linha) {
-    m = { passo: REVISAO, alcancado: REVISAO, itemCasa: linha.item_id ? c.itens.find((i) => i.id === linha.item_id) ?? null : null, uid: linha.uid,
+    m = { passo: REVISAO, alcancado: REVISAO, itemCasa: casa, uid: linha.uid,
           escolha: { ...escolhaVazia(), ...structuredClone(linha) } };
   } else if (itemCasa) {
-    const massa = c.massas.find((x) => x.id === itemCasa.massa_id);
-    const molho = c.molhos.find((x) => x.id === itemCasa.molho_id);
-    const ingredientes = itemCasa.ingrediente_ids.filter((id) => disponivel(c.ingredientes.find((x) => x.id === id)));
-    m = { passo: 0, alcancado: 0, itemCasa, uid: null,
-          escolha: { ...escolhaVazia(), massa_id: disponivel(massa) ? massa.id : null, molho_id: disponivel(molho) ? molho.id : null, ingrediente_ids: ingredientes } };
-    if (!disponivel(massa) || !disponivel(molho) || ingredientes.length !== itemCasa.ingrediente_ids.length) {
-      avisar('Parte deste prato esgotou. Escolha um substituto nos passos.');
-    }
+    m = { passo: 0, alcancado: 0, itemCasa, uid: null, escolha: escolhaVazia() };
   } else {
     m = rascunho ?? { passo: 0, alcancado: 0, itemCasa: null, uid: null, escolha: escolhaVazia() };
     rascunho = null;
@@ -60,7 +63,7 @@ export function abrirMontador({ itemCasa = null, linha = null } = {}) {
   abrirFolha(dialogo, {
     aoFechar: () => {
       // Fechou sem adicionar uma montagem livre: guarda para a pessoa não recomeçar do zero.
-      if (m && !m.uid && !m.itemCasa && m.escolha.tamanho_id) rascunho = m;
+      if (m && !m.uid && !m.itemCasa && m.escolha.massa_id) rascunho = m;
       m = null;
     },
   });
@@ -70,7 +73,7 @@ export function abrirMontador({ itemCasa = null, linha = null } = {}) {
 function limparIndisponiveis() {
   const c = estado.cardapio;
   const ok = (lista, id) => disponivel(lista.find((o) => o.id === id));
-  if (!ok(c.tamanhos, m.escolha.tamanho_id)) m.escolha.tamanho_id = null;
+  if (!tamanhoVende(c.tamanhos.find((o) => o.id === m.escolha.tamanho_id))) m.escolha.tamanho_id = null;
   if (!ok(c.massas, m.escolha.massa_id)) m.escolha.massa_id = null;
   if (!ok(c.molhos, m.escolha.molho_id)) m.escolha.molho_id = null;
   m.escolha.ingrediente_ids = m.escolha.ingrediente_ids.filter((id) => ok(c.ingredientes, id));
@@ -120,7 +123,7 @@ function desenharCasca() {
 function desenharPasso(direcao) {
   const passo = PASSOS[m.passo];
   m.alcancado = Math.max(m.alcancado, m.passo);
-  $('#montador-titulo').textContent = m.passo === 0 && m.itemCasa ? `${m.itemCasa.nome}: qual o tamanho?` : passo.titulo;
+  $('#montador-titulo').textContent = passo.id === 'tamanho' && m.itemCasa ? `${m.itemCasa.nome}: qual o tamanho?` : passo.titulo;
 
   const corpo = $('#montador-corpo');
   corpo.innerHTML = `<div class="montador__conteudo" style="--dir: ${direcao}">${CONTEUDO[passo.id]()}</div>`;
@@ -139,8 +142,7 @@ function desenharPasso(direcao) {
 const marca = `<span class="opcao__marca">${icone('check', 14)}</span>`;
 const esgotado = '<span class="selo">Esgotado</span>';
 
-function opcaoUnica(nome, o, { descricao, detalhe = '', lado, figura = '' }) {
-  const fora = !disponivel(o);
+function opcaoUnica(nome, o, { descricao, detalhe = '', lado, figura = '', fora = !disponivel(o) }) {
   return `
     <label class="opcao${figura ? ' opcao--figura' : ''}">
       <input class="opcao__entrada" type="radio" name="${nome}" value="${o.id}" ${m.escolha[nome] === o.id ? 'checked' : ''} ${fora ? 'disabled' : ''}>
@@ -155,14 +157,14 @@ function opcaoUnica(nome, o, { descricao, detalhe = '', lado, figura = '' }) {
 }
 
 const CONTEUDO = {
-  // Meio e Inteiro: o desenho do prato (metade ou cheio), a descrição de quanto serve e o que já está incluso no preço.
+  // Meio e Inteiro: o desenho do prato (metade ou cheio), a descrição de quanto serve e o preço do prato nesse tamanho.
   tamanho: () => `
     <fieldset class="grupo-opcoes">
       <legend class="so-leitor">Tamanho</legend>
       ${estado.cardapio.tamanhos.map((t) => opcaoUnica('tamanho_id', t, {
         descricao: t.descricao,
-        detalhe: plural(t.inclusos, 'ingrediente incluso', 'ingredientes inclusos'),
-        lado: `<span class="preco-opcao">${reais(t.preco_centavos)}</span>`,
+        fora: !tamanhoVende(t),
+        lado: `<span class="preco-opcao">${reais(calculo({ ...m.escolha, tamanho_id: t.id }).preco)}</span>`,
         figura: `<span class="opcao__figura porcao" aria-hidden="true">${iconePorcao(t.nome, 32)}</span>`,
       })).join('')}
     </fieldset>`,
@@ -201,7 +203,7 @@ const CONTEUDO = {
               <input class="opcao__entrada" type="checkbox" name="ingrediente" value="${i.id}" ${m.escolha.ingrediente_ids.includes(i.id) ? 'checked' : ''} ${disponivel(i) ? '' : 'disabled'}>
               ${marca}
               <span class="opcao__corpo"><span class="opcao__titulo">${esc(i.nome)}</span></span>
-              <span class="opcao__lado" data-lado="${i.id}">${disponivel(i) ? '' : esgotado}</span>
+              <span class="opcao__lado">${!disponivel(i) ? esgotado : i.preco_extra_centavos > 0 ? `+ ${reais(i.preco_extra_centavos)}` : ''}</span>
             </label>`).join('')}
         </fieldset>`).join('')}`;
   },
@@ -221,6 +223,7 @@ const CONTEUDO = {
 
   revisao: () => {
     const r = calculo();
+    if (m.itemCasa) return revisaoCasa(r);
     const linha = (rotulo, valor, passo, lado = '') => `
       <div class="revisao__linha">
         <dt>${rotulo}</dt>
@@ -230,20 +233,41 @@ const CONTEUDO = {
     const nomes = (lista) => lista.map((i) => esc(i.nome)).join(', ');
     return `
       <dl class="revisao">
-        ${linha('Tamanho', `${esc(r.tamanho.nome)}${r.tamanho.descricao ? ` (${esc(r.tamanho.descricao)})` : ''}`, 0, reais(r.tamanho.preco_centavos))}
-        ${linha('Massa', esc(r.massa.nome), 1, acrescimo(r.massa.acrescimo_centavos))}
-        ${linha('Molho', esc(r.molho.nome), 2, acrescimo(r.molho.acrescimo_centavos))}
-        ${linha('Ingredientes', r.inclusos.length ? nomes(r.inclusos) : 'Nenhum', 3, r.inclusos.length ? 'inclusos' : '')}
-        ${r.extras.length ? linha('Extras', nomes(r.extras), 3, `+ ${reais(r.valorExtras)}`) : ''}
-        ${linha('Observações', m.escolha.observacoes ? esc(m.escolha.observacoes) : 'Nenhuma', 4)}
+        ${linha('Massa', esc(r.massa.nome), indice('massa'), acrescimo(r.massa.acrescimo_centavos))}
+        ${linha('Molho', esc(r.molho.nome), indice('molho'), acrescimo(r.molho.acrescimo_centavos))}
+        ${r.inclusos.length || !r.extras.length ? linha('Ingredientes', r.inclusos.length ? nomes(r.inclusos) : 'Nenhum', indice('ingredientes')) : ''}
+        ${r.extras.length ? linha('Extras', nomes(r.extras), indice('ingredientes'), `+ ${reais(r.valorExtras)}`) : ''}
+        ${linha('Tamanho', `${esc(r.tamanho.nome)}${r.tamanho.descricao ? ` (${esc(r.tamanho.descricao)})` : ''}`, indice('tamanho'), reais(r.tamanho.preco_centavos))}
+        ${linha('Observações', m.escolha.observacoes ? esc(m.escolha.observacoes) : 'Nenhuma', indice('final'))}
       </dl>
-      ${r.inclusos.length < r.limite ? `<p class="revisao__dica">${icone('info', 18)}<span>Seu tamanho inclui ${plural(r.limite, 'ingrediente', 'ingredientes')} e você escolheu ${r.inclusos.length}. <button type="button" class="revisao__alterar" data-ir="3">Escolher mais</button></span></p>` : ''}
       <div class="montador__quantidade">
         <span class="campo__rotulo" id="rotulo-quantidade">Quantidade</span>
         ${quantidadeHtml()}
       </div>`;
   },
 };
+
+/** Revisão do prato da casa: a receita é fixa, então só o tamanho e a observação mudam. */
+function revisaoCasa(r) {
+  const nomes = [r.massa?.nome, r.molho && `molho ${r.molho.nome}`, ...r.inclusos.map((i) => i.nome)].filter(Boolean).map(esc).join(', ');
+  return `
+    <dl class="revisao">
+      <div class="revisao__linha"><dt>Prato</dt><dd>${esc(m.itemCasa.nome)}${nomes ? `<br><span class="opcao__descricao">${nomes}</span>` : ''}</dd></div>
+      <div class="revisao__linha">
+        <dt>Tamanho</dt>
+        <dd>${esc(r.tamanho.nome)}${r.tamanho.descricao ? ` (${esc(r.tamanho.descricao)})` : ''}<span class="revisao__valor numero">${reais(r.preco)}</span></dd>
+        <button type="button" class="revisao__alterar" data-ir="${indice('tamanho')}">Alterar<span class="so-leitor"> tamanho</span></button>
+      </div>
+      <div class="revisao__linha">
+        <dt>Observações</dt><dd>${m.escolha.observacoes ? esc(m.escolha.observacoes) : 'Nenhuma'}</dd>
+        <button type="button" class="revisao__alterar" data-ir="${indice('final')}">Alterar<span class="so-leitor"> observações</span></button>
+      </div>
+    </dl>
+    <div class="montador__quantidade">
+      <span class="campo__rotulo" id="rotulo-quantidade">Quantidade</span>
+      ${quantidadeHtml()}
+    </div>`;
+}
 
 function quantidadeHtml() {
   return `
@@ -313,30 +337,11 @@ function atualizar() {
   }
 
   if (passo !== 'ingredientes') return;
-  const usados = r.inclusos.length;
-  const pontos = Array.from({ length: r.limite }, (_, i) => `<span class="contador__ponto" ${i < usados ? 'data-cheio' : ''}></span>`).join('');
   $('#montador-contador').innerHTML = `
     <div class="contador__texto">
-      <strong class="numero">${usados} de ${r.limite} ${r.limite === 1 ? 'incluso' : 'inclusos'}</strong>
-      ${r.extras.length ? `<span class="contador__extras numero">${plural(r.extras.length, 'extra', 'extras')} + ${reais(r.valorExtras)}</span>` : `<span>${usados < r.limite ? `Escolha mais ${r.limite - usados} sem pagar a mais` : 'A partir daqui, cada um é cobrado à parte'}</span>`}
-    </div>
-    <div class="contador__pontos" aria-hidden="true">${pontos}</div>`;
-
-  // Ao lado de cada ingrediente: quanto custa adicionar agora, ou como ele entrou na conta.
-  const idsExtras = new Set(r.extras.map((i) => i.id));
-  const escolhidos = new Set(m.escolha.ingrediente_ids);
-  for (const i of estado.cardapio.ingredientes) {
-    const lado = $(`[data-lado="${i.id}"]`, dialogo);
-    if (!lado || !disponivel(i)) continue;
-    if (escolhidos.has(i.id)) {
-      lado.textContent = idsExtras.has(i.id) ? `extra + ${reais(i.preco_extra_centavos)}` : 'incluso';
-    } else if (usados >= r.limite) {
-      const comEle = calcularMontagem(estado.cardapio, { ...m.escolha, ingrediente_ids: [...m.escolha.ingrediente_ids, i.id] });
-      lado.textContent = `+ ${reais(comEle.preco - r.preco)}`;
-    } else {
-      lado.textContent = '';
-    }
-  }
+      <strong>Escolha quantos quiser</strong>
+      ${r.extras.length ? `<span class="contador__extras numero">${plural(r.extras.length, 'extra', 'extras')} + ${reais(r.valorExtras)}</span>` : '<span>Os que têm preço ao lado são cobrados à parte.</span>'}
+    </div>`;
 }
 
 function irPara(passo) {
@@ -348,9 +353,7 @@ function irPara(passo) {
 function avancar() {
   if (!passoResolvido(PASSOS[m.passo].id)) return;
   if (m.passo < REVISAO) {
-    // Prato da casa: escolhido o tamanho, o resto já vem pronto. Vai direto para a revisão.
-    const pular = m.passo === 0 && m.itemCasa && calculo().completa && m.alcancado === 0;
-    irPara(pular ? REVISAO : m.passo + 1);
+    irPara(m.passo + 1);
     return;
   }
   concluir();
@@ -362,14 +365,7 @@ function concluir() {
     irPara(PASSOS.findIndex((p) => !passoResolvido(p.id)));
     return;
   }
-  // Prato da casa alterado deixa de levar o nome da casa: vira uma montagem livre.
-  let itemId = m.itemCasa?.id ?? null;
-  if (m.itemCasa) {
-    const original = [...m.itemCasa.ingrediente_ids].sort().join();
-    const atual = [...m.escolha.ingrediente_ids].sort().join();
-    if (m.itemCasa.massa_id !== m.escolha.massa_id || m.itemCasa.molho_id !== m.escolha.molho_id || original !== atual) itemId = null;
-  }
-  const linha = { tipo: 'montado', item_id: itemId, ...structuredClone(m.escolha) };
+  const linha = { tipo: 'montado', ...structuredClone(m.escolha), item_id: m.itemCasa?.id ?? null };
   const editando = m.uid;
   if (editando) atualizarLinha(editando, linha);
   else adicionarAoCarrinho(linha);

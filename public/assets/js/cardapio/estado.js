@@ -115,8 +115,9 @@ export function linhasDoCarrinho() {
 
     if (linha.tipo === 'montado') {
       const m = calcularMontagem(c, linha);
-      const partes = [m.tamanho, m.massa, m.molho, ...m.inclusos, ...m.extras];
-      const faltando = !m.completa || m.inclusos.length + m.extras.length !== new Set(linha.ingrediente_ids).size;
+      // Prato da casa tem receita fixa (D87): só o tamanho conta; a cozinha marca o prato inteiro como esgotado.
+      const partes = item ? [m.tamanho] : [m.tamanho, m.massa, m.molho, ...m.inclusos, ...m.extras];
+      const faltando = !m.completa || (!item && m.inclusos.length + m.extras.length !== new Set(linha.ingrediente_ids).size);
       const esgotada = partes.find((p) => p && p.estado !== 'disponivel');
       if (!problema && faltando) problema = 'Uma opção deste prato saiu do cardápio';
       if (!problema && esgotada) problema = `${esgotada.nome} esgotou`;

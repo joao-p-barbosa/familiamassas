@@ -128,7 +128,7 @@ function passo2Html(s) {
           <span><strong>Grande: 8 cm</strong><span class="campo__ajuda">O cupom de mercado e de loja.</span></span></label>
         <label class="escolha-perfil__opcao"><input type="radio" name="papel" value="etiqueta" ${papel === 'etiqueta' ? 'checked' : ''}>
           <span><strong>Etiqueta de 10 × 15 cm</strong><span class="campo__ajuda">Impressora de etiqueta (de envio).</span></span></label>
-        <p class="campo__ajuda">Não sabe? Meça a largura do papel com uma régua.</p>
+        <p class="campo__ajuda">Não sabe? Olhe a etiqueta embaixo da impressora (“Largura 57,5 mm” ou “58 mm” é 5,8 cm) ou meça o papel com uma régua.</p>
       </fieldset>
       <div class="impressora__acoes">
         <button type="submit" class="botao botao--g">Continuar</button>
@@ -435,6 +435,15 @@ async function responder(resposta) {
       prova = { estado: null, aviso: trocasDeLargura > 2
         ? `Voltamos para o papel de ${largura} mm. Se ainda sair torta, ajuste a margem em “Ajustes da comanda” depois do teste.`
         : `Trocamos o papel para ${largura} mm. Imprima o teste de novo.` };
+      desenhar(nova);
+      return;
+    }
+    // Letras soltas e símbolos no cupom (ESC/POS) quase sempre são papel mais largo que o cabeçote: a impressora de 5,8 cm
+    // não aceita a imagem de 8 cm e imprime os bytes como texto. Antes de trocar o jeito de falar, tenta o papel de 5,8 cm.
+    if (j.linguagem === 'escpos' && j.largura_mm === 80) {
+      tentadas.delete('escpos');
+      const nova = await gravar({ largura_mm: 58, altura_mm: 0 });
+      prova = { estado: null, aviso: 'Letras soltas e símbolos no papel quase sempre querem dizer que o papel é mais estreito que o escolhido. Trocamos para 5,8 cm. Desligue e ligue a impressora e imprima o teste de novo.' };
       desenhar(nova);
       return;
     }

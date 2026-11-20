@@ -235,3 +235,17 @@ Testados no navegador (celular e desktop) e com testes automáticos. `⚠️` = 
 - ✅ Testado em navegador real com um iFood de mentira local: credenciais digitadas na tela, conexão, pedido importado e confirmado, cupom com quem paga, lista de motivos de cancelamento e `requestCancellation` com o código escolhido.
 - ⚠️ Não testado: contra o iFood de verdade (precisa do aplicativo de teste); homologação; bloqueio de IP da Render (se vier 403 com a loja autorizada, abrir chamado no Portal do Desenvolvedor).
 - ✅ **Contra o iFood real (16/11):** conexão, polling, pedido, confirmação, preparo, pronto, saiu, motivos e cancelamento funcionaram (D84). Falta: produção (homologação) e conferir o acesso a partir da Render.
+
+## Preços dos pratos e impressora (2026-11-20)
+
+- **Prato da casa com preço fixo** (D87): o cliente escolhe só o tamanho, depois observação e confirmação. Preços na aba **Cardápio › Preços dos pratos**.
+- **Monte sua massa**: massa → molho → ingredientes → tamanho. Preço = valor da tabela + acréscimos + cada ingrediente com preço (sem "inclusos").
+- **Impressora** (D88): "saiu estranha" com 8 cm tenta 5,8 cm primeiro.
+
+Como testar:
+1. Painel › Cardápio › Preços dos pratos: mude o "Monte sua massa" Meio para 30,00, deixe um tamanho de um prato em branco e salve.
+2. Painel › Cardápio › Ingredientes: zere o preço dos ingredientes que vêm sem custo; deixe preço só nos pagos (carne seca, camarão).
+3. Cardápio do cliente (celular): toque num prato da casa; deve pedir só o tamanho (o tamanho em branco aparece desabilitado), a observação e a revisão.
+4. "Montar meu prato": massa, molho, ingredientes (os pagos mostram "+ R$") e o tamanho por último, com o preço do prato montado.
+5. WhatsApp ("Cardápio"): mesma ordem no Monte; no prato da casa só aparecem os tamanhos com preço.
+6. Impressora › Trocar a impressora › papel **5,8 cm** › imprimir o teste.
