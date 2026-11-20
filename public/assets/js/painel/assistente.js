@@ -144,6 +144,8 @@ function desenhar() {
       <section class="bloco">
         <h2 class="bloco__titulo">Pedido pelo WhatsApp</h2>
         ${campo('whatsapp_palavras_cardapio', 'Palavra que o cliente digita para pedir pelo chat', c.whatsapp_palavras_cardapio, { max: 100, ajuda: 'Use a mesma palavra na saudação do WhatsApp Business ("Se preferir pedir por aqui, digite Cardápio"). Para aceitar mais de uma, separe por vírgula: Cardápio, Pedir.' })}
+        <label class="interruptor"><input type="checkbox" name="whatsapp_enquetes" ${c.whatsapp_enquetes ? 'checked' : ''}><span class="interruptor__trilho"></span><span>Mostrar as opções como enquete (o cliente toca na opção)</span></label>
+        <p class="campo__ajuda">O WhatsApp sempre mostra “Ver votos” embaixo de uma enquete, e não dá para tirar. Se isso confundir os clientes, desligue: as opções vão como lista numerada e o cliente responde com o número.</p>
       </section>
       <div class="abas" role="tablist" aria-label="Seções do assistente">
         ${ABAS.map((a) => `<button type="button" class="chip" role="tab" id="aba-${a.id}" data-aba="${a.id}" aria-selected="${a.id === aba}" aria-controls="painel-${a.id}">${a.titulo}</button>`).join('')}
@@ -174,6 +176,7 @@ function coletar() {
   const config = {
     ...dados.config,
     ia_ativo: f.elements.ia_ativo.checked,
+    whatsapp_enquetes: f.elements.whatsapp_enquetes.checked,
     whatsapp_palavras_cardapio: v('whatsapp_palavras_cardapio'), ia_nome: v('ia_nome'), ia_saudacao: v('ia_saudacao'), ia_tom_texto: v('ia_tom_texto'), ia_texto_livre: v('ia_texto_livre'),
     ia_tom: f.querySelector('input[name="ia_tom"]:checked')?.value ?? dados.config.ia_tom,
     ia_tamanho: f.querySelector('input[name="ia_tamanho"]:checked')?.value ?? dados.config.ia_tamanho,

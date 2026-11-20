@@ -15,7 +15,7 @@ use App\IA\OpenRouter;
 // A chave do OpenRouter NUNCA passa por aqui: só existe na variável de ambiente OPENROUTER_API_KEY.
 final class AdminAssistenteController
 {
-    private const BOOLEANOS = ['ia_ativo', 'ia_avisar_ia', 'ia_incluir_cardapio', 'ia_incluir_horarios', 'ia_incluir_entrega'];
+    private const BOOLEANOS = ['ia_ativo', 'ia_avisar_ia', 'ia_incluir_cardapio', 'ia_incluir_horarios', 'ia_incluir_entrega', 'whatsapp_enquetes'];
     private const TEXTOS = [   // chave => [rótulo, tamanho máximo]
         'ia_nome' => ['O nome do assistente', 40], 'ia_papel' => ['O papel', 1500], 'ia_tom_texto' => ['O tom personalizado', 300], 'ia_saudacao' => ['A saudação', 200],
         'ia_regras' => ['As regras', 1500], 'ia_escalonar' => ['A regra de passar para uma pessoa', 1000], 'ia_texto_livre' => ['O texto livre', 4000],

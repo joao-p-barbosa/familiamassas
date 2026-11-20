@@ -11,7 +11,9 @@ use App\Repositories\CardapioRepository;
 use App\Repositories\ConfigRepository;
 use App\Services\LojaService;
 use App\Services\PedidoService;
+use App\Services\Geocodificador;
 use App\Services\PrecoService;
+use App\Services\TaxaDeEntrega;
 use App\Services\TokenWhatsApp;
 
 /**
@@ -42,7 +44,7 @@ final class FluxoPedido
         'menu' => 'escolhendo um item do cardápio', 'prato_tamanho' => 'escolhendo o tamanho do prato', 'monte_tamanho' => 'escolhendo o tamanho da massa',
         'monte_massa' => 'escolhendo a massa', 'monte_molho' => 'escolhendo o molho', 'monte_grupo' => 'escolhendo os ingredientes',
         'simples' => 'escolhendo bebida ou sobremesa', 'quantidade' => 'dizendo a quantidade', 'mais' => 'decidindo se pede mais itens',
-        'tipo' => 'escolhendo entrega ou retirada', 'nome' => 'dizendo o nome', 'local' => 'mandando a localização', 'endereco' => 'digitando o endereço',
+        'tipo' => 'escolhendo entrega ou retirada', 'nome' => 'dizendo o nome', 'local' => 'mandando a localização', 'endereco' => 'digitando o endereço', 'endereco_numero' => 'dizendo o número da casa e o complemento',
         'pagamento' => 'escolhendo a forma de pagamento', 'troco' => 'dizendo o troco', 'resumo' => 'conferindo o resumo do pedido',
     ];
 
@@ -151,6 +153,7 @@ final class FluxoPedido
                 }
                 [$tipo, $id] = $escolhida;
                 $s['atual'] = $tipo === 'prato' ? ['item_id' => $id] : [];
+                $s['categoria'] = $tipo === 'simples' ? $id : null;   // bebidas, sobremesas...: uma opção do menu por categoria
                 $s['etapa'] = ['prato' => 'prato_tamanho', 'monte' => 'monte_massa', 'simples' => 'simples', 'fechar' => 'tipo'][$tipo];
                 return true;
 
@@ -241,7 +244,10 @@ final class FluxoPedido
 
             case 'local':
                 if ($local !== null) {
-                    $s['endereco'] = ['lat' => $local['lat'], 'lng' => $local['lng']];
+                    return $this->recebeuPin($s, $local);
+                } elseif ($texto === '0' && (new TaxaDeEntrega($this->config))->porRaio()) {
+                    $s['aviso'] = 'Para calcular a taxa de entrega, precisamos da sua localização. 📍';
+                    return true;
                 } elseif ($texto !== '0') {
                     if (substr_count($texto, ',') < 2) {
                         return false;
@@ -252,10 +258,26 @@ final class FluxoPedido
                 $s['etapa'] = 'endereco';
                 return true;
 
+            case 'endereco_numero':
+                // Rua e bairro vieram do pin: falta o número (e o complemento, se houver). "120, apto 12" ou "120 apto 12".
+                if ($local !== null) {
+                    return $this->recebeuPin($s, $local);
+                }
+                if (substr_count($texto, ',') >= 2) {   // escreveu o endereço inteiro: vale o que ele escreveu
+                    $s['etapa'] = 'endereco';
+                    return $this->passo($s, $texto, null, $telefone);
+                }
+                if (preg_match('/^\s*(?:n[º°o.]?\s*)?(\d+[a-zA-Z]?|s\/?n)\b[\s,.-]*(.*)$/iu', $texto, $m) !== 1) {
+                    return false;   // a IA tenta ler (D89)
+                }
+                $s['endereco']['numero'] = $m[1];
+                $s['endereco']['complemento'] = trim($m[2]) === '0' ? '' : mb_substr(trim($m[2]), 0, 80);
+                $s['etapa'] = 'pagamento';
+                return true;
+
             case 'endereco':
-                if ($local !== null) {   // mandou o pin agora: guarda e continua pedindo o endereço escrito
-                    $s['endereco'] = array_merge($s['endereco'] ?? [], ['lat' => $local['lat'], 'lng' => $local['lng']]);
-                    return true;
+                if ($local !== null) {   // mandou o pin agora: tenta tirar o endereço dele
+                    return $this->recebeuPin($s, $local);
                 }
                 $partes = array_values(array_filter(array_map('trim', explode(',', $texto)), static fn (string $p): bool => $p !== ''));
                 if (count($partes) < 3) {
@@ -405,8 +427,9 @@ final class FluxoPedido
                 return 'ia';
             }
         }
-        $s['aviso'] = in_array($s['etapa'], ['local', 'endereco'], true) ? 'Faltou alguma parte do endereço. Separe por vírgulas: rua, número e bairro.'
-            : ($temLetra ? 'Não entendi. 🙂' : 'Essa opção não existe.');
+        $s['aviso'] = $s['etapa'] === 'endereco_numero' ? 'Mande o número da casa (ex.: 120).'
+            : (in_array($s['etapa'], ['local', 'endereco'], true) ? 'Faltou alguma parte do endereço. Separe por vírgulas: rua, número e bairro.'
+            : ($temLetra ? 'Não entendi. 🙂' : 'Essa opção não existe.'));
         $this->perguntar($telefone, $s);
         return 'invalido';
     }
@@ -426,6 +449,7 @@ final class FluxoPedido
             'monte_grupo' => "Os números dos ingredientes escolhidos, separados por vírgula (ex.: 1, 3), ou 0 para nenhum deste grupo. As opções:\n{$opcoes}",
             'quantidade' => 'Só a quantidade, um número inteiro de 1 a 20 (ex.: 2).',
             'local', 'endereco' => $endereco,
+            'endereco_numero' => 'O número da casa e, se houver, o complemento, separados por vírgula (ex.: 120, apto 12). Só o número também vale (ex.: 120).',
             'troco' => 'Para quanto o cliente quer troco, só o número em reais (ex.: 100), ou 0 se não precisa de troco.',
             default => null,
         };
@@ -450,6 +474,7 @@ final class FluxoPedido
         $rotulos = [];       // o texto de cada opção da enquete (sem o número)
         $pergunta = null;    // o título da enquete; null = este passo não é de escolha
         $multipla = false;
+        $semNumero = false;  // enquete cujas opções já são o número (quantidade): sem o "1. " na frente
         $ambos = static function (string $linha) use (&$linhas, &$contexto): void {
             $linhas[] = $linha;
             $contexto[] = $linha;
@@ -482,8 +507,9 @@ final class FluxoPedido
                 }
                 $linhas[] = '';
                 $lista(['monte', null], '*Monte a sua massa* (você escolhe tudo)');
-                if ($this->itens($catalogo, 'simples') !== []) {
-                    $lista(['simples', null], 'Bebidas e sobremesas');
+                // Uma opção por categoria (Bebidas, Sobremesas...), para cada uma aparecer com o próprio nome (D97).
+                foreach ($this->categoriasSimples($catalogo) as $categoria) {
+                    $lista(['simples', $categoria['id']], $categoria['nome']);
                 }
                 if ($s['carrinho'] !== []) {
                     $lista(['fechar', null], '*Fechar o pedido* (' . self::itensTexto($s['carrinho']) . ', ' . self::reais($this->total($s, false)) . ')');
@@ -505,7 +531,7 @@ final class FluxoPedido
                         $lista($t['id'], "{$t['nome']}" . ($t['descricao'] !== '' ? " ({$t['descricao']})" : '') . ' — ' . self::reais($precos[$t['id']]));
                     }
                 }
-                $pergunta = "{$prato['nome']}: qual tamanho?";
+                $pergunta = "{$prato['nome']}: qual tamanho? (escolha 1)";
                 break;
 
             case 'monte_tamanho':
@@ -514,13 +540,13 @@ final class FluxoPedido
                     $preco = $this->precoMontado($catalogo, ['tamanho_id' => $t['id']] + $s['atual']);
                     $lista($t['id'], "{$t['nome']}" . ($t['descricao'] !== '' ? " ({$t['descricao']})" : '') . ' — ' . self::reais($preco));
                 }
-                $pergunta = 'Por último, o tamanho:';
+                $pergunta = 'Por último, o tamanho (escolha 1):';
                 break;
 
             case 'monte_massa':
             case 'monte_molho':
                 $massa = $s['etapa'] === 'monte_massa';
-                $titulo = $massa ? 'Monte a sua massa 🍝 Primeiro, qual massa?' : 'Qual molho?';
+                $titulo = $massa ? 'Monte a sua massa 🍝 Primeiro, qual massa? (escolha 1)' : 'Qual molho? (escolha 1)';
                 $linhas[] = $massa ? '*Monte a sua massa* 🍝 Primeiro, qual massa?' : $titulo;
                 foreach ($this->disponiveis($catalogo[$massa ? 'massas' : 'molhos']) as $o) {
                     $lista($o['id'], $o['nome'] . ($o['acrescimo_centavos'] > 0 ? ' (+' . self::reais($o['acrescimo_centavos']) . ')' : ''));
@@ -543,8 +569,9 @@ final class FluxoPedido
 
             case 'simples':
                 $esgotados = [];
-                $linhas[] = '*Bebidas e sobremesas*';
-                foreach ($this->itens($catalogo, 'simples') as $i) {
+                $nomeDaCategoria = array_column($catalogo['categorias'], 'nome', 'id')[$s['categoria'] ?? 0] ?? 'Bebidas e sobremesas';
+                $linhas[] = "*{$nomeDaCategoria}*";
+                foreach ($this->itens($catalogo, 'simples', $s['categoria'] ?? null) as $i) {
                     if ($i['estado'] !== 'disponivel') {
                         $linhas[] = "~{$i['nome']}~ (esgotado hoje)";
                         $esgotados[] = $i['nome'];
@@ -555,11 +582,19 @@ final class FluxoPedido
                 if ($esgotados !== []) {
                     $contexto[] = 'Esgotado hoje: ' . implode(', ', $esgotados) . '.';
                 }
-                $pergunta = 'Bebidas e sobremesas';
+                $pergunta = "{$nomeDaCategoria}: qual vai ser?";
                 break;
 
             case 'quantidade':
-                $linhas[] = 'Quantas? (de 1 a 20)';
+                // A pergunta diz o quê (D97). Na enquete as opções são "1 prato", "2 pratos"...: o voto vira o número da quantidade.
+                [$umNome, $variosNome, $titulo] = $this->palavrasDaQuantidade($s['atual']);
+                $linhas[] = "{$titulo} Responda com o número (de 1 a 20).";
+                for ($n = 1; $n <= 5; $n++) {
+                    $rotulos[] = $n . ' ' . ($n === 1 ? $umNome : $variosNome);
+                }
+                $contexto[] = 'Mais de 5? É só digitar o número.';
+                $pergunta = $titulo;
+                $semNumero = true;
                 break;
 
             case 'mais':
@@ -576,7 +611,8 @@ final class FluxoPedido
                 $linhas[] = 'Entrega ou retirada?';
                 if ($this->config->get('aceita_entrega', '1') === '1') {
                     $taxa = $this->config->inteiro('taxa_entrega_centavos');
-                    $lista('entrega', 'Entrega (' . ($taxa > 0 ? 'taxa ' . self::reais($taxa) . ', ' : '') . 'cerca de ' . $this->config->inteiro('tempo_entrega_min', 50) . ' min)');
+                    $textoTaxa = (new TaxaDeEntrega($this->config))->porRaio() ? 'taxa pela distância, ' : ($taxa > 0 ? 'taxa ' . self::reais($taxa) . ', ' : '');
+                    $lista('entrega', 'Entrega (' . $textoTaxa . 'cerca de ' . $this->config->inteiro('tempo_entrega_min', 50) . ' min)');
                 }
                 if ($this->config->get('aceita_retirada', '1') === '1') {
                     $lista('retirada', 'Retirada no balcão (cerca de ' . $this->config->inteiro('tempo_retirada_min', 25) . ' min)');
@@ -589,8 +625,20 @@ final class FluxoPedido
                 break;
 
             case 'local':
-                $linhas[] = 'Mande a sua localização para a entrega: 📎 › *Localização* › *Enviar localização atual*.';
-                $linhas[] = 'Se preferir não mandar, responda 0.';
+                $linhas[] = 'Mande a sua localização para a entrega: 📎 › *Localização* › *Enviar localização atual*. Pegamos o endereço dela.';
+                if (!(new TaxaDeEntrega($this->config))->porRaio()) {
+                    $linhas[] = 'Se preferir não mandar, responda 0.';
+                }
+                break;
+
+            case 'endereco_numero':
+                $e = $s['endereco'];
+                $calculo = (new TaxaDeEntrega($this->config))->calcular($e['lat'] ?? null, $e['lng'] ?? null);
+                $linhas[] = "📍 Recebi! Endereço: *{$e['rua']}*, {$e['bairro']}" . ($calculo['km'] !== null ? ' (' . TaxaDeEntrega::kmTexto($calculo['km']) . ', taxa ' . self::reais($calculo['taxa_centavos']) . ')' : '') . '.';
+                $linhas[] = ($e['numero'] ?? '') !== ''
+                    ? "O número é *{$e['numero']}*? Responda o número e o complemento, se tiver (ex.: {$e['numero']}, apto 12)."
+                    : 'Qual o número da casa? Se tiver complemento, mande junto (ex.: 120, apto 12).';
+                $linhas[] = 'Se a rua não for essa, escreva o endereço inteiro: rua, número, bairro.';
                 break;
 
             case 'endereco':
@@ -619,7 +667,7 @@ final class FluxoPedido
                 foreach ($s['carrinho'] as $item) {
                     $ambos("• {$item['quantidade']}× {$item['nome']} — " . self::reais($item['preco'] * $item['quantidade']));
                 }
-                if ($s['tipo'] === 'entrega' && ($taxa = $this->config->inteiro('taxa_entrega_centavos')) > 0) {
+                if ($s['tipo'] === 'entrega' && ($taxa = $this->taxa($s)) > 0) {
                     $ambos('• Taxa de entrega — ' . self::reais($taxa));
                 }
                 $ambos('*Total: ' . self::reais($s['total_mostrado']) . '*');
@@ -638,7 +686,7 @@ final class FluxoPedido
         }
 
         $s['rotulos'] = $rotulos;   // o texto de cada opção, para a IA ler uma resposta fora do formato (D89)
-        $enquete = $pergunta !== null && Conector::ativo() ? self::enquete($pergunta, $rotulos, $multipla) : null;
+        $enquete = $pergunta !== null && $this->usaEnquete() ? self::enquete($pergunta, $rotulos, $multipla, !$semNumero) : null;
         if ($enquete !== null) {
             $s['enquete'] = $enquete['tag'];
         }
@@ -667,11 +715,11 @@ final class FluxoPedido
      * @param list<string> $rotulos
      * @return array{pergunta:string, opcoes:list<string>, tag:string}|null
      */
-    private static function enquete(string $pergunta, array $rotulos, bool $multipla): ?array
+    private static function enquete(string $pergunta, array $rotulos, bool $multipla, bool $numerar = true): ?array
     {
         $opcoes = [];
         foreach ($rotulos as $i => $rotulo) {
-            $opcoes[] = self::cortar(($i + 1) . '. ' . self::semMarcas($rotulo), self::ENQUETE_MAX_OPCAO);
+            $opcoes[] = self::cortar(($numerar ? ($i + 1) . '. ' : '') . self::semMarcas($rotulo), self::ENQUETE_MAX_OPCAO);
         }
         if ($multipla) {
             $opcoes[] = '✅ Pronto (ou nenhum)';
@@ -701,10 +749,64 @@ final class FluxoPedido
         return array_values(array_unique(array_column($this->cardapio->publico()['ingredientes'], 'grupo')));
     }
 
-    private function itens(array $catalogo, string $tipo): array
+    private function itens(array $catalogo, string $tipo, ?int $categoria = null): array
     {
         $categorias = array_column($catalogo['categorias'], null, 'id');
-        return array_values(array_filter($catalogo['itens'], static fn (array $i): bool => $i['tipo'] === $tipo && isset($categorias[$i['categoria_id']])));
+        return array_values(array_filter($catalogo['itens'], static fn (array $i): bool => $i['tipo'] === $tipo && isset($categorias[$i['categoria_id']])
+            && ($categoria === null || $i['categoria_id'] === $categoria)));
+    }
+
+    /** Categorias que têm itens prontos (bebidas, sobremesas...), na ordem do cardápio. */
+    private function categoriasSimples(array $catalogo): array
+    {
+        $usadas = array_unique(array_column($this->itens($catalogo, 'simples'), 'categoria_id'));
+        return array_values(array_filter($catalogo['categorias'], static fn (array $c): bool => in_array($c['id'], $usadas, true)));
+    }
+
+    /** ["prato", "pratos", "Quantos pratos ...?"] ou ["unidade", "unidades", "Quantas unidades de Coca?"] para a pergunta da quantidade. */
+    private function palavrasDaQuantidade(array $atual): array
+    {
+        if (isset($atual['simples'])) {
+            $nome = $this->itemDoCardapio($atual['simples'])['nome'];
+            return ['unidade', 'unidades', "Quantas unidades de *{$nome}*?"];
+        }
+        $nome = isset($atual['item_id']) ? $this->itemDoCardapio($atual['item_id'])['nome'] : 'Monte a sua massa';
+        return ['prato', 'pratos', "Quantos pratos de *{$nome}*?"];
+    }
+
+    /** Enquete só no canal QR e se o dono não desligou na tela Assistente (o WhatsApp sempre mostra "Ver votos" nelas). */
+    private function usaEnquete(): bool
+    {
+        return Conector::ativo() && $this->config->get('whatsapp_enquetes', '1') === '1';
+    }
+
+    /** Taxa de entrega deste pedido: pela distância do pin, se a loja usa raio (D98), ou a fixa. */
+    private function taxa(array $s): int
+    {
+        return (new TaxaDeEntrega($this->config))->calcular($s['endereco']['lat'] ?? null, $s['endereco']['lng'] ?? null)['taxa_centavos'];
+    }
+
+    /**
+     * O cliente mandou o pin (D98): guarda o ponto, confere se a loja entrega lá e tenta tirar rua e bairro dele.
+     * Achou: só pede o número. Não achou: pede o endereço escrito, como antes.
+     */
+    private function recebeuPin(array &$s, array $local): bool
+    {
+        $s['endereco'] = ['lat' => $local['lat'], 'lng' => $local['lng']];
+        $calculo = (new TaxaDeEntrega($this->config))->calcular($local['lat'], $local['lng']);
+        if (!$calculo['atende']) {
+            $s['aviso'] = 'Esse local fica a ' . TaxaDeEntrega::kmTexto((float) $calculo['km']) . ' da loja, fora da nossa área de entrega. 😕 Mande outra localização ou responda *cancelar*.';
+            $s['etapa'] = 'local';
+            return true;
+        }
+        $achado = Geocodificador::endereco((float) $local['lat'], (float) $local['lng']);
+        if ($achado !== null) {
+            $s['endereco'] += ['rua' => $achado['rua'], 'numero' => $achado['numero'], 'bairro' => $achado['bairro'], 'complemento' => ''];
+            $s['etapa'] = 'endereco_numero';
+        } else {
+            $s['etapa'] = 'endereco';
+        }
+        return true;
     }
 
     private function disponiveis(array $lista): array
@@ -760,7 +862,7 @@ final class FluxoPedido
             $preco = $p['tipo'] === 'simples' ? ($this->itemDoCardapio($p['item_id'])['preco_centavos']) : $this->precoMontado($catalogo, $p);
             $subtotal += $preco * $p['quantidade'];
         }
-        return $subtotal + ($comTaxa && ($s['tipo'] ?? '') === 'entrega' ? $this->config->inteiro('taxa_entrega_centavos') : 0);
+        return $subtotal + ($comTaxa && ($s['tipo'] ?? '') === 'entrega' ? $this->taxa($s) : 0);
     }
 
     // ---------- Sessão ----------

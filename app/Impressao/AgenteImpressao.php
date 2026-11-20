@@ -23,7 +23,7 @@ final class AgenteImpressao
     public const VERSAO_MINIMA = 1;
     public const ORIGENS = ['cardapio', 'whatsapp', 'ifood', 'balcao'];
     public const LARGURAS = [58, 72, 80, 100, 104];
-    public const FONTES = ['p', 'm', 'g'];
+    public const FONTES = ['p', 'm', 'g', 'gg', 'xg'];   // gg e xg: agente v5 (o v4 imprime como média)
     /**
      * Como a comanda chega à impressora (a comanda sempre vira imagem, então acentos e letra grande saem em qualquer uma):
      *   escpos = impressora de cupom, ESC/POS direto na fila do Windows (não depende do driver instalado);
@@ -60,7 +60,7 @@ final class AgenteImpressao
             'modo' => $c->get('impressao_modo', 'navegador') === 'agente' ? 'agente' : 'navegador',
             'impressora' => $c->get('impressora_nome'),
             'linguagem' => in_array($c->get('impressora_linguagem', 'escpos'), self::LINGUAGENS, true) ? $c->get('impressora_linguagem', 'escpos') : 'escpos',
-            'largura_mm' => $c->inteiro('comanda_largura_mm', 80),
+            'largura_mm' => $c->inteiro('comanda_largura_mm', 58),   // a impressora da loja (QIA-8388) é de 58 mm (D97)
             'altura_mm' => $c->inteiro('comanda_altura_mm', 0),
             'margem_mm' => $c->inteiro('comanda_margem_mm', 3),
             'fonte' => in_array($c->get('comanda_fonte', 'm'), self::FONTES, true) ? $c->get('comanda_fonte', 'm') : 'm',

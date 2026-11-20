@@ -77,6 +77,8 @@ final class LojaService
             'endereco'              => $c->get('endereco_loja'),
             'tipos_pedido'          => $tipos,
             'taxa_entrega_centavos' => $c->inteiro('taxa_entrega_centavos'),
+            // Taxa por raio (D98): o navegador calcula igual ao servidor, só para mostrar. null = taxa fixa.
+            'entrega_por_raio'      => ($taxa = new TaxaDeEntrega($c))->porRaio() ? $taxa->regras() : null,
             'area_entrega'          => $c->get('area_entrega'),
             'tempo_retirada_min'    => $c->inteiro('tempo_retirada_min', 25),
             'tempo_entrega_min'     => $c->inteiro('tempo_entrega_min', 50),

@@ -12,6 +12,7 @@ use App\Repositories\PedidoRepository;
 use App\Services\PedidoService;
 use App\IA\Assistente;
 use App\Impressao\AgenteImpressao;
+use App\Impressao\Comanda;
 use App\WhatsApp\Conector;
 
 // API do quadro de pedidos (a produção) e da impressão. Proprietário (admin) e atendente usam as mesmas rotas.

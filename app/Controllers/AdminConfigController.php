@@ -10,6 +10,7 @@ use App\Core\Sessao;
 use App\Repositories\ConfigRepository;
 use App\Services\LojaService;
 use App\Services\PedidoService;
+use App\Services\TaxaDeEntrega;
 
 // Configurações da loja e situação da integração com o WhatsApp. (Impressora e comanda: IntegracoesController, tela Impressora.)
 final class AdminConfigController
@@ -35,6 +36,7 @@ final class AdminConfigController
             'aceita_retirada' => $c->get('aceita_retirada', '1') === '1',
             'aceita_mesa' => $c->get('aceita_mesa', '1') === '1',
             'polling_segundos' => $c->inteiro('polling_segundos', 5),
+            'entrega_raio' => (new TaxaDeEntrega($c))->regras(),
             'estado_agora' => (new LojaService())->estado(),
         ]);
     }
@@ -106,11 +108,52 @@ final class AdminConfigController
             'aceita_mesa' => $aceita['mesa'] ? '1' : '0',
             'polling_segundos' => (string) $numero('polling_segundos', 3, 60, 'Informe de 3 a 60 segundos.'),
         ];
+        if (is_array($d['entrega_raio'] ?? null)) {
+            $valores += $this->validarRaio($d['entrega_raio'], $erros);
+        }
         if ($erros !== []) {
             throw ErroHttp::validacao($erros);
         }
         (new ConfigRepository())->salvar($valores);
         $this->ler($req);
+    }
+
+    /**
+     * Taxa por raio (D98): {lat, lng, faixas: [{ate_km, taxa_centavos}], alem_centavos: int|null}.
+     * Faixas vazias = volta a taxa fixa. Com faixas, o ponto da loja é obrigatório (é dele que a distância é medida).
+     * @return array<string,string>
+     */
+    private function validarRaio(array $r, array &$erros): array
+    {
+        $faixas = [];
+        foreach (array_slice(is_array($r['faixas'] ?? null) ? $r['faixas'] : [], 0, 12) as $f) {
+            $km = $f['ate_km'] ?? null;
+            $taxa = $f['taxa_centavos'] ?? null;
+            if (!is_numeric($km) || (float) $km <= 0 || (float) $km > 100 || !is_numeric($taxa) || (int) $taxa < 0 || (int) $taxa > 100_000) {
+                $erros['entrega_raio'] = 'Cada faixa precisa de uma distância (até 100 km) e de uma taxa em reais.';
+                continue;
+            }
+            $faixas[] = ['ate_km' => round((float) $km, 2), 'taxa_centavos' => (int) $taxa];
+        }
+        usort($faixas, static fn (array $a, array $b): int => $a['ate_km'] <=> $b['ate_km']);
+        if (count(array_unique(array_column($faixas, 'ate_km'))) !== count($faixas)) {
+            $erros['entrega_raio'] = 'Duas faixas com a mesma distância: deixe uma só.';
+        }
+        $alem = $r['alem_centavos'] ?? null;
+        if ($alem !== null && (!is_numeric($alem) || (int) $alem < 0 || (int) $alem > 100_000)) {
+            $erros['entrega_raio'] = 'Informe a taxa de quem está mais longe, ou marque que não entrega.';
+        }
+        $lat = $r['lat'] ?? null;
+        $lng = $r['lng'] ?? null;
+        $temPonto = is_numeric($lat) && is_numeric($lng) && abs((float) $lat) <= 90 && abs((float) $lng) <= 180 && ((float) $lat !== 0.0 || (float) $lng !== 0.0);
+        if ($faixas !== [] && !$temPonto) {
+            $erros['entrega_raio'] = 'Marque o local da loja: a distância é medida a partir dele.';
+        }
+        return [
+            'entrega_faixas' => json_encode(['faixas' => $faixas, 'alem_centavos' => $alem === null ? null : (int) $alem]),
+            'loja_lat' => $temPonto ? (string) round((float) $lat, 6) : '',
+            'loja_lng' => $temPonto ? (string) round((float) $lng, 6) : '',
+        ];
     }
 
     /**

@@ -41,7 +41,7 @@ function desenharLoja() {
 
   const partes = [];
   if (loja.tipos_pedido.includes('entrega')) {
-    partes.push(`<span>${icone('moto', 18)}Entrega em ${loja.tempo_entrega_min} min · ${loja.taxa_entrega_centavos ? reais(loja.taxa_entrega_centavos) : 'grátis'}</span>`);
+    partes.push(`<span>${icone('moto', 18)}Entrega em ${loja.tempo_entrega_min} min · ${loja.entrega_por_raio ? 'taxa pela distância' : loja.taxa_entrega_centavos ? reais(loja.taxa_entrega_centavos) : 'grátis'}</span>`);
   }
   if (loja.tipos_pedido.includes('retirada')) {
     partes.push(`<span>${icone('loja', 18)}Retirada em ${loja.tempo_retirada_min} min</span>`);

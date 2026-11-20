@@ -489,7 +489,13 @@ conferir('Comanda do iFood a cobrar: o valor é o de payments.pending, não o to
 conferir('Comanda do iFood: código de coleta e quem entrega', [str_contains($doIfood, 'Código de coleta: '), str_contains($doIfood, 'Entregador do iFood')], [true, true]);
 $comum = $pedidos->porId($pedidoComum());
 $comPreco = $texto(Comanda::linhas($comum, ['nome_loja' => 'Família Massas', 'com_preco' => true]));
-conferir('Comanda comum com preço: total e pagamento', [str_contains($comPreco, 'TOTAL | R$ 24,90'), str_contains($comPreco, 'Pix'), str_contains($comPreco, '(11) 91234-5678')], [true, true, true]);
+conferir('Comanda comum com preço: total, telefone e o pagamento num quadro em destaque (D97)', [str_contains($comPreco, 'TOTAL | R$ 24,90'), str_contains($comPreco, 'PAGAMENTO: PIX'), str_contains($comPreco, '(11) 91234-5678')], [true, true, true]);
+$semPreco = Comanda::linhas($comum, ['nome_loja' => 'X', 'com_preco' => false]);
+$quadroPagamento = array_values(array_filter($semPreco, static fn (array $l): bool => str_starts_with($l['t'], 'PAGAMENTO')));
+conferir('O pagamento sai mesmo na comanda sem preço, no estilo de quadro', [$quadroPagamento[0]['t'] ?? null, $quadroPagamento[0]['e'] ?? null, str_contains($texto($semPreco), 'TOTAL')], ['PAGAMENTO: PIX', 'caixa', false]);
+conferir('Dinheiro com troco e pedido do salão', [
+    Comanda::pagamentoEmDestaque(['pagamento' => 'dinheiro', 'troco_para_centavos' => 10000]), Comanda::pagamentoEmDestaque(['pagamento' => 'caixa', 'troco_para_centavos' => null]),
+], ['PAGAMENTO: DINHEIRO - TROCO PARA R$ 100,00', 'PAGAMENTO NA CONTA']);
 conferir('Comanda de teste tem acentos (o agente precisa imprimi-los)', str_contains($texto(Comanda::teste(['nome_loja' => 'X', 'com_preco' => true])), 'ação, pão'), true);
 
 echo "\nCOMANDA COMO LISTA DE MARCAR (D95)\n";

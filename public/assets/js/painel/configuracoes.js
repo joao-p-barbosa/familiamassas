@@ -22,6 +22,68 @@ let config = null;
 let horarios = [];     // por dia (0 = domingo): lista de [abre, fecha]
 let temaSalvo = 'italia';
 
+// ---------- Taxa de entrega por distância (D98) ----------
+const dinheiro = (centavos) => (centavos === null || centavos === undefined ? '' : textoDeCentavos(centavos));
+const linhaFaixa = (f = { ate_km: '', taxa_centavos: null }) => `
+  <div class="faixa-raio" data-faixa-raio>
+    <label class="campo"><span class="campo__rotulo">Até (km)</span><input class="entrada" name="faixa_km" inputmode="decimal" value="${esc(String(f.ate_km).replace('.', ','))}" placeholder="Ex.: 3"></label>
+    <label class="campo"><span class="campo__rotulo">Taxa (R$)</span><input class="entrada" name="faixa_taxa" inputmode="decimal" value="${dinheiro(f.taxa_centavos)}" placeholder="Ex.: 5,00"></label>
+    <button type="button" class="botao botao--fantasma botao--icone" data-raio="tirar" aria-label="Tirar esta faixa">${icone('lixeira', 18)}</button>
+  </div>`;
+
+function raioHtml(r) {
+  const temPonto = r.lat !== null && r.lng !== null;
+  return `
+    <section class="bloco" id="bloco-raio">
+      <h2 class="bloco__titulo">Taxa de entrega pela distância</h2>
+      <p class="bloco__nota">Cadastre faixas de distância da loja até o cliente (em linha reta, pelo ponto que ele marca no mapa ou manda pelo WhatsApp). Sem faixas, vale a taxa fixa acima.</p>
+      <div class="local-loja">
+        <p><strong>Local da loja:</strong> <span id="raio-ponto">${temPonto ? `marcado (${r.lat.toFixed(5)}, ${r.lng.toFixed(5)})` : 'ainda não marcado'}</span></p>
+        <input type="hidden" name="raio_lat" value="${temPonto ? r.lat : ''}"><input type="hidden" name="raio_lng" value="${temPonto ? r.lng : ''}">
+        <div class="impressora__acoes">
+          <button type="button" class="botao botao--secundario botao--p" data-raio="aqui">${icone('pin', 16)}Usar a localização deste aparelho</button>
+          <button type="button" class="botao botao--fantasma botao--p" data-raio="endereco">Achar pelo endereço da loja</button>
+        </div>
+        <p class="campo__ajuda">“Usar a localização deste aparelho” funciona melhor com o celular ou o computador dentro da loja.</p>
+      </div>
+      <div id="raio-faixas">${r.faixas.map(linhaFaixa).join('')}</div>
+      <div class="impressora__acoes"><button type="button" class="botao botao--secundario botao--p" data-raio="mais">${icone('mais', 16)}Adicionar faixa</button></div>
+      <fieldset class="campo" style="border: 0; padding: 0; margin: var(--e-3) 0 0;">
+        <legend class="campo__rotulo">Mais longe que a última faixa</legend>
+        <label class="escolha-simples"><input type="radio" name="raio_alem" value="nao" ${r.alem_centavos === null ? 'checked' : ''}><span>Não entregar</span></label>
+        <label class="escolha-simples"><input type="radio" name="raio_alem" value="sim" ${r.alem_centavos !== null ? 'checked' : ''}><span>Entregar, com a taxa de</span></label>
+        <input class="entrada" name="raio_alem_taxa" inputmode="decimal" style="max-width: 9rem;" value="${dinheiro(r.alem_centavos)}" placeholder="Ex.: 12,00" aria-label="Taxa de quem está mais longe (R$)">
+      </fieldset>
+      <span class="campo__erro" id="erro-entrega_raio" hidden></span>
+    </section>`;
+}
+
+/** Lê as faixas do formulário. Faixa toda em branco é ignorada; meio preenchida é erro. */
+function lerRaio(form) {
+  const faixas = [];
+  for (const linha of $$('[data-faixa-raio]', form)) {
+    const km = linha.querySelector('[name="faixa_km"]').value.trim().replace(',', '.');
+    const taxa = linha.querySelector('[name="faixa_taxa"]').value.trim();
+    if (!km && !taxa) continue;
+    const centavos = centavosDeTexto(taxa);
+    if (!km || Number.isNaN(Number(km)) || centavos === null) return { erro: 'Preencha a distância e a taxa de cada faixa (ex.: até 3 km, R$ 5,00).' };
+    faixas.push({ ate_km: Number(km), taxa_centavos: centavos });
+  }
+  const alem = form.raio_alem.value === 'sim' ? centavosDeTexto(form.raio_alem_taxa.value) : null;
+  if (form.raio_alem.value === 'sim' && alem === null) return { erro: 'Informe a taxa de quem está mais longe, ou marque “Não entregar”.' };
+  const lat = form.raio_lat.value === '' ? null : Number(form.raio_lat.value);
+  const lng = form.raio_lng.value === '' ? null : Number(form.raio_lng.value);
+  return { raio: { lat, lng, faixas, alem_centavos: alem } };
+}
+
+function marcarPonto(lat, lng) {
+  const form = $('#form-config');
+  form.raio_lat.value = lat;
+  form.raio_lng.value = lng;
+  $('#raio-ponto').textContent = `marcado (${lat.toFixed(5)}, ${lng.toFixed(5)})`;
+  avisar('Local da loja marcado. Clique em Salvar para guardar.');
+}
+
 const campo = (nome, rotulo, valor, { ajuda = '', extra = '', tipo = 'text' } = {}) => `
   <label class="campo">
     <span class="campo__rotulo">${rotulo}</span>
@@ -91,6 +153,8 @@ function desenhar() {
           ${campo('tempo_retirada_min', 'Tempo para retirada (min)', c.tempo_retirada_min, { extra: 'inputmode="numeric"' })}
         </div>
       </section>
+
+      ${raioHtml(c.entrega_raio)}
 
       <section class="bloco">
         <h2 class="bloco__titulo">Aparência</h2>
@@ -173,6 +237,39 @@ delegar(conteudo, 'focusout', 'input[name="taxa_entrega"]', (e, entrada) => {
 delegar(conteudo, 'input', 'input[name="whatsapp_loja"]', (e, entrada) => {
   entrada.value = formatarTelefone(entrada.value);
 });
+// Faixas de distância e local da loja (D98).
+delegar(conteudo, 'click', '[data-raio]', async (e, botao) => {
+  const acao = botao.dataset.raio;
+  if (acao === 'mais') {
+    $('#raio-faixas').insertAdjacentHTML('beforeend', linhaFaixa());
+    $('#raio-faixas [data-faixa-raio]:last-child input')?.focus();
+  } else if (acao === 'tirar') {
+    botao.closest('[data-faixa-raio]').remove();
+  } else if (acao === 'aqui') {
+    if (!navigator.geolocation) { avisar('Este aparelho não informa a localização.', { tipo: 'erro' }); return; }
+    botao.setAttribute('aria-busy', 'true');
+    navigator.geolocation.getCurrentPosition(
+      (p) => { botao.removeAttribute('aria-busy'); marcarPonto(p.coords.latitude, p.coords.longitude); },
+      () => { botao.removeAttribute('aria-busy'); avisar('Não deu para pegar a localização. Permita o acesso ou use o endereço da loja.', { tipo: 'erro' }); },
+      { enableHighAccuracy: true, timeout: 15000 },
+    );
+  } else if (acao === 'endereco') {
+    const endereco = $('#form-config').endereco_loja.value.trim();
+    if (!endereco) { avisar('Preencha o endereço da loja primeiro (com a cidade).', { tipo: 'erro' }); return; }
+    botao.setAttribute('aria-busy', 'true');
+    try {
+      const r = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=br&q=${encodeURIComponent(endereco)}`, { headers: { Accept: 'application/json' } });
+      const [achado] = r.ok ? await r.json() : [];
+      if (achado) marcarPonto(Number(achado.lat), Number(achado.lon));
+      else avisar('Não achamos esse endereço no mapa. Escreva com a cidade (ex.: Rua X, 100, Centro, Campinas) ou use a localização do aparelho.', { tipo: 'erro', duracao: 7000 });
+    } catch {
+      avisar('Sem conexão com o mapa agora. Tente de novo.', { tipo: 'erro' });
+    } finally {
+      botao.removeAttribute('aria-busy');
+    }
+  }
+});
+
 conteudo.addEventListener('submit', async (e) => {
   e.preventDefault();
   const form = e.target;
@@ -181,6 +278,11 @@ conteudo.addEventListener('submit', async (e) => {
   const taxa = centavosDeTexto(form.taxa_entrega.value);
   if (taxa === null) {
     mostrarErros(form, { taxa_entrega: 'Digite um valor, por exemplo 6,00.' });
+    return;
+  }
+  const raio = lerRaio(form);
+  if (raio.erro) {
+    mostrarErros(form, { entrega_raio: raio.erro });
     return;
   }
   botao.setAttribute('aria-busy', 'true');
@@ -195,6 +297,7 @@ conteudo.addEventListener('submit', async (e) => {
         tempo_entrega_min: form.tempo_entrega_min.value, tempo_retirada_min: form.tempo_retirada_min.value,
         tema: form.tema.value,
         polling_segundos: form.polling_segundos.value,
+        entrega_raio: raio.raio,
       },
     });
     horarios = Array.from({ length: 7 }, (_, d) => (config.horarios[d] ?? []).map((faixa) => [...faixa]));

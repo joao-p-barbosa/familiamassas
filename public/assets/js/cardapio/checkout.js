@@ -6,7 +6,8 @@ import { reais, telefone as formatarTelefone, centavosDeTexto, textoDeCentavos, 
 import { api } from '../shared/api.js';
 import { avisar } from '../shared/avisos.js';
 import { PAGAMENTOS, PAGAMENTOS_DO_CLIENTE, linhasMontagem, linkComoChegar } from '../shared/pedido.js';
-import { estado, totaisDoCarrinho, esvaziarCarrinho, recarregarCardapio } from './estado.js';
+import { estado, totaisDoCarrinho as totaisSemLocal, esvaziarCarrinho, recarregarCardapio } from './estado.js';
+import { taxaDeEntrega, kmTexto } from '../shared/taxa.js';
 import { escolherNoMapa } from './mapa.js';
 
 const CHAVE_CLIENTE = 'fm_cliente_v1';
@@ -25,6 +26,11 @@ dados.observacoes = '';
 dados.lat = null;
 dados.lng = null;
 let enviando = false;
+let corrigindoEndereco = false;   // o endereço lido do mapa fica resumido; "Corrigir" abre os campos
+
+// A taxa pode depender da distância do ponto marcado (D98).
+const totaisDoCarrinho = (tipo = null) => totaisSemLocal(tipo, { lat: dados.lat, lng: dados.lng });
+const porRaio = () => Boolean(estado.loja.entrega_por_raio);
 
 // O cliente pede entrega, retirada ou mesa (D96: está no restaurante, só informa o nome e a atendente leva o pedido).
 // Pra viagem é feito pela atendente, no salão.
@@ -144,23 +150,41 @@ function camposDoTipo() {
   const loja = estado.loja;
   if (dados.tipo === 'entrega') {
     const marcado = dados.lat !== null;
+    const calculo = taxaDeEntrega(loja, dados);
+    // Endereço tirado do ponto do mapa (D98): a pessoa só confere e completa o número; "Corrigir" abre os campos.
+    const doMapa = marcado && dados.rua && dados.bairro && !corrigindoEndereco;
+    const taxaTexto = porRaio()
+      ? (marcado ? (calculo.atende ? `Fica a ${kmTexto(calculo.km)}: taxa de ${reais(calculo.taxa)}` : `Fica a ${kmTexto(calculo.km)}: fora da nossa área de entrega`) : 'A taxa depende da distância: marque o local no mapa')
+      : `Taxa de ${reais(loja.taxa_entrega_centavos)}`;
     return `
-      <p class="bloco__nota">${icone('moto', 16)}<span>Entregamos em: ${esc(loja.area_entrega || 'consulte a loja')}. Taxa de ${reais(loja.taxa_entrega_centavos)}, cerca de ${loja.tempo_entrega_min} min.</span></p>
+      <p class="bloco__nota">${icone('moto', 16)}<span>Entregamos em: ${esc(loja.area_entrega || 'consulte a loja')}. ${taxaTexto}, cerca de ${loja.tempo_entrega_min} min.</span></p>
       <div class="local-mapa" ${marcado ? 'data-marcado' : ''}>
         <span class="local-mapa__icone">${icone(marcado ? 'check' : 'pin', 22)}</span>
         <div class="local-mapa__texto">
           <p class="local-mapa__titulo">${marcado ? 'Local marcado no mapa' : 'Marque o local no mapa'}</p>
-          <p class="local-mapa__apoio">${marcado ? 'Confira o endereço abaixo e complete o que faltar.' : 'Mais rápido: usamos a sua localização e preenchemos o endereço.'}</p>
+          <p class="local-mapa__apoio">${marcado ? (doMapa ? 'Pegamos o endereço do mapa. Só confira o número.' : 'Confira o endereço abaixo e complete o que faltar.') : 'Mais rápido: usamos a sua localização e preenchemos o endereço.'}</p>
         </div>
         <button type="button" class="botao botao--secundario botao--p" data-acao="marcar-mapa">${marcado ? 'Alterar no mapa' : 'Marcar no mapa'}</button>
       </div>
+      ${doMapa ? `
+      <div class="endereco-do-mapa">
+        <p><strong>${esc(dados.rua)}</strong><br>${esc(dados.bairro)}</p>
+        <button type="button" class="botao botao--fantasma botao--p" data-acao="corrigir-endereco">Corrigir o endereço</button>
+        <input type="hidden" name="rua" value="${esc(dados.rua)}"><input type="hidden" name="bairro" value="${esc(dados.bairro)}">
+        <span class="campo__erro" id="erro-rua" hidden></span><span class="campo__erro" id="erro-bairro" hidden></span>
+      </div>
+      <div class="bloco__grade">
+        ${campo('numero', 'Número', { extra: 'maxlength="20" inputmode="numeric"' })}
+        ${campo('complemento', 'Complemento', { opcional: true, extra: 'maxlength="80" placeholder="Apto, bloco"' })}
+        ${campo('referencia', 'Ponto de referência', { opcional: true, extra: 'maxlength="120"', largura: 'campo--larga' })}
+      </div>` : `
       <div class="bloco__grade">
         ${campo('rua', 'Rua', { extra: 'autocomplete="address-line1" maxlength="120"', largura: 'campo--larga' })}
         ${campo('numero', 'Número', { extra: 'maxlength="20" inputmode="numeric"' })}
         ${campo('bairro', 'Bairro', { extra: 'autocomplete="address-level3" maxlength="80"' })}
         ${campo('complemento', 'Complemento', { opcional: true, extra: 'maxlength="80" placeholder="Apto, bloco"' })}
         ${campo('referencia', 'Ponto de referência', { opcional: true, extra: 'maxlength="120"', largura: 'campo--larga' })}
-      </div>`;
+      </div>`}`;
   }
   if (dados.tipo === 'retirada') {
     return `
@@ -202,6 +226,9 @@ function validar() {
   if (dados.nome.length < 2) erros.nome = 'Diga seu nome para chamarmos você.';
   if (!naMesa() && !/^[1-9]\d9?\d{8}$/.test(digitos)) erros.telefone = 'Informe o WhatsApp com DDD, por exemplo (11) 91234-5678.';
   if (dados.tipo === 'entrega') {
+    const calculo = taxaDeEntrega(estado.loja, dados);
+    if (porRaio() && dados.lat === null) erros.tipo = 'Marque o local da entrega no mapa: a taxa depende da distância.';
+    else if (!calculo.atende) erros.tipo = `Esse endereço fica a ${kmTexto(calculo.km)} da loja, fora da nossa área de entrega. Escolha retirada, se puder.`;
     if (!dados.rua) erros.rua = 'Informe a rua.';
     if (!dados.numero) erros.numero = 'Informe o número (ou "s/n").';
     if (!dados.bairro) erros.bairro = 'Informe o bairro.';
@@ -381,10 +408,18 @@ delegar(visaoCheckout, 'click', '[data-acao="marcar-mapa"]', async () => {
     dados.numero = local.numero;
     dados.bairro = local.bairro;
   }
+  corrigindoEndereco = false;
   $('#campos-tipo').innerHTML = camposDoTipo();
+  $('#checkout-total').textContent = reais(totaisDoCarrinho(dados.tipo).total);
   // Leva a pessoa ao primeiro campo que ainda falta (quase sempre o número).
   const faltando = ['rua', 'numero', 'bairro'].find((nome) => !dados[nome]);
   $(`[name="${faltando ?? 'complemento'}"]`, visaoCheckout)?.focus();
+});
+delegar(visaoCheckout, 'click', '[data-acao="corrigir-endereco"]', () => {
+  lerFormulario();
+  corrigindoEndereco = true;
+  $('#campos-tipo').innerHTML = camposDoTipo();
+  $('[name="rua"]', visaoCheckout)?.focus();
 });
 delegar(visaoCheckout, 'change', 'input[name="pagamento"]', (e, entrada) => {
   $('#campo-troco').hidden = entrada.value !== 'dinheiro';

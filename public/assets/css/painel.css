@@ -1188,6 +1188,42 @@ a.balao__acao {
 .tabela tr[data-erro] td {
   color: var(--cor-perigo);
 }
+/* Impressora (D97): o avançado fica recolhido dentro dos ajustes; a escolha da letra quebra linha no celular. */
+.impressora__avancado {
+  margin-top: var(--e-3);
+}
+.impressora__avancado > summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+.letra-comanda .segmentado {
+  grid-auto-flow: row;
+  grid-template-columns: repeat(auto-fit, minmax(6.5rem, 1fr));
+}
+/* Taxa pela distância (D98): uma linha por faixa. */
+.faixa-raio {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  align-items: end;
+  gap: var(--e-2);
+  margin-top: var(--e-2);
+}
+.escolha-simples {
+  display: flex;
+  align-items: center;
+  gap: var(--e-2);
+  min-height: var(--toque);
+}
+.escolha-simples input {
+  width: 1.1rem;
+  height: 1.1rem;
+  accent-color: var(--cor-acento);
+}
+.local-loja {
+  display: grid;
+  gap: var(--e-2);
+  margin: var(--e-3) 0;
+}
 /* Preços dos pratos (D87): uma linha por prato, uma coluna por tamanho. */
 .tabela-precos {
   display: grid;

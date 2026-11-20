@@ -1040,6 +1040,7 @@ ini_set('error_log', $logAntesWa);
 @unlink(sys_get_temp_dir() . '/familiamassas-whatsapp-teste.log');
 
 echo "\nPEDIDO PELO WHATSAPP PASSO A PASSO (D74)\n";
+App\Services\Geocodificador::$transporte = static fn (string $url): ?string => null;   // sem internet nos testes: o pin "não acha" endereço
 $pdoFx = App\Core\Banco::conexao();
 $pdoFx->exec('DELETE FROM whatsapp_sessoes');
 Env::definir('APP_URL', 'https://exemplo.test');
@@ -1061,7 +1062,7 @@ $opcao = static function (string $nome) use ($tela): string {
 $taxaFx = (new ConfigRepository())->inteiro('taxa_entrega_centavos');
 
 conferir('"CARDÁPIO" (com acento e maiúscula) abre o cardápio: pratos da casa, monte a sua massa, bebidas e sobremesas', [
-    $diz('CARDÁPIO!'), str_contains($tela(), 'Carbonara da casa'), str_contains($tela(), 'Monte a sua massa'), str_contains($tela(), 'Bebidas e sobremesas'),
+    $diz('CARDÁPIO!'), str_contains($tela(), 'Carbonara da casa'), str_contains($tela(), 'Monte a sua massa'), str_contains($tela(), 'Bebidas') && str_contains($tela(), 'Sobremesas'),
 ], ['menu', true, true, true]);
 conferir('Prato da casa: escolhe o prato e o tamanho, com o preço de cada tamanho', [$diz($opcao('Carbonara da casa')), str_contains($tela(), 'Inteiro')], ['prato_tamanho', true]);
 conferir('Tamanho escolhido: pergunta a quantidade', $diz($opcao('Inteiro')), 'quantidade');
@@ -1100,10 +1101,63 @@ conferir('O cliente recebe na hora o "Recebemos seu pedido" (o mesmo aviso de st
     str_contains($tela(), "Recebemos seu pedido #{$pedidoFx['id']}"), $pdoFx->query("SELECT COUNT(*) FROM whatsapp_sessoes WHERE telefone = '{$foneFx}'")->fetchColumn(), count(array_filter((new App\Repositories\PedidoRepository())->paraPainel(null), static fn (array $p): bool => (int) $p['id'] === (int) $pedidoFx['id'])),
 ], [true, 0, 1]);
 
+// Menu por categoria (D97): bebidas e sobremesas aparecem cada uma com as suas opções.
+$diz('cardapio', null, '5511966660020');
+$diz($opcao('Sobremesas'), null, '5511966660020');
+conferir('Sobremesas: opção própria no menu, com os doces listados (e sem as bebidas)', [str_contains($tela(), 'Tiramisù'), str_contains($tela(), 'Cannoli'), str_contains($tela(), 'Água mineral')], [true, true, false]);
+$diz($opcao('Tiramisù'), null, '5511966660020');
+conferir('Quantidade de item pronto: "Quantas unidades de ...?"', str_contains($tela(), 'Quantas unidades de *Tiramisù*?'), true);
+$pdoFx->exec("DELETE FROM whatsapp_sessoes WHERE telefone = '5511966660020'");
+
+// Pin vira endereço (D98): rua e bairro saem do mapa; o cliente manda só o número.
+App\Services\Geocodificador::$transporte = static fn (string $url): ?string => json_encode(['address' => ['road' => 'Rua das Acácias', 'suburb' => 'Jardim Paulista', 'house_number' => '']]);
+$fonePin = '5511966660021';
+$diz('cardapio', null, $fonePin);
+$diz($opcao('Bebidas'), null, $fonePin);
+$diz($opcao('Água mineral'), null, $fonePin);
+$diz('1', null, $fonePin);
+$diz('2', null, $fonePin);
+$diz($opcao('Entrega'), null, $fonePin);
+$diz('Rui', null, $fonePin);
+conferir('Pin com endereço achado: o bot mostra rua e bairro e pede só o número', [$diz('', ['lat' => -23.56, 'lng' => -46.66], $fonePin), str_contains($tela(), 'Rua das Acácias'), str_contains($tela(), 'Qual o número da casa?')], ['endereco_numero', true, true]);
+conferir('"45, casa 2" completa o endereço e vai ao pagamento', [$diz('45, casa 2', null, $fonePin)], ['pagamento']);
+$sessaoPin = json_decode((string) $pdoFx->query("SELECT dados FROM whatsapp_sessoes WHERE telefone = '{$fonePin}'")->fetchColumn(), true);
+conferir('O endereço guardado tem o ponto, a rua e o bairro do mapa e o número digitado', array_intersect_key($sessaoPin['endereco'], array_flip(['rua', 'numero', 'bairro', 'complemento', 'lat'])), ['lat' => -23.56, 'rua' => 'Rua das Acácias', 'numero' => '45', 'bairro' => 'Jardim Paulista', 'complemento' => 'casa 2']);
+$pdoFx->exec("DELETE FROM whatsapp_sessoes WHERE telefone = '{$fonePin}'");
+
+// Taxa pela distância (D98): loja num ponto, faixas de 1 e 3 km, mais longe não entrega.
+(new ConfigRepository())->salvar(['loja_lat' => '-23.5500', 'loja_lng' => '-46.6300', 'entrega_faixas' => json_encode(['faixas' => [['ate_km' => 1, 'taxa_centavos' => 300], ['ate_km' => 3, 'taxa_centavos' => 800]], 'alem_centavos' => null])]);
+$taxaRaio = new App\Services\TaxaDeEntrega();
+conferir('Taxa pela distância: 0,5 km paga a 1ª faixa, 2 km a 2ª, 10 km não entrega; sem o ponto do cliente, a taxa fixa', [
+    $taxaRaio->calcular(-23.5545, -46.6300)['taxa_centavos'], $taxaRaio->calcular(-23.5680, -46.6300)['taxa_centavos'], $taxaRaio->calcular(-23.6400, -46.6300)['atende'],
+    $taxaRaio->calcular(null, null)['taxa_centavos'],
+], [300, 800, false, (new ConfigRepository())->inteiro('taxa_entrega_centavos')]);
+$fonePin = '5511966660022';
+$diz('cardapio', null, $fonePin);
+$diz($opcao('Bebidas'), null, $fonePin);
+$diz($opcao('Água mineral'), null, $fonePin);
+$diz('1', null, $fonePin);
+$diz('2', null, $fonePin);
+conferir('No WhatsApp, a entrega diz que a taxa é pela distância', str_contains($tela(), 'taxa pela distância'), true);
+$diz($opcao('Entrega'), null, $fonePin);
+$diz('Rui', null, $fonePin);
+conferir('Sem o pin não dá para seguir (a taxa depende dele); pin longe demais: fora da área', [
+    $diz('0', null, $fonePin), str_contains($tela(), 'precisamos da sua localização'), $diz('', ['lat' => -23.6400, 'lng' => -46.6300], $fonePin), str_contains($tela(), 'fora da nossa área'),
+], ['local', true, 'local', true]);
+conferir('Pin a 2 km: mostra a distância e a taxa da faixa', [$diz('', ['lat' => -23.5680, 'lng' => -46.6300], $fonePin), str_contains($tela(), 'taxa R$ 8,00')], ['endereco_numero', true]);
+$pdoFx->exec("DELETE FROM whatsapp_sessoes WHERE telefone = '{$fonePin}'");
+$pedidoRaio = ['tipo' => 'entrega', 'cliente' => ['nome' => 'Rui', 'telefone' => '(11) 91234-5678'], 'pagamento' => ['forma' => 'pix'], 'itens' => [['tipo' => 'simples', 'item_id' => $id('itens', 'Tiramisù'), 'quantidade' => 1]]];
+conferir('Cardápio digital: a taxa do pedido sai da distância; sem o ponto, pede para marcar no mapa', [
+    (int) (new App\Repositories\PedidoRepository())->porId((new PedidoService())->criar($pedidoRaio + ['endereco' => ['rua' => 'Rua A', 'numero' => '1', 'bairro' => 'Centro', 'lat' => -23.5545, 'lng' => -46.6300]])['id'])['taxa_entrega_centavos'],
+    array_keys(camposDoErro(fn () => (new PedidoService())->criar($pedidoRaio + ['endereco' => ['rua' => 'Rua A', 'numero' => '1', 'bairro' => 'Centro']]))),
+], [300, ['tipo']]);
+(new ConfigRepository())->salvar(['loja_lat' => '', 'loja_lng' => '', 'entrega_faixas' => '']);
+App\Services\Geocodificador::$transporte = static fn (string $url): ?string => null;
+
 // Um pedido de retirada, só com bebida.
 $foneFx2 = '5511966660002';
 $diz('cardapio', null, $foneFx2);
-$diz($opcao('Bebidas e sobremesas'), null, $foneFx2);
+$diz($opcao('Bebidas'), null, $foneFx2);
 $diz($opcao('Água mineral'), null, $foneFx2);
 $diz('3', null, $foneFx2);
 $diz('2', null, $foneFx2);
@@ -1168,7 +1222,7 @@ $dizIa = static function (string $texto) use ($botFxIa, $foneIa): string {
 };
 $etapaIa = static fn (): ?string => ($pdoFx->query("SELECT etapa FROM whatsapp_sessoes WHERE telefone = '{$foneIa}'")->fetchColumn() ?: null);
 $dizIa('cardapio');
-$dizIa($opcao('Bebidas e sobremesas'));
+$dizIa($opcao('Bebidas'));
 $dizIa($opcao('Água mineral'));
 $pedidosIa = [];
 $filaIa = [$textoIa('{"tipo":"resposta","valor":"2"}')];
@@ -1193,7 +1247,7 @@ conferir('Resposta da IA fora do JSON: o bot não trava, repete a pergunta', [$d
 $repoIa->salvarConfig(['ia_ativo' => '0']);
 $dizIa('2');
 $dizIa('cardapio');
-$dizIa($opcao('Bebidas e sobremesas'));
+$dizIa($opcao('Bebidas'));
 $dizIa($opcao('Água mineral'));
 $dizIa('1');
 $dizIa('2');
@@ -1261,15 +1315,15 @@ conferir('O registro da conversa mostra a enquete como pergunta e opções (o si
 })(), ['O que vai ser?', true, false]);
 
 // Votar é o mesmo que digitar o número da opção.
-conferir('Voto no prato da casa: vai ao tamanho, com a enquete nova (preço de cada tamanho na opção)', [$dizEq($numeroEq($menuEq, 'Carbonara da casa'), $menuEq['tag']), $enqueteEq()['name'] ?? null, str_contains(implode('|', $enqueteEq()['options'] ?? []), 'R$ 39,90')], ['prato_tamanho', 'Carbonara da casa: qual tamanho?', true]);
+conferir('Voto no prato da casa: vai ao tamanho, com a enquete nova (preço de cada tamanho na opção)', [$dizEq($numeroEq($menuEq, 'Carbonara da casa'), $menuEq['tag']), $enqueteEq()['name'] ?? null, str_contains(implode('|', $enqueteEq()['options'] ?? []), 'R$ 39,90')], ['prato_tamanho', 'Carbonara da casa: qual tamanho? (escolha 1)', true]);
 $tamanhoEq = $enqueteEq();
 $antesEq = count($falsoWhats->enviadas);
 conferir('Voto numa enquete antiga (a do menu, depois de avançar) é ignorado em silêncio: o passo e as mensagens não mudam', [
     $dizEq('1', $menuEq['tag']), count($falsoWhats->enviadas) - $antesEq, $sessaoEq($foneEq)['etapa'], $sessaoEq($foneEq)['enquete'] === $tamanhoEq['tag'],
 ], ['enquete_antiga', 0, 'prato_tamanho', true]);
-conferir('O número digitado continua valendo; a quantidade (texto livre) vem sem enquete e a sessão fica sem tag', [
-    $dizEq($numeroEq($tamanhoEq, 'Inteiro')), $ultimaEq()['type'] ?? null, str_contains($ultimaEq()['text']['body'] ?? '', 'Quantas?'), $sessaoEq($foneEq)['enquete'],
-], ['quantidade', 'text', true, null]);
+conferir('O número digitado continua valendo; a quantidade vem em enquete "1 prato, 2 pratos..." com o nome do prato (D97)', [
+    $dizEq($numeroEq($tamanhoEq, 'Inteiro')), $enqueteEq()['name'] ?? null, array_slice($enqueteEq()['options'] ?? [], 0, 2), $sessaoEq($foneEq)['enquete'] === ($enqueteEq()['tag'] ?? 'x'),
+], ['quantidade', 'Quantos pratos de Carbonara da casa?', ['1 prato', '2 pratos'], true]);
 conferir('Quantidade 2: o "Anotado" vai como texto e "mais alguma coisa?" como enquete de duas opções', [
     $dizEq('2'), str_contains($falsoWhats->enviadas[count($falsoWhats->enviadas) - 2]['text']['body'] ?? '', '2× Carbonara da casa (Inteiro) — R$ 79,80'), $enqueteEq()['name'] ?? null, count($enqueteEq()['options'] ?? []),
 ], ['mais', true, 'Mais alguma coisa?', 2]);
@@ -1290,7 +1344,7 @@ conferir('Acompanhamentos tem 12 ingredientes disponíveis (13 opções com o Pr
     $acompanhamentosEq['type'] ?? null, str_contains($acompanhamentosEq['text']['body'] ?? '', 'Acompanhamentos'), str_contains($acompanhamentosEq['text']['body'] ?? '', '12. Manjericão'), $sessaoEq($foneEq)['enquete'],
 ], ['text', true, true, null]);
 conferir('Digitar "0" na lista numerada passa para os queijos, de novo em enquete', [$dizEq('0'), $enqueteEq()['multipla'] ?? null], ['monte_grupo', true]);
-conferir('Voto múltiplo "Parmesão + Pronto" chega como o número do queijo e vai ao tamanho (o último passo)', [$dizEq($numeroEq($enqueteEq(), 'Parmesão'), $enqueteEq()['tag']), $sessaoEq($foneEq)['etapa'], $enqueteEq()['name'] ?? null], ['monte_tamanho', 'monte_tamanho', 'Por último, o tamanho:']);
+conferir('Voto múltiplo "Parmesão + Pronto" chega como o número do queijo e vai ao tamanho (o último passo)', [$dizEq($numeroEq($enqueteEq(), 'Parmesão'), $enqueteEq()['tag']), $sessaoEq($foneEq)['etapa'], $enqueteEq()['name'] ?? null], ['monte_tamanho', 'monte_tamanho', 'Por último, o tamanho (escolha 1):']);
 conferir('Tamanho por voto vai à quantidade', $dizEq($numeroEq($enqueteEq(), 'Meio'), $enqueteEq()['tag']), 'quantidade');
 $dizEq('1');
 $dizEq('2', $enqueteEq()['tag']);   // "Fechar o pedido"

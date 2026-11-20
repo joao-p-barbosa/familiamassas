@@ -15,6 +15,10 @@
   line-height: 1.25;
   overflow-wrap: anywhere;
 }
+.comanda--gg { font-size: 15pt; }
+.comanda--xg { font-size: 17pt; }
+.comanda--58.comanda--gg { font-size: 13.5pt; }
+.comanda--58.comanda--xg { font-size: 15pt; }
 .comanda--58 {
   --largura: 48mm; /* área útil do papel de 58 mm */
   font-size: 12pt;

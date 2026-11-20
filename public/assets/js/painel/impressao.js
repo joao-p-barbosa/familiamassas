@@ -75,7 +75,7 @@ export function comandaHtml(pedido, { largura = ajustes.comanda_largura_mm, comP
         ${(ifood.cupons ?? []).map((cupom) => `<p class="comanda__via">${esc(cupom)}</p>`).join('')}
       </div>` : '';
   return `
-    <div class="comanda ${largura === 58 ? 'comanda--58' : ''}">
+    <div class="comanda ${largura === 58 ? 'comanda--58' : ''} ${['gg', 'xg'].includes(ajustes.comanda_fonte) ? `comanda--${ajustes.comanda_fonte}` : ''}">
       <p class="comanda__loja">${esc(ajustes.nome_loja)}</p>
       <p class="comanda__numero">#${pedido.id}</p>
       ${doIfood}
@@ -92,8 +92,8 @@ export function comandaHtml(pedido, { largura = ajustes.comanda_largura_mm, comP
       <div class="comanda__bloco">
         ${pedido.taxa_entrega_centavos ? `<p class="comanda__meta"><span>Taxa de entrega</span><span>${reais(pedido.taxa_entrega_centavos)}</span></p>` : ''}
         <p class="comanda__total"><span>TOTAL</span><span>${reais(pedido.total_centavos)}</span></p>
-        ${ifood ? '' : `<p>${PAGAMENTOS[pedido.pagamento]}${troco}</p>`}
       </div>` : ''}
+      ${ifood ? '' : `<p class="comanda__tipo">${pedido.pagamento === 'caixa' ? 'Pagamento na conta' : `Pagamento: ${esc(PAGAMENTOS[pedido.pagamento] ?? pedido.pagamento)}${troco}`}</p>`}
       ${ifoodPagamento}
       ${reimpressao ? `<p class="comanda__via">Reimpressão · ${hora(new Date().toISOString())}</p>` : ''}
     </div>`;

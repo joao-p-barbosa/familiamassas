@@ -20,8 +20,9 @@ const ATUALIZAR_MS = 4000;
 const ORIGENS = [['cardapio', 'Cardápio'], ['whatsapp', 'WhatsApp'], ['ifood', 'iFood'], ['balcao', 'Salão (mesa e pra viagem)']];
 const LARGURAS = [[58, '58 mm (cupom pequeno)'], [72, '72 mm'], [80, '80 mm (cupom padrão)'], [100, '100 mm (etiqueta 4")'], [104, '104 mm']];
 const PAPEIS = [[0, 'Rolo contínuo (cupom)'], [150, 'Etiqueta de 150 mm (100 × 150)'], [100, 'Etiqueta de 100 mm'], [-1, 'Outra altura…']];
-const FONTES = [['p', 'Pequena'], ['m', 'Média'], ['g', 'Grande']];
-const LINGUAGENS = [['escpos', 'Cupom (ESC/POS)'], ['tspl', 'Etiqueta (TSPL)'], ['driver', 'Pelo driver do Windows']];
+const FONTES = [['p', 'Pequena'], ['m', 'Média'], ['g', 'Grande'], ['gg', 'Muito grande'], ['xg', 'Enorme']];
+// ESC/POS é o que funciona na impressora da loja (QIA-8388, D88/D97): fica como o principal; os outros só no "Avançado".
+const LINGUAGENS = [['escpos', 'Cupom (ESC/POS) - o principal'], ['tspl', 'Etiqueta (TSPL)'], ['driver', 'Pelo driver do Windows']];
 /** Ordem das tentativas quando o teste sai estranho: o mais comum primeiro. */
 const ORDEM_LINGUAGENS = ['escpos', 'tspl', 'driver'];
 const ESTADOS = { pendente: 'Na fila', enviado: 'Imprimindo', feito: 'Impressa', falhou: 'Falhou' };
@@ -194,11 +195,28 @@ function prontoHtml(s) {
       </div>
       <div id="teste-conexao" aria-live="polite">${testeHtml()}</div>
     </section>
+    ${letraHtml(s)}
     <section class="bloco">
       <h2 class="bloco__titulo">${icone('impressora', 20)} Imprimir por outro computador</h2>
       <p>O computador da loja deu problema? Abra este painel no outro computador (com a impressora ligada nele), baixe o programa e abra o arquivo. A impressão passa para ele.</p>
       <div class="impressora__acoes"><button type="button" class="botao botao--secundario" data-impressora="baixar">${icone('impressora', 18)}Baixar o programa da impressora</button></div>
       <p class="campo__ajuda">Só um computador imprime por vez: assim que você baixar, o “${esc(s.agente.computador)}” para de imprimir.</p>
+    </section>`;
+}
+
+/** Tamanho da letra da comanda (D97): à vista, com um teste na hora. */
+function letraHtml(s) {
+  return `
+    <section class="bloco">
+      <h2 class="bloco__titulo">Tamanho da letra da comanda</h2>
+      <form id="form-letra" class="letra-comanda">
+        <fieldset class="segmentado" aria-label="Tamanho da letra">
+          ${FONTES.map(([valor, rotulo]) => `
+            <label class="segmentado__item"><input type="radio" name="fonte" value="${valor}" ${s.ajustes.fonte === valor ? 'checked' : ''}><span>${rotulo}</span></label>`).join('')}
+        </fieldset>
+        <div class="impressora__acoes"><button type="submit" class="botao">${icone('impressora', 18)}Salvar e imprimir um teste</button></div>
+        <p class="campo__ajuda">“Muito grande” e “Enorme” precisam do programa da impressora atualizado (baixe de novo se a letra não mudar).</p>
+      </form>
     </section>`;
 }
 
@@ -208,20 +226,24 @@ function ajustesHtml(s) {
   const agente = j.modo === 'agente';
   return `
     <details class="bloco impressora__mais">
-      <summary>Ajustes da comanda <span class="campo__ajuda">(letra, vias, preços e o que imprimir sozinho)</span></summary>
+      <summary>Ajustes da comanda <span class="campo__ajuda">(vias, papel, preços e o que imprimir sozinho)</span></summary>
       <form class="config" id="form-impressora" novalidate>
         <div class="bloco__grade">
-          <label class="campo"><span class="campo__rotulo">Tamanho da letra</span><select class="entrada" name="fonte">${opcoes(FONTES, j.fonte)}</select></label>
           <label class="campo"><span class="campo__rotulo">Vias de cada comanda</span><select class="entrada" name="vias">${opcoes([[1, '1 via'], [2, '2 vias'], [3, '3 vias']], j.vias)}</select></label>
           <label class="campo"><span class="campo__rotulo">Largura do papel</span><select class="entrada" name="largura_mm">${opcoes(LARGURAS, j.largura_mm)}</select></label>
-          <label class="campo"><span class="campo__rotulo">Tipo de papel</span><select class="entrada" name="papel">${opcoes(PAPEIS, altura)}</select>
-            <span class="campo__ajuda">Etiqueta: a comanda comprida continua na etiqueta seguinte.</span></label>
-          <label class="campo" ${altura === -1 ? '' : 'hidden'} data-altura><span class="campo__rotulo">Altura da etiqueta (mm)</span>
-            <input class="entrada" name="altura_mm" inputmode="numeric" value="${j.altura_mm || ''}" aria-describedby="erro-altura_mm"><span class="campo__erro" id="erro-altura_mm" hidden></span></label>
           <label class="campo"><span class="campo__rotulo">Margem (mm)</span><input class="entrada" name="margem_mm" inputmode="numeric" value="${j.margem_mm}" aria-describedby="erro-margem_mm"><span class="campo__erro" id="erro-margem_mm" hidden></span></label>
-          ${agente ? `<label class="campo"><span class="campo__rotulo">Jeito de falar com a impressora</span><select class="entrada" name="linguagem">${opcoes(LINGUAGENS, j.linguagem)}</select>
-            <span class="campo__ajuda">O teste do passo 3 escolhe sozinho. Só mexa aqui se a comanda começar a sair estranha.</span></label>` : ''}
         </div>
+        <details class="impressora__avancado" ${j.linguagem !== 'escpos' || j.altura_mm > 0 ? 'open' : ''}>
+          <summary>Avançado: outra impressora (etiqueta ou driver)</summary>
+          <p class="campo__ajuda">A sua impressora funciona com “Cupom (ESC/POS)” e rolo contínuo. Só mexa aqui se trocar por uma impressora de etiqueta.</p>
+          <div class="bloco__grade">
+            ${agente ? `<label class="campo"><span class="campo__rotulo">Jeito de falar com a impressora</span><select class="entrada" name="linguagem">${opcoes(LINGUAGENS, j.linguagem)}</select></label>` : ''}
+            <label class="campo"><span class="campo__rotulo">Tipo de papel</span><select class="entrada" name="papel">${opcoes(PAPEIS, altura)}</select>
+              <span class="campo__ajuda">Etiqueta: a comanda comprida continua na etiqueta seguinte.</span></label>
+            <label class="campo" ${altura === -1 ? '' : 'hidden'} data-altura><span class="campo__rotulo">Altura da etiqueta (mm)</span>
+              <input class="entrada" name="altura_mm" inputmode="numeric" value="${j.altura_mm || ''}" aria-describedby="erro-altura_mm"><span class="campo__erro" id="erro-altura_mm" hidden></span></label>
+          </div>
+        </details>
         <label class="interruptor"><input type="checkbox" name="com_preco" ${j.com_preco ? 'checked' : ''}><span class="interruptor__trilho"></span><span>Imprimir preços e pagamento na comanda</span></label>
         <p class="campo__ajuda">No pedido do iFood, “pago online” ou “cobrar” sai sempre, mesmo sem os preços.</p>
         <p class="campo__rotulo" style="margin-top: var(--e-3);">Imprimir sozinho os pedidos de</p>
@@ -334,6 +356,7 @@ async function gravar(mudancas) {
   ajustesDoPainel.impressao_modo = nova.ajustes.modo;
   ajustesDoPainel.impressao_origens = nova.ajustes.origens;
   ajustesDoPainel.comanda_largura_mm = nova.ajustes.largura_mm;
+  ajustesDoPainel.comanda_fonte = nova.ajustes.fonte;
   ajustesDoPainel.comanda_mostra_preco = nova.ajustes.com_preco;
   return nova;
 }
@@ -545,7 +568,7 @@ function lerAjustes(form) {
     largura_mm: Number(form.largura_mm.value),
     altura_mm: papel === -1 ? Number(form.altura_mm.value || 0) : papel,
     margem_mm: Number(form.margem_mm.value),
-    fonte: form.fonte.value,
+    fonte: situacao.ajustes.fonte,   // a letra tem o seu próprio bloco (letraHtml)
     vias: Number(form.vias.value),
     com_preco: form.com_preco.checked,
     origens: $$('input[name="origens"]:checked', form).map((el) => el.value),
@@ -647,7 +670,26 @@ conteudo.addEventListener('submit', (e) => {
   e.preventDefault();
   if (e.target.id === 'form-escolha') escolher(e.target);
   if (e.target.id === 'form-impressora') salvarAjustes(e.target);
+  if (e.target.id === 'form-letra') salvarLetra(e.target);
 });
+
+/** Salva o tamanho da letra e manda uma comanda de teste, para a pessoa ver o resultado no papel. */
+async function salvarLetra(form) {
+  const botao = form.querySelector('button[type="submit"]');
+  botao.setAttribute('aria-busy', 'true');
+  try {
+    desenhar(await gravar({ fonte: form.fonte.value }));
+    if (situacao.ajustes.modo === 'agente') {
+      await api('/api/admin/impressora/teste', { metodo: 'POST' });
+      avisar('Letra salva. A comanda de teste já está saindo.');
+    } else {
+      avisar('Letra salva');
+    }
+  } catch (erro) {
+    botao.removeAttribute('aria-busy');
+    mostrarErro(erro);
+  }
+}
 
 export async function montar() {
   baixou = false;

@@ -112,7 +112,18 @@ final class PedidoService
         // ---- Itens ----
         ['itens' => $itens, 'subtotal' => $subtotal] = $this->validarItens($dados);
 
-        $taxa = $tipo === 'entrega' ? $this->config->inteiro('taxa_entrega_centavos') : 0;
+        // Taxa por raio (D98): pela distância do ponto marcado; sem ponto (ou sem faixas), a taxa fixa.
+        $taxa = 0;
+        if ($tipo === 'entrega') {
+            $porRaio = new TaxaDeEntrega($this->config);
+            $calculo = $porRaio->calcular($lat, $lng);
+            if ($porRaio->porRaio() && $lat === null) {
+                $erros['tipo'] = 'Marque o local da entrega no mapa: a taxa depende da distância.';
+            } elseif (!$calculo['atende']) {
+                $erros['tipo'] = 'Esse endereço fica a ' . TaxaDeEntrega::kmTexto((float) $calculo['km']) . ' da loja, fora da nossa área de entrega. Escolha retirada, se puder.';
+            }
+            $taxa = $calculo['taxa_centavos'];
+        }
         $total = $subtotal + $taxa;
 
         $trocoPara = null;

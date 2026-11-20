@@ -111,7 +111,8 @@ final class PainelController
             'csrf' => Sessao::csrf(),
             'ajustes' => [
                 'polling_segundos' => max(3, $config->inteiro('polling_segundos', 5)),
-                'comanda_largura_mm' => $config->inteiro('comanda_largura_mm', 80),
+                'comanda_largura_mm' => $config->inteiro('comanda_largura_mm', 58),
+                'comanda_fonte' => $config->get('comanda_fonte', 'm'),
                 'comanda_mostra_preco' => $config->get('comanda_mostra_preco', '0') === '1',
                 'nome_loja' => $config->get('nome_loja', 'Nome do Restaurante'),
                 // Modo agente: quem imprime é o computador da loja, não o navegador (D79). Origens: o que sai sozinho.

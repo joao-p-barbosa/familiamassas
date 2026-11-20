@@ -1064,6 +1064,18 @@
   color: var(--cor-perigo);
   font-weight: 600;
 }
+.endereco-do-mapa {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--e-2);
+  margin-top: var(--e-3);
+  padding: var(--e-3) var(--e-4);
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio-2);
+  background: var(--cor-superficie);
+}
 .aviso-som {
   display: grid;
   justify-items: start;

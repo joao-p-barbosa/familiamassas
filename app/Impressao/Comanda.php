@@ -115,10 +115,11 @@ final class Comanda
                 $l[] = ['t' => 'Taxa de entrega', 'e' => 'normal', 'd' => self::reais((int) $pedido['taxa_entrega_centavos'])];
             }
             $l[] = ['t' => 'TOTAL', 'e' => 'destaque', 'd' => self::reais((int) $pedido['total_centavos'])];
-            if ($ifood === null) {
-                $troco = $pedido['pagamento'] === 'dinheiro' && $pedido['troco_para_centavos'] ? ' · troco para ' . self::reais((int) $pedido['troco_para_centavos']) : '';
-                $l[] = ['t' => (self::PAGAMENTOS[$pedido['pagamento']] ?? (string) $pedido['pagamento']) . $troco, 'e' => 'normal'];
-            }
+        }
+        // A forma de pagamento sai sempre, num quadro (D97): quem entrega ou serve precisa saber se leva a maquininha ou o troco.
+        if ($ifood === null) {
+            $l[] = ['t' => '', 'e' => 'espaco'];
+            $l[] = ['t' => self::pagamentoEmDestaque($pedido), 'e' => 'caixa', 'a' => 'c'];
         }
         // No iFood, "pago ou cobrar" sai sempre, mesmo na comanda sem preço: é o que evita cobrar duas vezes na porta.
         if ($ifood !== null) {
@@ -227,6 +228,17 @@ final class Comanda
         $linhas[] = ['t' => '', 'e' => 'espaco'];
         $linhas[] = ['t' => 'Acentos: ação, pão, café, açúcar, maçã', 'e' => 'pequeno', 'a' => 'c'];
         return $linhas;
+    }
+
+    /** "PAGAMENTO: PIX", "PAGAMENTO: DINHEIRO - TROCO PARA R$ 100,00", "PAGAMENTO NA CONTA" (salão e mesa). */
+    public static function pagamentoEmDestaque(array $pedido): string
+    {
+        if ($pedido['pagamento'] === 'caixa') {
+            return 'PAGAMENTO NA CONTA';
+        }
+        $forma = mb_strtoupper(self::PAGAMENTOS[$pedido['pagamento']] ?? (string) $pedido['pagamento']);
+        $troco = $pedido['pagamento'] === 'dinheiro' && $pedido['troco_para_centavos'] ? ' - TROCO PARA ' . self::reais((int) $pedido['troco_para_centavos']) : '';
+        return "PAGAMENTO: {$forma}{$troco}";
     }
 
     private static function reais(int $centavos): string

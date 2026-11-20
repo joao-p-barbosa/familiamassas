@@ -40,7 +40,7 @@ if ($Instalar) {
     Write-Host ''
     exit 0
 }
-$VERSAO = 4
+$VERSAO = 5
 $LOG = Join-Path $PSScriptRoot 'agente.log'
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 Add-Type -AssemblyName System.Drawing
@@ -290,7 +290,7 @@ function Fonte([string]$estilo, [double]$base) {
 function Tamanho-Base($ajustes) {
     $base = 11.5
     if ($ajustes.largura_mm -le 58) { $base = 9.0 } elseif ($ajustes.largura_mm -ge 100) { $base = 12.5 }
-    switch ($ajustes.fonte) { 'p' { $base *= 0.85 } 'g' { $base *= 1.2 } }
+    switch ($ajustes.fonte) { 'p' { $base *= 0.85 } 'g' { $base *= 1.2 } 'gg' { $base *= 1.4 } 'xg' { $base *= 1.6 } }
     return $base
 }
 

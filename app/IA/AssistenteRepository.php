@@ -31,6 +31,7 @@ final class AssistenteRepository
     public const PADROES = [
         'ia_ativo' => '0',
         'whatsapp_palavras_cardapio' => 'Cardápio',   // abre o pedido pelo chat (D74); não é da IA, mas mora na mesma tela
+        'whatsapp_enquetes' => '1',                    // escolhas como enquete no canal QR (D85); desligado: lista numerada (D97)
         'ia_modelo' => self::MODELO_PADRAO,
         'ia_nome' => 'Assistente',
         'ia_papel' => 'Você atende os clientes da loja pelo WhatsApp: tira dúvidas sobre o cardápio, os horários e a entrega, e leva o cliente a fazer o pedido pelo link do cardápio.',

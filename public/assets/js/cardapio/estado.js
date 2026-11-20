@@ -4,6 +4,7 @@
 import { api } from '../shared/api.js';
 import { dadosDaPagina, guardado } from '../shared/dom.js';
 import { calcularMontagem } from '../shared/preco.js';
+import { taxaDeEntrega } from '../shared/taxa.js';
 import { resumoMontagem } from '../shared/pedido.js';
 
 const inicial = dadosDaPagina('dados-cardapio') ?? {};
@@ -143,10 +144,11 @@ export function linhasDoCarrinho() {
   });
 }
 
-export function totaisDoCarrinho(tipoPedido = null) {
+/** @param {{lat: number|null, lng: number|null}|null} local ponto da entrega (a taxa pode depender da distância, D98) */
+export function totaisDoCarrinho(tipoPedido = null, local = null) {
   const linhas = linhasDoCarrinho();
   const subtotal = linhas.reduce((soma, l) => soma + l.total, 0);
-  const taxa = tipoPedido === 'entrega' ? estado.loja?.taxa_entrega_centavos ?? 0 : 0;
+  const taxa = tipoPedido === 'entrega' ? taxaDeEntrega(estado.loja, local).taxa : 0;
   return {
     linhas,
     subtotal,
