@@ -193,6 +193,12 @@ function prontoHtml(s) {
         <button type="button" class="botao botao--fantasma" data-impressora="trocar">Trocar a impressora</button>
       </div>
       <div id="teste-conexao" aria-live="polite">${testeHtml()}</div>
+    </section>
+    <section class="bloco">
+      <h2 class="bloco__titulo">${icone('impressora', 20)} Imprimir por outro computador</h2>
+      <p>O computador da loja deu problema? Abra este painel no outro computador (com a impressora ligada nele), baixe o programa e abra o arquivo. A impressão passa para ele.</p>
+      <div class="impressora__acoes"><button type="button" class="botao botao--secundario" data-impressora="baixar">${icone('impressora', 18)}Baixar o programa da impressora</button></div>
+      <p class="campo__ajuda">Só um computador imprime por vez: assim que você baixar, o “${esc(s.agente.computador)}” para de imprimir.</p>
     </section>`;
 }
 
@@ -336,9 +342,9 @@ async function gravar(mudancas) {
 async function baixarPrograma(botao) {
   const a = situacao.agente;
   if (a.online && !(await confirmar({
-    titulo: 'Baixar o programa de novo?',
-    texto: 'O programa que está ligado agora para de imprimir até você abrir o arquivo novo no computador da impressora.',
-    confirmar: 'Baixar de novo',
+    titulo: 'Baixar o programa da impressora?',
+    texto: `O computador “${a.computador}” para de imprimir agora. A impressão volta quando você abrir o arquivo novo no computador que vai imprimir (pode ser este ou outro).`,
+    confirmar: 'Baixar',
   }))) return;
   botao.setAttribute('aria-busy', 'true');
   try {
