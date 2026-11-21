@@ -96,7 +96,7 @@ async function consultar() {
   try {
     const novo = await api(`/api/pedidos/${encodeURIComponent(pedido.codigo)}`);
     const statusMudou = novo.status !== pedido.status;
-    const mudou = statusMudou || semConexao;
+    const mudou = statusMudou || semConexao || novo.previsao_minutos !== pedido.previsao_minutos;   // a fila andou (D99)
     pedido = novo;
     semConexao = false;
     if (statusMudou) tocarStatus(novo.status);

@@ -125,7 +125,8 @@ final class Avisos
         $link = WhatsApp::urlDoSite() . '/pedido/' . $pedido['codigo'];
         return match ($tipo) {
             'novo' => "Recebemos seu pedido #{$n}! Total: R$ " . number_format($pedido['total_centavos'] / 100, 2, ',', '.') . '. '
-                . 'Previsão: ' . ($pedido['tipo'] === 'entrega' ? $this->config->inteiro('tempo_entrega_min', 50) : $this->config->inteiro('tempo_retirada_min', 25)) . " minutos.\nAcompanhe: {$link}",
+                . (($pedido['previsao_minutos'] ?? 0) > 0 ? "Fica pronto em cerca de {$pedido['previsao_minutos']} minutos" . ($pedido['tipo'] === 'entrega' ? ' e então sai para entrega' : '') . '. ' : '')
+                . "\nAcompanhe: {$link}",
             'em_preparo' => "Seu pedido #{$n} está em preparo.",
             'pronto' => $pedido['tipo'] === 'entrega' ? "Seu pedido #{$n} está pronto e já vai sair para entrega." : "Seu pedido #{$n} está pronto.",
             'saiu_entrega' => "Seu pedido #{$n} saiu para entrega.",

@@ -155,9 +155,9 @@ function camposDoTipo() {
     const doMapa = marcado && dados.rua && dados.bairro && !corrigindoEndereco;
     const taxaTexto = porRaio()
       ? (marcado ? (calculo.atende ? `Fica a ${kmTexto(calculo.km)}: taxa de ${reais(calculo.taxa)}` : `Fica a ${kmTexto(calculo.km)}: fora da nossa área de entrega`) : 'A taxa depende da distância: marque o local no mapa')
-      : `Taxa de ${reais(loja.taxa_entrega_centavos)}`;
+      : 'Entrega sem taxa';
     return `
-      <p class="bloco__nota">${icone('moto', 16)}<span>Entregamos em: ${esc(loja.area_entrega || 'consulte a loja')}. ${taxaTexto}, cerca de ${loja.tempo_entrega_min} min.</span></p>
+      <p class="bloco__nota">${icone('moto', 16)}<span>Entregamos em: ${esc(loja.area_entrega || 'consulte a loja')}. ${taxaTexto}. Fica pronto a partir de ${loja.preparo_min} min; avisamos quando sair para entrega.</span></p>
       <div class="local-mapa" ${marcado ? 'data-marcado' : ''}>
         <span class="local-mapa__icone">${icone(marcado ? 'check' : 'pin', 22)}</span>
         <div class="local-mapa__texto">
@@ -188,7 +188,7 @@ function camposDoTipo() {
   }
   if (dados.tipo === 'retirada') {
     return `
-      <p class="bloco__nota">${icone('loja', 16)}<span>Retire em: ${esc(loja.endereco || 'endereço da loja')}. Fica pronto em cerca de ${loja.tempo_retirada_min} min.</span></p>
+      <p class="bloco__nota">${icone('loja', 16)}<span>Retire em: ${esc(loja.endereco || 'endereço da loja')}. Fica pronto a partir de ${loja.preparo_min} min.</span></p>
       ${comoChegarHtml()}`;
   }
   if (dados.tipo === 'mesa') {
@@ -269,7 +269,6 @@ function revisaoHtml() {
     retirada: esc(loja.endereco || 'Na loja'),
     mesa: 'A atendente leva até a sua mesa',
   }[dados.tipo];
-  const minutos = dados.tipo === 'entrega' ? loja.tempo_entrega_min : loja.tempo_retirada_min;
 
   return `
     <div class="checkout__dentro">
@@ -296,7 +295,7 @@ function revisaoHtml() {
 
       <section class="bloco">
         <dl class="resumo-dados">
-          <div><dt>${ROTULO_TIPO[dados.tipo]}</dt><dd>${onde}<br><span class="resumo-dados__leve">Cerca de ${minutos} min</span></dd></div>
+          <div><dt>${ROTULO_TIPO[dados.tipo]}</dt><dd>${onde}<br><span class="resumo-dados__leve">Fica pronto a partir de ${loja.preparo_min} min</span></dd></div>
           <div><dt>Quem pede</dt><dd>${esc(dados.nome)}${naMesa() ? '' : `<br>${esc(formatarTelefone(dados.telefone))}`}</dd></div>
           <div><dt>Pagamento</dt><dd>${naMesa() ? 'Na conta, no fim' : `${PAGAMENTOS[dados.pagamento]}${troco ? `, troco para ${reais(troco)}` : ''}`}</dd></div>
           ${dados.tipo === 'entrega' && dados.observacoes ? `<div><dt>Observações</dt><dd>${esc(dados.observacoes)}</dd></div>` : ''}

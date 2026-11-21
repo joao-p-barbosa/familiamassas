@@ -9,7 +9,7 @@ return static function (PDO $pdo): void {
         $colunas = array_keys($linha);
         $sql = sprintf('INSERT INTO %s (%s) VALUES (%s)', $tabela, implode(', ', $colunas), implode(', ', array_fill(0, count($colunas), '?')));
         // configuracoes (chave) e item_ingredientes (chave composta) não têm coluna "id".
-        return \App\Core\Banco::inserir($pdo, $sql, array_values($linha), !in_array($tabela, ['configuracoes', 'item_ingredientes'], true));
+        return \App\Core\Banco::inserir($pdo, $sql, array_values($linha), !in_array($tabela, ['configuracoes', 'item_ingredientes', 'item_precos'], true));
     };
 
     // ---------- Configurações da loja (suposições da Etapa 0: confirmar com o dono) ----------

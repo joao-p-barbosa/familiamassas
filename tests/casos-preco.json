@@ -49,7 +49,8 @@
                 "descricao": "Tubinho que segura bem o molho",
                 "acrescimo_centavos": 0,
                 "estado": "disponivel",
-                "ordem": 0
+                "ordem": 0,
+                "preparo_min": 15
             },
             {
                 "id": 2,
@@ -57,7 +58,8 @@
                 "descricao": "Fio longo, o clássico",
                 "acrescimo_centavos": 0,
                 "estado": "disponivel",
-                "ordem": 1
+                "ordem": 1,
+                "preparo_min": 15
             },
             {
                 "id": 3,
@@ -65,7 +67,8 @@
                 "descricao": "Parafuso, bom com molhos encorpados",
                 "acrescimo_centavos": 0,
                 "estado": "disponivel",
-                "ordem": 2
+                "ordem": 2,
+                "preparo_min": 15
             },
             {
                 "id": 4,
@@ -73,7 +76,8 @@
                 "descricao": "Fita larga de massa fresca",
                 "acrescimo_centavos": 0,
                 "estado": "disponivel",
-                "ordem": 3
+                "ordem": 3,
+                "preparo_min": 15
             },
             {
                 "id": 5,
@@ -81,7 +85,8 @@
                 "descricao": "De batata, feito na casa",
                 "acrescimo_centavos": 400,
                 "estado": "disponivel",
-                "ordem": 4
+                "ordem": 4,
+                "preparo_min": 15
             },
             {
                 "id": 6,
@@ -89,7 +94,8 @@
                 "descricao": "Penne de arroz e milho",
                 "acrescimo_centavos": 500,
                 "estado": "disponivel",
-                "ordem": 5
+                "ordem": 5,
+                "preparo_min": 15
             }
         ],
         "molhos": [
@@ -331,6 +337,7 @@
                 "molho_id": 3,
                 "estado": "disponivel",
                 "ordem": 0,
+                "preparo_min": null,
                 "ingrediente_ids": [
                     5,
                     20
@@ -358,6 +365,7 @@
                 "molho_id": null,
                 "estado": "disponivel",
                 "ordem": 0,
+                "preparo_min": null,
                 "ingrediente_ids": [],
                 "precos": []
             },
@@ -373,6 +381,7 @@
                 "molho_id": 2,
                 "estado": "disponivel",
                 "ordem": 1,
+                "preparo_min": null,
                 "ingrediente_ids": [
                     18
                 ],
@@ -399,6 +408,7 @@
                 "molho_id": null,
                 "estado": "disponivel",
                 "ordem": 1,
+                "preparo_min": null,
                 "ingrediente_ids": [],
                 "precos": []
             },
@@ -414,6 +424,7 @@
                 "molho_id": 4,
                 "estado": "disponivel",
                 "ordem": 2,
+                "preparo_min": null,
                 "ingrediente_ids": [
                     12,
                     20
@@ -441,6 +452,7 @@
                 "molho_id": null,
                 "estado": "disponivel",
                 "ordem": 2,
+                "preparo_min": null,
                 "ingrediente_ids": [],
                 "precos": []
             },
@@ -456,6 +468,7 @@
                 "molho_id": 6,
                 "estado": "disponivel",
                 "ordem": 3,
+                "preparo_min": null,
                 "ingrediente_ids": [
                     16
                 ],
@@ -482,6 +495,7 @@
                 "molho_id": null,
                 "estado": "disponivel",
                 "ordem": 3,
+                "preparo_min": null,
                 "ingrediente_ids": [],
                 "precos": []
             },
@@ -497,6 +511,7 @@
                 "molho_id": 5,
                 "estado": "disponivel",
                 "ordem": 4,
+                "preparo_min": null,
                 "ingrediente_ids": [
                     2,
                     10,
@@ -525,6 +540,7 @@
                 "molho_id": null,
                 "estado": "esgotado",
                 "ordem": 4,
+                "preparo_min": null,
                 "ingrediente_ids": [],
                 "precos": []
             },
@@ -540,6 +556,7 @@
                 "molho_id": null,
                 "estado": "disponivel",
                 "ordem": 5,
+                "preparo_min": null,
                 "ingrediente_ids": [],
                 "precos": []
             },
@@ -555,6 +572,7 @@
                 "molho_id": null,
                 "estado": "disponivel",
                 "ordem": 6,
+                "preparo_min": null,
                 "ingrediente_ids": [],
                 "precos": []
             },
@@ -570,6 +588,7 @@
                 "molho_id": null,
                 "estado": "disponivel",
                 "ordem": 7,
+                "preparo_min": null,
                 "ingrediente_ids": [],
                 "precos": []
             }

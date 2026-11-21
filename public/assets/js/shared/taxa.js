@@ -8,12 +8,12 @@ export function km(lat1, lng1, lat2, lng2) {
 }
 
 /**
- * @param {object} loja estado.loja (taxa_entrega_centavos e entrega_por_raio)
+ * @param {object} loja estado.loja (entrega_por_raio)
  * @param {{lat: number|null, lng: number|null}|null} local o ponto que o cliente marcou
  * @returns {{taxa: number, km: number|null, atende: boolean}}
  */
 export function taxaDeEntrega(loja, local) {
-  const fixa = { taxa: loja?.taxa_entrega_centavos ?? 0, km: null, atende: true };
+  const fixa = { taxa: 0, km: null, atende: true };   // sem faixas, entrega sem taxa (igual ao servidor)
   const r = loja?.entrega_por_raio;
   if (!r || local?.lat == null || local?.lng == null) return fixa;
   const dist = Math.round(km(r.lat, r.lng, local.lat, local.lng) * 100) / 100;

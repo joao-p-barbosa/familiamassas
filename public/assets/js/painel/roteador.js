@@ -23,6 +23,8 @@ const MODULOS = {
   assistente: () => import('./assistente.js'),
   ifood: () => import('./ifood.js'),
   impressora: () => import('./impressora.js'),
+  vendas: () => import('./vendas.js'),
+  fechamento: () => import('./fechamento.js'),
 };
 
 const abertas = new Map();   // nome → { raiz, modulo }: cada tela fica no DOM (escondida) depois de aberta

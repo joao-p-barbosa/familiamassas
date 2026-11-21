@@ -181,7 +181,101 @@ conferir('Telefone é guardado só com dígitos e DDI', $salvo['cliente_telefone
 $entrega = $base + ['endereco' => ['rua' => 'Rua A', 'numero' => '1', 'bairro' => 'Centro']];
 $entrega['tipo'] = 'entrega';
 $salvo = (new App\Repositories\PedidoRepository())->porId($pedidos->criar($entrega)['id']);
-conferir('Entrega soma a taxa (6,00)', [$salvo['subtotal_centavos'], $salvo['taxa_entrega_centavos'], $salvo['total_centavos']], [3380, 600, 3980]);
+conferir('Entrega sem faixas de distância sai sem taxa (não há mais taxa fixa)', [$salvo['subtotal_centavos'], $salvo['taxa_entrega_centavos'], $salvo['total_centavos']], [3380, 0, 3380]);
+
+// Previsão pela linha do tempo da cozinha (D100): bocas, pratos por pedido e tempo de cada prato.
+$linha = static fn (array $fila, int $bocas): array => array_map(static fn (int $t): int => intdiv($t, 60), App\Services\TempoDePreparo::linhaDoTempo($fila, $bocas, 0));
+conferir('Linha do tempo, 4 bocas: 2 nhoques (25) prontos em 25; 3 espaguetes (15) em 30 (o 3º espera boca); mais 1 espaguete em 30 (a 4ª boca libera aos 15)', $linha([
+    ['id' => 1, 'inicio' => null, 'pratos' => [25, 25]], ['id' => 2, 'inicio' => null, 'pratos' => [15, 15, 15]], ['id' => 3, 'inicio' => null, 'pratos' => [15]],
+], 4), [1 => 25, 2 => 30, 3 => 30]);
+conferir('Sai o 1º pedido: a fila anda e os outros dois ficam prontos em 15', $linha([
+    ['id' => 2, 'inicio' => null, 'pratos' => [15, 15, 15]], ['id' => 3, 'inicio' => null, 'pratos' => [15]],
+], 4), [2 => 15, 3 => 15]);
+conferir('Sem limite de bocas: cada pedido leva o tempo do prato mais demorado', $linha([['id' => 1, 'inicio' => null, 'pratos' => [25, 15]], ['id' => 2, 'inicio' => null, 'pratos' => [15]]], 0), [1 => 25, 2 => 15]);
+conferir('Pedido já em preparo há 10 min conta só o que falta', $linha([['id' => 1, 'inicio' => -600, 'pratos' => [25]]], 2), [1 => 15]);
+conferir('Pedido só com bebida não ocupa boca', $linha([['id' => 1, 'inicio' => null, 'pratos' => []]], 2), [1 => 0]);
+
+$cfgFila = new ConfigRepository();
+$pdoFila = App\Core\Banco::conexao();
+$repoFila = new App\Repositories\PedidoRepository();
+$jaNaCozinha = $pdoFila->query("SELECT id, status FROM pedidos WHERE status IN ('novo', 'em_preparo')")->fetchAll();
+$pdoFila->exec("UPDATE pedidos SET status = 'concluido' WHERE status IN ('novo', 'em_preparo')");   // fila vazia só para este exemplo
+$pdoFila->exec("UPDATE massas SET preparo_min = 20 WHERE nome = 'Espaguete'");
+$cfgFila->salvar(['cozinha_capacidade' => '2']);
+$carbonaras = static fn (int $n): array => ['itens' => [['tipo' => 'montado', 'item_id' => $carbonara, 'tamanho_id' => $id('tamanhos', 'Meio'), 'quantidade' => $n]]] + $base;
+$previsao = static fn (int $pedido): int => (int) $repoFila->porId($pedido)['previsao_minutos'];
+$pedidoA = $pedidos->criar($carbonaras(2))['id'];
+$pedidoB = $pedidos->criar($carbonaras(1))['id'];
+$pedidoC = $pedidos->criar($base)['id'];
+// No Postgres remoto passam segundos entre gravar e calcular: o arredondamento para cima pode dar 1 min a mais.
+$quase = static fn (int $obtido, int $esperado): bool => in_array($obtido, [$esperado, $esperado + 1], true);
+conferir('Cozinha com 2 bocas, espaguete 20 min: A (2 carbonaras) pronto em 20; B (1 carbonara) espera boca e fica em 40; C (só sobremesa) sem previsão', [$quase($previsao($pedidoA), 20), $quase($previsao($pedidoB), 40), $previsao($pedidoC)], [true, true, 0]);
+$repoFila->mudarStatus($pedidoA, 'novo', 'pronto', null, null);
+conferir('A sai da cozinha: B adianta para cerca de 20 min; A fica com a última previsão', [$quase($previsao($pedidoA), 20), in_array($previsao($pedidoB), [20, 21, 22], true)], [true, true]);
+conferir('O acompanhamento do cliente mostra a previsão nova de B', in_array((new PedidoService())->publico($repoFila->porId($pedidoB))['previsao_minutos'], [20, 21, 22], true), true);
+$pdoFila->exec('UPDATE itens SET preparo_min = 8 WHERE id = ' . (int) $carbonara);
+$pedidoD = $pedidos->criar($carbonaras(1))['id'];
+conferir('Prato da casa com tempo próprio (8 min) vale mais que o da massa; B, que já estava na fila, não muda', [$previsao($pedidoD) <= 9, in_array($previsao($pedidoB), [20, 21, 22], true)], [true, true]);
+$pdoFila->exec('UPDATE itens SET preparo_min = NULL WHERE id = ' . (int) $carbonara);
+$pdoFila->exec("UPDATE massas SET preparo_min = 15 WHERE nome = 'Espaguete'");
+$pdoFila->exec("UPDATE pedidos SET status = 'concluido' WHERE status IN ('novo', 'em_preparo')");
+$volta = $pdoFila->prepare('UPDATE pedidos SET status = ? WHERE id = ?');
+foreach ($jaNaCozinha as $linhaFila) {
+    $volta->execute([$linhaFila['status'], $linhaFila['id']]);
+}
+$cfgFila->salvar(['cozinha_capacidade' => '0']);
+conferir('Antes do pedido, o cardápio mostra "a partir de": um prato do maior tempo cadastrado (sem limite de bocas)', App\Services\TempoDePreparo::estimativaDeUmPrato(), (int) $pdoFila->query('SELECT MAX(preparo_min) FROM massas')->fetchColumn());
+
+echo "\nFATURAMENTO (D101)\n";
+$fat = new App\Services\FaturamentoService();
+$hojeFat = App\Services\FaturamentoService::hoje();
+$donoFat = ['id' => (int) $pdoFila->query("SELECT id FROM usuarios WHERE perfil = 'admin' ORDER BY id LIMIT 1")->fetchColumn()];
+$antes = $fat->resumoDoDia($hojeFat);
+$vendaX = $pedidos->criar($base)['id'];   // 2 tiramisùs no Pix: R$ 33,80
+$vendaY = $pedidos->criar(['pagamento' => ['forma' => 'dinheiro']] + $carbonaras(2))['id'];   // 2 carbonaras no dinheiro: R$ 49,80
+$repoFila->mudarStatus($vendaX, 'novo', 'concluido', null, null);
+$repoFila->mudarStatus($vendaY, 'novo', 'concluido', null, null);
+$naLista = static function () use ($fat, $hojeFat): array {
+    $porChave = [];
+    foreach ($fat->relatorio($hojeFat, $hojeFat)['lancamentos'] as $v) {
+        $porChave[$v['chave']] = $v;
+    }
+    return $porChave;
+};
+$lista = $naLista();
+conferir('Pedido concluído vira venda, com canal, pagamento, valor e itens', [
+    $lista["pedido:$vendaX"]['valor_centavos'], $lista["pedido:$vendaX"]['canal_rotulo'], $lista["pedido:$vendaY"]['pagamento_rotulo'], $lista["pedido:$vendaY"]['itens'][0]['quantidade'], $lista["pedido:$vendaY"]['situacao'],
+], [3380, 'Cardápio digital', 'Dinheiro', 2, 'ativa']);
+conferir('O dia soma as duas vendas; o dinheiro vai para a gaveta', [
+    $fat->resumoDoDia($hojeFat)['faturamento_centavos'] - $antes['faturamento_centavos'], $fat->resumoDoDia($hojeFat)['dinheiro_centavos'] - $antes['dinheiro_centavos'],
+], [3380 + 4980, 4980]);
+$itemY = $lista["pedido:$vendaY"]['itens'][0]['id'];
+conferir('Cancelamento sem motivo é recusado', codigoDoErro(fn () => $fat->cancelar("pedido:$vendaY", 'parcial', [['id' => $itemY, 'quantidade' => 1]], '', $donoFat)), '422 validacao');
+$fat->cancelar("pedido:$vendaY", 'parcial', [['id' => $itemY, 'quantidade' => 1]], 'Prato voltou', $donoFat);
+$lista = $naLista();
+conferir('Cancelamento parcial: 1 das 2 carbonaras sai da venda, que fica "cancelada em parte" com R$ 24,90', [
+    $lista["pedido:$vendaY"]['valor_centavos'], $lista["pedido:$vendaY"]['situacao'], $lista["pedido:$vendaY"]['itens'][0]['cancelada'],
+], [2490, 'parcial', 1]);
+conferir('Não dá para cancelar mais unidades do que restam', codigoDoErro(fn () => $fat->cancelar("pedido:$vendaY", 'parcial', [['id' => $itemY, 'quantidade' => 2]], 'De novo', $donoFat)), '422 validacao');
+$fat->cancelar("pedido:$vendaX", 'total', [], 'Cliente desistiu', $donoFat);
+$lista = $naLista();
+conferir('Cancelamento total: a venda vale 0, fica "cancelada" e o pedido passa a Cancelado', [
+    $lista["pedido:$vendaX"]['valor_centavos'], $lista["pedido:$vendaX"]['situacao'], $repoFila->porId($vendaX)['status'],
+], [0, 'cancelada', 'cancelado']);
+conferir('Venda já cancelada não cancela de novo', codigoDoErro(fn () => $fat->cancelar("pedido:$vendaX", 'total', [], 'De novo', $donoFat)), '409 ja_cancelada');
+$depois = $fat->resumoDoDia($hojeFat);
+conferir('O dia já desconta os cancelamentos (no dinheiro também)', [$depois['faturamento_centavos'] - $antes['faturamento_centavos'], $depois['dinheiro_centavos'] - $antes['dinheiro_centavos']], [2490, 2490]);
+
+$fechado = $fat->fechar($hojeFat, ['caixa_inicial_centavos' => 10000, 'retiradas_centavos' => 2000, 'contado_centavos' => 10000 + $depois['dinheiro_centavos'] - 2000 - 500, 'observacao' => 'Teste'], $donoFat);
+conferir('Fechar o caixa: esperado = inicial + dinheiro − retiradas; contado R$ 5 a menos dá falta de R$ 5', [
+    $fechado['estado'], $fechado['fechamento']['esperado_centavos'], $fechado['fechamento']['diferenca_centavos'],
+], ['fechado', 10000 + $depois['dinheiro_centavos'] - 2000, -500]);
+conferir('Não fecha o mesmo dia duas vezes', codigoDoErro(fn () => $fat->fechar($hojeFat, ['caixa_inicial_centavos' => 0, 'retiradas_centavos' => 0, 'contado_centavos' => 0], $donoFat)), '409 ja_fechado');
+conferir('Dia fechado não aceita cancelamento: precisa reabrir', codigoDoErro(fn () => $fat->cancelar("pedido:$vendaY", 'total', [], 'Depois de fechar', $donoFat)), '409 dia_fechado');
+conferir('No calendário, hoje aparece fechado, com o valor do fechamento', array_values(array_filter($fat->calendario(substr($hojeFat, 0, 7))['dias'], static fn (array $d): bool => $d['data'] === $hojeFat))[0]['estado'], 'fechado');
+$reaberto = $fat->reabrir($fechado['fechamento']['id'], 'Conferir de novo', $donoFat);
+conferir('Reabrir: o dia volta a ficar aberto e o fechamento vai para o histórico', [$reaberto['estado'], $reaberto['fechamento'], count($reaberto['historico']), $reaberto['historico'][0]['motivo_cancelamento']], ['hoje', null, 1, 'Conferir de novo']);
+conferir('Data futura não fecha', codigoDoErro(fn () => $fat->fechar('2999-01-01', ['caixa_inicial_centavos' => 0, 'retiradas_centavos' => 0, 'contado_centavos' => 0], $donoFat)), '422 validacao');
 
 conferir('Preço mandado pelo navegador é ignorado; total divergente é recusado', codigoDoErro(fn () => $pedidos->criar($base + ['total_esperado_centavos' => 100])), '409 total_mudou');
 conferir('Item esgotado (Chá gelado) é recusado', codigoDoErro(fn () => $pedidos->criar(['itens' => [['tipo' => 'simples', 'item_id' => $id('itens', 'Chá gelado de limão'), 'quantidade' => 1]]] + $base)), '409 esgotado');
@@ -387,7 +481,7 @@ echo "\nPERFIS E TELAS\n";
 conferir('Só existem os perfis proprietário (admin) e atendente', Sessao::PERFIS, ['admin', 'atendente']);
 conferir('Os dois perfis entram no quadro de pedidos (o salão é uma coluna dele)', [PainelController::telaInicial('atendente'), PainelController::telaInicial('admin')], ['/painel/pedidos', '/painel/pedidos']);
 conferir('Menu da atendente: só pedidos (D92); o cardápio é do proprietário', [array_keys(PainelController::menuDo('atendente')), PainelController::TELAS['cardapio']['perfis']], [['pedidos'], ['admin']]);
-conferir('Menu do proprietário: pedidos, cardápio, usuários, configurações, WhatsApp, assistente, iFood e impressora', array_keys(PainelController::menuDo('admin')), ['pedidos', 'cardapio', 'usuarios', 'configuracoes', 'whatsapp', 'assistente', 'ifood', 'impressora']);
+conferir('Menu do proprietário: pedidos, vendas, fechamento do dia, cardápio, usuários, configurações, WhatsApp, assistente, iFood e impressora', array_keys(PainelController::menuDo('admin')), ['pedidos', 'vendas', 'fechamento', 'cardapio', 'usuarios', 'configuracoes', 'whatsapp', 'assistente', 'ifood', 'impressora']);
 conferir('"Produtos do atendimento" é uma tela de apoio: fora do menu, mas a atendente a abre', [isset(PainelController::menuDo('atendente')['atendimento']), PainelController::TELAS['atendimento']['perfis']], [false, ['admin', 'atendente']]);
 conferir('Cozinha, Salão e Histórico do salão não são mais telas', [isset(PainelController::TELAS['cozinha']), isset(PainelController::TELAS['salao']), isset(PainelController::TELAS['historico'])], [false, false, false]);
 conferir('Usuários, Configurações e WhatsApp são só do proprietário', [PainelController::TELAS['usuarios']['perfis'], PainelController::TELAS['configuracoes']['perfis'], PainelController::TELAS['whatsapp']['perfis']], [['admin'], ['admin'], ['admin']]);
@@ -1059,7 +1153,7 @@ $tela = static fn (): string => (string) ($ultimaWa()['text']['body'] ?? '');
 $opcao = static function (string $nome) use ($tela): string {
     return preg_match('/^(\d+)\. [^\n]*' . preg_quote($nome, '/') . '/mu', $tela(), $m) === 1 ? $m[1] : 'não achei ' . $nome;
 };
-$taxaFx = (new ConfigRepository())->inteiro('taxa_entrega_centavos');
+$taxaFx = 0;   // sem faixas de distância, a entrega sai sem taxa
 
 conferir('"CARDÁPIO" (com acento e maiúscula) abre o cardápio: pratos da casa, monte a sua massa, bebidas e sobremesas', [
     $diz('CARDÁPIO!'), str_contains($tela(), 'Carbonara da casa'), str_contains($tela(), 'Monte a sua massa'), str_contains($tela(), 'Bebidas') && str_contains($tela(), 'Sobremesas'),
@@ -1128,17 +1222,17 @@ $pdoFx->exec("DELETE FROM whatsapp_sessoes WHERE telefone = '{$fonePin}'");
 // Taxa pela distância (D98): loja num ponto, faixas de 1 e 3 km, mais longe não entrega.
 (new ConfigRepository())->salvar(['loja_lat' => '-23.5500', 'loja_lng' => '-46.6300', 'entrega_faixas' => json_encode(['faixas' => [['ate_km' => 1, 'taxa_centavos' => 300], ['ate_km' => 3, 'taxa_centavos' => 800]], 'alem_centavos' => null])]);
 $taxaRaio = new App\Services\TaxaDeEntrega();
-conferir('Taxa pela distância: 0,5 km paga a 1ª faixa, 2 km a 2ª, 10 km não entrega; sem o ponto do cliente, a taxa fixa', [
+conferir('Taxa pela distância: 0,5 km paga a 1ª faixa, 2 km a 2ª, 10 km não entrega; sem o ponto do cliente, sem taxa', [
     $taxaRaio->calcular(-23.5545, -46.6300)['taxa_centavos'], $taxaRaio->calcular(-23.5680, -46.6300)['taxa_centavos'], $taxaRaio->calcular(-23.6400, -46.6300)['atende'],
     $taxaRaio->calcular(null, null)['taxa_centavos'],
-], [300, 800, false, (new ConfigRepository())->inteiro('taxa_entrega_centavos')]);
+], [300, 800, false, 0]);
 $fonePin = '5511966660022';
 $diz('cardapio', null, $fonePin);
 $diz($opcao('Bebidas'), null, $fonePin);
 $diz($opcao('Água mineral'), null, $fonePin);
 $diz('1', null, $fonePin);
 $diz('2', null, $fonePin);
-conferir('No WhatsApp, a entrega diz que a taxa é pela distância', str_contains($tela(), 'taxa pela distância'), true);
+conferir('No WhatsApp, a escolha de entrega não fala de taxa: ela vem depois da localização', str_contains($tela(), 'taxa'), false);
 $diz($opcao('Entrega'), null, $fonePin);
 $diz('Rui', null, $fonePin);
 conferir('Sem o pin não dá para seguir (a taxa depende dele); pin longe demais: fora da área', [
@@ -1624,7 +1718,7 @@ foreach ([['A1', 'Mesa 5', 'local', '5', 'pix', 'concluido', 'balcao'], ['A2', '
 }
 
 $aplicadas = App\Core\Banco::migrar($antigo, $arquivoAntigo);
-conferir('Banco da versão 1 recebe as migrações 002 a 008', $aplicadas, [2, 3, 4, 5, 6, 7, 8]);
+conferir('Banco da versão 1 recebe as migrações 002 a 011', $aplicadas, [2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
 conferir('A versão do banco passa a ser a atual', (int) $antigo->query('PRAGMA user_version')->fetchColumn(), App\Core\Banco::VERSAO_DO_ESQUEMA);
 conferir('Uma cópia do banco antigo foi guardada antes de mexer', count(glob($pastaMigracao . '/backups/antigo-antes-da-v2-*.sqlite') ?: []), 1);
 conferir('Rodar de novo não faz nada', App\Core\Banco::migrar($antigo, $arquivoAntigo), []);

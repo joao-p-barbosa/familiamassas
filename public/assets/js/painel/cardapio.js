@@ -7,6 +7,7 @@ import { api } from '../shared/api.js';
 import { abrirFolha, fecharFolha } from '../shared/folha.js';
 import { avisar } from '../shared/avisos.js';
 import { recipienteDaTela, ehAdmin, mostrarErro, confirmar } from './casca.js';
+import { reduzirFoto } from './foto.js';
 
 const conteudo = recipienteDaTela();   // o contêiner desta tela (criado pelo roteador)
 
@@ -52,6 +53,7 @@ function metaDe(r) {
     case 'tamanhos':
       return [r.sigla, r.descricao].filter(Boolean).join(' · ');
     case 'massas':
+      return [r.descricao, acrescimo(r.acrescimo_centavos), `preparo ${r.preparo_min} min`].filter(Boolean).join(' · ');
     case 'molhos':
       return [r.descricao, acrescimo(r.acrescimo_centavos)].filter(Boolean).join(' · ');
     case 'ingredientes':
@@ -207,7 +209,10 @@ function camposDoRecurso(recurso, r) {
         <p class="cadastro__nota">O preço de cada prato neste tamanho fica na aba “Preços dos pratos”.</p>${estado}`;
     case 'massas':
       return `${nome}${campoTexto('descricao', 'Descrição', r?.descricao, { extra: 'maxlength="100"', opcional: true })}
-        ${campoPreco('acrescimo_centavos', 'Acréscimo (R$)', r?.acrescimo_centavos ?? 0, 'Deixe 0,00 se não muda o preço do prato.')}${estado}`;
+        <div class="formulario__par">
+          ${campoPreco('acrescimo_centavos', 'Acréscimo (R$)', r?.acrescimo_centavos ?? 0, 'Deixe 0,00 se não muda o preço do prato.')}
+          ${campoTexto('preparo_min', 'Tempo de preparo (min)', r?.preparo_min ?? 15, { extra: 'inputmode="numeric"', ajuda: 'Quanto um prato com esta massa leva na cozinha. Entra na previsão do pedido.' })}
+        </div>${estado}`;
     case 'molhos':
       return `${nome}${campoTexto('descricao', 'Descrição', r?.descricao, { extra: 'maxlength="100"', opcional: true })}
         <div class="formulario__par">
@@ -242,6 +247,7 @@ function camposDoRecurso(recurso, r) {
             ${campoSelecao('massa_id', 'Massa', dados.massas.map((x) => [x.id, x.nome]), r?.massa_id)}
             ${campoSelecao('molho_id', 'Molho', dados.molhos.map((x) => [x.id, x.nome]), r?.molho_id)}
           </div>
+          ${campoTexto('preparo_min', 'Tempo de preparo (min)', r?.preparo_min ?? '', { extra: 'inputmode="numeric" placeholder="O da massa"', ajuda: 'Só se este prato leva um tempo diferente do da massa (ex.: lasanha). Em branco, usa o da massa.', opcional: true })}
           <fieldset class="campo" style="border: 0; padding: 0; margin: 0;">
             <legend class="campo__rotulo">Ingredientes do prato</legend>
             <div class="formulario__marcar">
@@ -288,20 +294,6 @@ function abrirFormulario(recurso, registro = null) {
   abrirFolha(lateral, { aoFechar: () => (editando = null) });
 }
 
-/** Reduz a foto para no máximo 1200 px e converte para WebP (ou JPEG, se o navegador não gerar WebP). */
-async function reduzirFoto(arquivo) {
-  const imagem = await createImageBitmap(arquivo);
-  const escala = Math.min(1, 1200 / Math.max(imagem.width, imagem.height));
-  const tela = document.createElement('canvas');
-  tela.width = Math.round(imagem.width * escala);
-  tela.height = Math.round(imagem.height * escala);
-  tela.getContext('2d').drawImage(imagem, 0, 0, tela.width, tela.height);
-  const gerar = (tipo) => new Promise((pronto) => tela.toBlob(pronto, tipo, 0.82));
-  let blob = await gerar('image/webp');
-  if (!blob || blob.type !== 'image/webp') blob = await gerar('image/jpeg');
-  return blob;
-}
-
 function lerFormulario(form) {
   const v = {};
   const erros = {};
@@ -320,6 +312,7 @@ function lerFormulario(form) {
     case 'massas':
       v.descricao = form.descricao.value.trim();
       v.acrescimo_centavos = dinheiro('acrescimo_centavos');
+      v.preparo_min = form.preparo_min.value.trim();
       break;
     case 'molhos':
       v.descricao = form.descricao.value.trim();
@@ -340,6 +333,7 @@ function lerFormulario(form) {
       } else {
         v.massa_id = Number(form.massa_id.value);
         v.molho_id = Number(form.molho_id.value);
+        v.preparo_min = form.preparo_min.value.trim();
       }
       v.ingrediente_ids = [...form.querySelectorAll('[name="ingrediente"]:checked')].map((c) => Number(c.value));
       break;

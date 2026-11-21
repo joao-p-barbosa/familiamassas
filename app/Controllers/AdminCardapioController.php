@@ -9,6 +9,7 @@ use App\Core\Requisicao;
 use App\Core\Resposta;
 use App\Core\Sessao;
 use App\Repositories\CardapioRepository;
+use App\Services\TempoDePreparo;
 use App\Repositories\ImagemRepository;
 
 // Edição do cardápio (Etapa 5): cadastro de categorias, itens, tamanhos, massas, molhos e ingredientes.
@@ -53,6 +54,9 @@ final class AdminCardapioController
         Banco::transacao(function () use ($recurso, $id, $valores, $dados): void {
             $this->repo->atualizar($recurso, $id, $valores);
             $this->gravarIngredientesDoItem($recurso, $id, $valores, $dados);
+            if (array_key_exists('preparo_min', $valores)) {
+                TempoDePreparo::recalcularFila(Banco::conexao());   // tempo de preparo mudou: a fila refaz as previsões (D100)
+            }
         });
         Resposta::json($this->repo->buscar($recurso, $id));
     }
@@ -227,6 +231,9 @@ final class AdminCardapioController
             case 'massas':
                 $v['descricao'] = $texto('descricao', 100);
                 $v['acrescimo_centavos'] = $dinheiro('acrescimo_centavos', false);
+                $preparo = $d['preparo_min'] ?? $atual['preparo_min'] ?? TempoDePreparo::PREPARO_PADRAO_MIN;
+                if (!is_numeric($preparo) || (int) $preparo < 1 || (int) $preparo > 180) { $erros['preparo_min'] = 'Informe de 1 a 180 minutos.'; }
+                $v['preparo_min'] = (int) $preparo;
                 break;
             case 'molhos':
                 $v['descricao'] = $texto('descricao', 100);
@@ -257,10 +264,15 @@ final class AdminCardapioController
                     $v['molho_id'] = (int) ($d['molho_id'] ?? $atual['molho_id'] ?? 0);
                     if (!$existe('massas', $v['massa_id'])) { $erros['massa_id'] = 'Escolha a massa do prato.'; }
                     if (!$existe('molhos', $v['molho_id'])) { $erros['molho_id'] = 'Escolha o molho do prato.'; }
+                    // Tempo próprio (ex.: lasanha); em branco = o da massa (D100).
+                    $preparo = array_key_exists('preparo_min', $d) ? $d['preparo_min'] : ($atual['preparo_min'] ?? null);
+                    if ($preparo !== null && $preparo !== '' && (!is_numeric($preparo) || (int) $preparo < 1 || (int) $preparo > 180)) { $erros['preparo_min'] = 'Informe de 1 a 180 minutos, ou deixe em branco.'; }
+                    $v['preparo_min'] = $preparo === null || $preparo === '' ? null : (int) $preparo;
                 } else {
                     $v['preco_centavos'] = $dinheiro('preco_centavos', true);
                     $v['massa_id'] = null;
                     $v['molho_id'] = null;
+                    $v['preparo_min'] = null;
                 }
                 break;
         }

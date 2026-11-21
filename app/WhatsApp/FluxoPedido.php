@@ -610,12 +610,11 @@ final class FluxoPedido
             case 'tipo':
                 $linhas[] = 'Entrega ou retirada?';
                 if ($this->config->get('aceita_entrega', '1') === '1') {
-                    $taxa = $this->config->inteiro('taxa_entrega_centavos');
-                    $textoTaxa = (new TaxaDeEntrega($this->config))->porRaio() ? 'taxa pela distância, ' : ($taxa > 0 ? 'taxa ' . self::reais($taxa) . ', ' : '');
-                    $lista('entrega', 'Entrega (' . $textoTaxa . 'cerca de ' . $this->config->inteiro('tempo_entrega_min', 50) . ' min)');
+                    // A taxa só aparece depois da localização (rua, distância e taxa juntas), não aqui.
+                    $lista('entrega', 'Entrega');
                 }
                 if ($this->config->get('aceita_retirada', '1') === '1') {
-                    $lista('retirada', 'Retirada no balcão (cerca de ' . $this->config->inteiro('tempo_retirada_min', 25) . ' min)');
+                    $lista('retirada', 'Retirada no balcão');
                 }
                 $pergunta = 'Entrega ou retirada?';
                 break;

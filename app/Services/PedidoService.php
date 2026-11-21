@@ -307,7 +307,8 @@ final class PedidoService
                 $cancelamento = $h['motivo'];
             }
         }
-        $minutos = $pedido['tipo'] === 'entrega' ? $this->config->inteiro('tempo_entrega_min', 50) : $this->config->inteiro('tempo_retirada_min', 25);
+        // Minutos desde o pedido até ficar pronto, pela linha do tempo da cozinha (D100); 0 ou null = sem previsão.
+        $minutos = $pedido['previsao_minutos'] ?? 0;
         return [
             'numero' => $pedido['id'],
             'codigo' => $pedido['codigo'],

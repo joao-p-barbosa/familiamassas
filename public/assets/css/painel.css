@@ -100,6 +100,13 @@
 .lateral__marca-inicial {
   display: none;
 }
+/* Logo da loja no lugar da inicial (Configurações › Loja, D99). */
+.lateral__marca-logo {
+  display: block;
+  width: 2.25rem;
+  height: 2.25rem;
+  object-fit: contain;
+}
 .lateral__botao {
   flex: none;
   display: grid;
@@ -1927,4 +1934,580 @@ a.balao__acao {
 .ifood__id {
   display: inline-block;
   padding: var(--e-1) var(--e-2);
+}
+
+/* ==========================================================================
+   Faturamento (D101): telas Vendas e Fechamento do dia, adaptadas do Cantinho de Sabores.
+   ========================================================================== */
+.vendas__periodo {
+  display: grid;
+  gap: var(--e-3);
+  margin-bottom: var(--e-4);
+}
+.vendas__periodo > * {
+  min-width: 0;
+}
+.vendas__periodo .segmentado {
+  overflow-x: auto;
+  grid-auto-columns: minmax(max-content, 1fr);
+}
+.vendas__datas {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: var(--e-3);
+}
+.vendas__datas[hidden] {
+  display: none;
+}
+.vendas__cab {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--e-3);
+}
+.vendas__cab .bloco__titulo {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--e-2);
+}
+.segmentado--p .segmentado__item {
+  min-height: 2.25rem;
+  font-size: var(--texto-2);
+}
+.vendas__filtros {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e-3);
+}
+.vendas__filtro {
+  min-width: 9rem;
+}
+.vendas__dupla {
+  display: grid;
+  gap: var(--e-4);
+}
+@media (min-width: 64rem) {
+  .vendas__dupla {
+    grid-template-columns: 3fr 2fr;
+    align-items: start;
+    margin-bottom: var(--e-4);
+  }
+  .vendas__dupla > .bloco {
+    margin-bottom: 0;
+  }
+}
+
+/* Indicadores do período: o primeiro é o destaque. */
+.indicadores {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr));
+  gap: var(--e-3);
+  margin-bottom: var(--e-4);
+}
+.ind {
+  display: grid;
+  gap: var(--e-1);
+  min-width: 0;
+  padding: var(--e-4) var(--e-5);
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio-2);
+  background: var(--cor-superficie);
+}
+.ind--destaque {
+  border-color: var(--cor-acento);
+  background: var(--cor-acento-suave);
+}
+.ind__rotulo {
+  display: flex;
+  align-items: center;
+  gap: var(--e-2);
+  font-size: var(--texto-2);
+  font-weight: 700;
+  color: var(--cor-texto-2);
+}
+.ind__valor {
+  font-family: var(--fonte-titulo);
+  font-size: var(--texto-7);
+  line-height: 1.15;
+  color: var(--cor-texto);
+  font-variant-numeric: tabular-nums;
+}
+.ind__valor--texto {
+  font-size: var(--texto-5);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ind__sub {
+  font-size: var(--texto-2);
+  color: var(--cor-texto-2);
+}
+
+/* Mapa de calor dia × hora: a cor diz o valor, o número diz a quantidade (nunca só cor). */
+.calor__resumo {
+  font-size: var(--texto-3);
+  color: var(--cor-texto-2);
+}
+.calor__rolagem {
+  overflow-x: auto;
+}
+.calor {
+  border-collapse: separate;
+  border-spacing: 3px;
+  font-size: var(--texto-1);
+  font-variant-numeric: tabular-nums;
+}
+.calor th {
+  font-weight: 700;
+  color: var(--cor-texto-2);
+  text-align: center;
+}
+.calor tbody th {
+  padding-right: var(--e-2);
+  text-align: left;
+}
+.calor abbr {
+  text-decoration: none;
+}
+.calor__cel {
+  min-width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 6px;
+  background: var(--cor-superficie-2);
+  font-weight: 700;
+  text-align: center;
+}
+.calor__cel[data-nivel="1"],
+.calor__legenda i[data-nivel="1"] {
+  background: color-mix(in srgb, var(--cor-acento) 22%, var(--cor-superficie));
+  color: var(--cor-texto);
+}
+.calor__cel[data-nivel="2"],
+.calor__legenda i[data-nivel="2"] {
+  background: color-mix(in srgb, var(--cor-acento) 45%, var(--cor-superficie));
+  color: var(--cor-texto);
+}
+.calor__cel[data-nivel="3"],
+.calor__legenda i[data-nivel="3"] {
+  background: color-mix(in srgb, var(--cor-acento) 72%, var(--cor-superficie));
+  color: var(--cor-acento-texto);
+}
+.calor__cel[data-nivel="4"],
+.calor__legenda i[data-nivel="4"] {
+  background: var(--cor-acento);
+  color: var(--cor-acento-texto);
+}
+.calor__total {
+  padding-left: var(--e-2);
+  color: var(--cor-texto-2);
+  text-align: right;
+  white-space: nowrap;
+}
+.calor__legenda {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--e-1);
+  font-size: var(--texto-1);
+  color: var(--cor-texto-2);
+}
+.calor__legenda i {
+  width: 0.875rem;
+  height: 0.875rem;
+  border-radius: 3px;
+}
+
+/* Ranking de ticket médio */
+.rank {
+  display: grid;
+  gap: var(--e-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.rank__item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: var(--e-1) var(--e-3);
+}
+.rank__nome {
+  font-weight: 700;
+}
+.rank__valor {
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.rank__trilho {
+  grid-column: 1 / -1;
+  height: 0.375rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--cor-superficie-2);
+}
+.rank__trilho > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--cor-acento);
+}
+.rank__nota {
+  grid-column: 1 / -1;
+  font-size: var(--texto-2);
+  color: var(--cor-texto-2);
+}
+
+/* Lançamentos */
+.tabela--vendas td:last-child {
+  min-width: 0;
+  text-align: right;
+}
+.tabela--vendas .numero {
+  text-align: right;
+  white-space: nowrap;
+}
+.tabela--vendas tr[data-cancelada] td {
+  color: var(--cor-texto-2);
+}
+.vendas__itens {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.vendas__paginas {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--e-3);
+  font-size: var(--texto-3);
+  color: var(--cor-texto-2);
+}
+.vazio-painel {
+  display: grid;
+  justify-items: center;
+  gap: var(--e-1);
+  padding: var(--e-6) var(--e-4);
+  color: var(--cor-texto-2);
+  text-align: center;
+}
+.vazio-painel strong {
+  color: var(--cor-texto);
+}
+.vazio-painel__bola {
+  display: grid;
+  place-items: center;
+  width: 3rem;
+  height: 3rem;
+  margin-bottom: var(--e-2);
+  border-radius: 50%;
+  background: var(--cor-superficie-2);
+}
+.cancelar__itens {
+  display: grid;
+  gap: var(--e-2);
+}
+.cancelar__itens[hidden] {
+  display: none;
+}
+.cancelar__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--e-3);
+  padding: var(--e-2) var(--e-3);
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio-1);
+}
+.cancelar__item .entrada {
+  flex: none;
+  width: 5.5rem;
+}
+.cancelar__soma {
+  font-weight: 700;
+  text-align: right;
+}
+
+/* Calendário do fechamento: estado sempre com símbolo e texto, nunca só cor. */
+.calendario {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: var(--e-2);
+}
+.calendario__semana {
+  padding: var(--e-1) 0;
+  font-size: var(--texto-1);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-align: center;
+  text-transform: uppercase;
+  color: var(--cor-texto-2);
+}
+.dia {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-height: 5.25rem;
+  padding: var(--e-2);
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio-1);
+  background: var(--cor-superficie);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--dur-1) ease, transform var(--dur-1) var(--ease-saida);
+}
+.dia:focus-visible {
+  outline: 2px solid var(--cor-foco);
+  outline-offset: 2px;
+}
+@media (hover: hover) and (pointer: fine) {
+  button.dia:hover {
+    border-color: var(--cor-acento);
+  }
+}
+button.dia:active {
+  transform: scale(0.97);
+}
+.dia__numero {
+  font-size: var(--texto-3);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.dia__estado {
+  font-size: 0.6875rem;
+  font-weight: 700;
+}
+.dia__valor {
+  margin-top: auto;
+  font-size: var(--texto-1);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.dia--fechado {
+  border-color: color-mix(in srgb, var(--cor-sucesso) 40%, transparent);
+  background: var(--cor-sucesso-suave);
+}
+.dia--fechado .dia__estado {
+  color: var(--cor-sucesso);
+}
+.dia--pendente {
+  border-color: color-mix(in srgb, var(--cor-alerta) 40%, transparent);
+  background: var(--cor-alerta-suave);
+}
+.dia--pendente .dia__estado {
+  color: var(--cor-alerta);
+}
+.dia--hoje {
+  border: 2px solid var(--cor-acento);
+  background: var(--cor-acento-suave);
+}
+.dia--hoje .dia__estado {
+  color: var(--cor-acento-tinta);
+}
+.dia--futuro {
+  border-style: dashed;
+  background: transparent;
+  color: var(--cor-texto-2);
+  cursor: default;
+}
+.dia--neutro {
+  color: var(--cor-texto-2);
+}
+.dia--fora {
+  visibility: hidden;
+}
+@media (max-width: 40rem) {
+  .calendario {
+    gap: 3px;
+  }
+  .dia {
+    min-height: 3.75rem;
+    padding: var(--e-1);
+  }
+  .dia__estado {
+    display: none;
+  }
+  .dia--pendente .dia__numero::after {
+    content: " !";
+    color: var(--cor-alerta);
+  }
+  .dia--fechado .dia__numero::after {
+    content: " \2713";
+    color: var(--cor-sucesso);
+  }
+  .dia__valor {
+    display: none;   /* não cabe no celular: tocar no dia mostra o valor */
+  }
+}
+.legenda-estados {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e-2) var(--e-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--texto-2);
+  color: var(--cor-texto-2);
+}
+.legenda-estados li {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--e-2);
+}
+.link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  cursor: pointer;
+}
+#conteudo .faixa-aviso {
+  margin: 0 0 var(--e-4);
+}
+
+/* O dia aberto (painel lateral): resumo, formas de pagamento e a conta da gaveta. */
+.caixa {
+  display: grid;
+  align-content: start;
+  gap: var(--e-4);
+}
+.caixa__sobretitulo {
+  font-size: var(--texto-1);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--cor-acento-tinta);
+}
+.caixa__resumo {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
+  gap: var(--e-3);
+}
+.mini-kpi {
+  padding: var(--e-3) var(--e-4);
+  border-radius: var(--raio-1);
+  background: var(--cor-superficie-2);
+}
+.mini-kpi__rotulo {
+  font-size: var(--texto-2);
+  color: var(--cor-texto-2);
+}
+.mini-kpi__valor {
+  font-family: var(--fonte-titulo);
+  font-size: var(--texto-6);
+  font-variant-numeric: tabular-nums;
+}
+.caixa__formas {
+  display: grid;
+  margin: 0;
+}
+.caixa__formas > div,
+.gaveta__linha,
+.gaveta__campo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--e-3);
+  padding: var(--e-2) 0;
+  border-bottom: 1px solid var(--cor-borda);
+  font-variant-numeric: tabular-nums;
+}
+.caixa__formas dt {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--e-2);
+}
+.caixa__formas dd,
+.gaveta__linha dd {
+  margin: 0;
+  font-weight: 800;
+}
+/* Gaveta: uma conta de cima para baixo, como num caderno de caixa. */
+.gaveta {
+  display: grid;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio-2);
+}
+.gaveta__linha,
+.gaveta__campo {
+  padding: var(--e-3) var(--e-4);
+}
+.gaveta > :last-child {
+  border-bottom: 0;
+}
+.gaveta__linha dt,
+.gaveta__linha > span,
+.gaveta__campo > span {
+  font-size: var(--texto-3);
+  font-weight: 700;
+}
+.gaveta__campo > span .campo__ajuda {
+  display: block;
+  font-weight: 400;
+}
+.gaveta__campo .entrada {
+  flex: none;
+  width: 9rem;
+  text-align: right;
+}
+.gaveta__sinal {
+  display: inline-block;
+  width: 1.2em;
+  color: var(--cor-acento-tinta);
+  font-weight: 800;
+}
+.gaveta__linha--total {
+  background: var(--cor-superficie-2);
+}
+.gaveta__linha--contado {
+  background: var(--cor-acento-suave);
+}
+.caixa__diferenca {
+  display: flex;
+  justify-content: flex-end;
+}
+.caixa__diferenca:empty {
+  display: none;
+}
+.caixa__acoes {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--e-3);
+  padding-top: var(--e-4);
+  border-top: 1px solid var(--cor-borda);
+}
+.caixa__form,
+.caixa__reabrir {
+  display: grid;
+  gap: var(--e-3);
+}
+.caixa__reabrir {
+  padding-top: var(--e-4);
+  border-top: 1px solid var(--cor-borda);
+}
+.caixa__reabrir .botao {
+  justify-self: start;
+}
+.caixa__historico summary {
+  font-size: var(--texto-3);
+  font-weight: 700;
+  color: var(--cor-texto-2);
+  cursor: pointer;
+}
+.caixa__historico ul {
+  margin: var(--e-2) 0 0;
+  padding-left: var(--e-5);
+  font-size: var(--texto-2);
+  color: var(--cor-texto-2);
 }

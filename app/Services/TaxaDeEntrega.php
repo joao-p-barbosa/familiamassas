@@ -10,7 +10,8 @@ use App\Repositories\ConfigRepository;
  * quem está além da última (ou "não entrega"). A distância é em linha reta, do ponto da loja ao ponto que o cliente marcou no
  * mapa ou mandou pelo WhatsApp. O navegador calcula igual só para mostrar (public/assets/js/shared/taxa.js); vale o do servidor.
  *
- * Sem faixas cadastradas, sem o ponto da loja ou sem o ponto do cliente (endereço só digitado), vale a taxa fixa de sempre.
+ * Sem faixas cadastradas ou sem o ponto da loja, a entrega sai sem taxa (não há mais taxa fixa: o valor vem só das faixas).
+ * Com faixas, o pedido exige o ponto do cliente (PedidoService e o WhatsApp recusam sem ele).
  *
  * Configuração: entrega_faixas = {"faixas": [{"ate_km": 1, "taxa_centavos": 300}, ...], "alem_centavos": 1200 | null},
  * loja_lat e loja_lng.
@@ -54,7 +55,7 @@ final class TaxaDeEntrega
      */
     public function calcular(?float $lat, ?float $lng): array
     {
-        $fixa = ['taxa_centavos' => $this->config->inteiro('taxa_entrega_centavos'), 'km' => null, 'atende' => true];
+        $fixa = ['taxa_centavos' => 0, 'km' => null, 'atende' => true];
         $r = $this->regras();
         if ($lat === null || $lng === null || !$this->porRaio()) {
             return $fixa;

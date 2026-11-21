@@ -52,7 +52,8 @@ CREATE TABLE massas (
   descricao          TEXT NOT NULL DEFAULT '',
   acrescimo_centavos INTEGER NOT NULL DEFAULT 0 CHECK (acrescimo_centavos >= 0),
   estado             TEXT NOT NULL DEFAULT 'disponivel' CHECK (estado IN ('disponivel', 'esgotado', 'oculto')),
-  ordem              INTEGER NOT NULL DEFAULT 0
+  ordem              INTEGER NOT NULL DEFAULT 0,
+  preparo_min        INTEGER NOT NULL DEFAULT 15            -- minutos de preparo de um prato com esta massa (D100)
 );
 
 CREATE TABLE molhos (
@@ -85,7 +86,8 @@ CREATE TABLE itens (
   massa_id       INTEGER REFERENCES massas (id) ON DELETE SET NULL,        -- só para "prato_casa"
   molho_id       INTEGER REFERENCES molhos (id) ON DELETE SET NULL,        -- só para "prato_casa"
   estado         TEXT NOT NULL DEFAULT 'disponivel' CHECK (estado IN ('disponivel', 'esgotado', 'oculto')),
-  ordem          INTEGER NOT NULL DEFAULT 0
+  ordem          INTEGER NOT NULL DEFAULT 0,
+  preparo_min    INTEGER                                                    -- tempo próprio do prato da casa; NULL = o da massa (D100)
 );
 
 CREATE TABLE item_ingredientes (     -- ingredientes sugeridos de um prato da casa
@@ -160,7 +162,8 @@ CREATE TABLE pedidos (
   impresso_por         TEXT,                                -- id da estação de impressão
   status_atualizado_em TEXT NOT NULL,
   atualizado_em        TEXT NOT NULL,                       -- muda em qualquer alteração (base do polling do painel)
-  criado_em            TEXT NOT NULL
+  criado_em            TEXT NOT NULL,
+  previsao_minutos     INTEGER                              -- previsão gravada na hora do pedido (tempo fixo + fila da cozinha, D99)
 );
 CREATE INDEX idx_pedidos_atualizado ON pedidos (atualizado_em);
 CREATE INDEX idx_pedidos_status ON pedidos (status);
@@ -176,7 +179,8 @@ CREATE TABLE itens_pedido (
   quantidade          INTEGER NOT NULL CHECK (quantidade > 0),
   preco_unit_centavos INTEGER NOT NULL,
   montagem            TEXT,                    -- JSON com a montagem completa (cópia na hora do pedido)
-  observacoes         TEXT NOT NULL DEFAULT ''
+  observacoes         TEXT NOT NULL DEFAULT '',
+  quantidade_cancelada INTEGER NOT NULL DEFAULT 0          -- unidades já canceladas na tela Vendas (D101)
 );
 CREATE INDEX idx_itens_pedido_pedido ON itens_pedido (pedido_id);
 
@@ -374,3 +378,35 @@ CREATE TABLE impressao_trabalhos (
   feito_em    TEXT
 );
 CREATE INDEX idx_impressao_estado ON impressao_trabalhos (estado);
+
+-- Faturamento (D101): conferência da gaveta de cada dia (reabrir marca cancelado_em) e cancelamentos de venda.
+CREATE TABLE fechamentos_caixa (
+  id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+  data                     TEXT NOT NULL,                     -- dia no fuso da loja (AAAA-MM-DD)
+  caixa_inicial_centavos   INTEGER NOT NULL,
+  vendas_dinheiro_centavos INTEGER NOT NULL,
+  retiradas_centavos       INTEGER NOT NULL,
+  esperado_centavos        INTEGER NOT NULL,
+  contado_centavos         INTEGER NOT NULL,
+  diferenca_centavos       INTEGER NOT NULL,
+  faturamento_centavos     INTEGER NOT NULL,
+  observacao               TEXT NOT NULL DEFAULT '',
+  fechado_por              INTEGER REFERENCES usuarios (id) ON DELETE SET NULL,
+  fechado_em               TEXT NOT NULL,
+  cancelado_em             TEXT,
+  cancelado_por            INTEGER REFERENCES usuarios (id) ON DELETE SET NULL,
+  motivo_cancelamento      TEXT
+);
+CREATE INDEX idx_fechamentos_data ON fechamentos_caixa (data);
+
+CREATE TABLE cancelamentos (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  pedido_id      INTEGER REFERENCES pedidos (id) ON DELETE CASCADE,
+  atendimento_id INTEGER REFERENCES atendimentos (id) ON DELETE CASCADE,
+  tipo           TEXT NOT NULL CHECK (tipo IN ('total', 'parcial')),
+  valor_centavos INTEGER NOT NULL CHECK (valor_centavos >= 0),
+  itens          TEXT NOT NULL,                     -- JSON: [{id, nome, quantidade}]
+  motivo         TEXT NOT NULL,
+  usuario_id     INTEGER REFERENCES usuarios (id) ON DELETE SET NULL,
+  criado_em      TEXT NOT NULL
+);

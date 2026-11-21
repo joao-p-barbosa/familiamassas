@@ -61,20 +61,22 @@ async function descobrirEndereco(lat, lng, sinal) {
 
 // ---------- Abrir ----------
 /**
- * @param {{ inicial?: { lat: number, lng: number } | null }} opcoes  último ponto marcado (o mapa abre nele)
+ * @param {{ inicial?: { lat: number, lng: number } | null, loja?: boolean }} opcoes  inicial: último ponto marcado (o mapa abre nele);
+ *   loja: o dono marcando o local do restaurante no painel (D99), sem a opção de digitar o endereço.
  * @returns {Promise<{ lat: number, lng: number, rua: string, numero: string, bairro: string } | null>}
- *   o local confirmado, ou null se a pessoa preferiu digitar o endereço.
+ *   o local confirmado, ou null se a pessoa preferiu digitar o endereço (ou fechou).
  */
-export function escolherNoMapa({ inicial = null, enderecoDaLoja = '' } = {}) {
+export function escolherNoMapa({ inicial = null, enderecoDaLoja = '', loja = false } = {}) {
   return new Promise((resolver) => {
-    sessao = { resolver, resultado: null, map: null, endereco: null, buscando: null, pontoEscolhido: false, temporizador: null, enderecoDaLoja };
+    sessao = { resolver, resultado: null, map: null, endereco: null, buscando: null, pontoEscolhido: false, temporizador: null, enderecoDaLoja, loja };
+    const ondeTexto = loja ? 'do restaurante' : 'da entrega';
     dialogo.innerHTML = `
       <header class="folha__topo">
-        <h2 class="folha__titulo" id="mapa-titulo">Onde entregamos?</h2>
+        <h2 class="folha__titulo" id="mapa-titulo">${loja ? 'Onde fica o restaurante?' : 'Onde entregamos?'}</h2>
         <button type="button" class="botao botao--fantasma botao--icone" data-fechar aria-label="Fechar o mapa">${icone('fechar')}</button>
       </header>
       <div class="mapa" id="mapa">
-        <div class="mapa__tela" id="mapa-tela" aria-label="Mapa para marcar o local da entrega. Setas movem o mapa; mais e menos aproximam ou afastam."></div>
+        <div class="mapa__tela" id="mapa-tela" aria-label="Mapa para marcar o local ${ondeTexto}. Setas movem o mapa; mais e menos aproximam ou afastam."></div>
         <div class="mapa__pino" aria-hidden="true">${PINO}<span class="mapa__sombra"></span></div>
         <button type="button" class="botao botao--secundario botao--icone mapa__localizar" id="mapa-localizar" aria-label="Usar minha localização">${icone('alvo', 22)}</button>
         <p class="mapa__aviso" id="mapa-aviso" role="status" hidden></p>
@@ -82,7 +84,7 @@ export function escolherNoMapa({ inicial = null, enderecoDaLoja = '' } = {}) {
       <footer class="folha__rodape mapa__rodape">
         <div class="mapa__endereco" id="mapa-endereco" aria-live="polite"></div>
         <div class="mapa__acoes">
-          <button type="button" class="botao botao--secundario" data-acao="digitar">Digitar o endereço</button>
+          <button type="button" class="botao botao--secundario" data-acao="digitar">${loja ? 'Cancelar' : 'Digitar o endereço'}</button>
           <button type="button" class="botao" id="mapa-confirmar" data-acao="confirmar-local" disabled>Confirmar local</button>
         </div>
       </footer>`;
@@ -98,7 +100,7 @@ async function iniciarMapa(inicial) {
   try {
     L = await carregarLeaflet();
   } catch {
-    if (sessao === s) avisar('Não conseguimos carregar o mapa agora. Digite o endereço: o pedido segue normalmente.', true);
+    if (sessao === s) avisar(s.loja ? 'Não conseguimos carregar o mapa agora. Tente de novo daqui a pouco.' : 'Não conseguimos carregar o mapa agora. Digite o endereço: o pedido segue normalmente.', true);
     return;
   }
   if (sessao !== s) return; // fechou enquanto carregava
@@ -113,7 +115,7 @@ async function iniciarMapa(inicial) {
     maxZoom: 19,
     attribution: '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>',
   }).addTo(s.map);
-  imagens.once('tileerror', () => avisar('As imagens do mapa não carregaram. Confira a internet ou digite o endereço.', true));
+  imagens.once('tileerror', () => avisar(s.loja ? 'As imagens do mapa não carregaram. Confira a internet.' : 'As imagens do mapa não carregaram. Confira a internet ou digite o endereço.', true));
 
   const mapa = $('#mapa');
   s.map.on('movestart', () => mapa.setAttribute('data-movendo', ''));
@@ -157,11 +159,13 @@ async function irParaLoja() {
   }
 }
 
+const arraste = () => (sessao?.loja ? 'Arraste o mapa até o restaurante.' : 'Arraste o mapa até o local da entrega ou digite o endereço.');
+
 function pedirLocalizacao() {
   const s = sessao;
   if (!s?.map) return;
   if (!('geolocation' in navigator) || !window.isSecureContext) {
-    avisar('A localização do aparelho só funciona em conexão segura (https). Arraste o mapa até o local da entrega ou digite o endereço.');
+    avisar(`A localização do aparelho só funciona em conexão segura (https). ${arraste()}`);
     irParaLoja();
     return;
   }
@@ -180,7 +184,7 @@ function pedirLocalizacao() {
         2: 'Não conseguimos descobrir onde você está agora.',
         3: 'Demorou demais para achar sua localização.',
       }[erro.code] ?? 'Não conseguimos usar sua localização.';
-      avisar(`${motivo} Arraste o mapa até o local da entrega ou digite o endereço.`);
+      avisar(`${motivo} ${arraste()}`);
       irParaLoja();
     },
     { enableHighAccuracy: true, timeout: 12_000, maximumAge: 30_000 },
@@ -223,15 +227,15 @@ function escrever() {
   if (!caixa || !s) return;
   let html;
   if (!s.pontoEscolhido) {
-    html = '<p class="mapa__dica">Arraste o mapa até o local exato da entrega, ou toque nele.</p>';
+    html = `<p class="mapa__dica">Arraste o mapa até o local exato ${s.loja ? 'do restaurante' : 'da entrega'}, ou toque nele.</p>`;
   } else if (s.carregando) {
     html = '<p class="mapa__dica" aria-busy="true">Buscando o endereço…</p>';
   } else if (s.endereco && (s.endereco.rua || s.endereco.bairro)) {
     html = `<p class="mapa__rua">${icone('pin', 18)}<span>${esc(ruaComNumero(s.endereco) || s.endereco.bairro)}</span></p>
             ${s.endereco.rua && s.endereco.bairro ? `<p class="mapa__bairro">${esc(s.endereco.bairro)}</p>` : ''}
-            ${s.endereco.numero ? '' : '<p class="mapa__dica">O mapa não sabe o número: você completa na tela seguinte.</p>'}`;
+            ${s.endereco.numero || s.loja ? '' : '<p class="mapa__dica">O mapa não sabe o número: você completa na tela seguinte.</p>'}`;
   } else {
-    html = `<p class="mapa__dica">${s.falhou ? 'Não conseguimos achar o nome da rua agora.' : 'Não achamos o nome da rua neste ponto.'} Confirme o local e digite o endereço na tela seguinte.</p>`;
+    html = `<p class="mapa__dica">${s.falhou ? 'Não conseguimos achar o nome da rua agora.' : 'Não achamos o nome da rua neste ponto.'} ${s.loja ? 'O local vale assim mesmo: confirme se o pino está no restaurante.' : 'Confirme o local e digite o endereço na tela seguinte.'}</p>`;
   }
   caixa.innerHTML = html;
   confirmar.disabled = !s.pontoEscolhido || Boolean(s.carregando);

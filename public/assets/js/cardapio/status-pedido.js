@@ -2,12 +2,14 @@
 import { hora } from '../shared/formato.js';
 import { encerrado } from '../shared/pedido.js';
 
-/** "Chega por volta das 20:15." (vazio quando o pedido já está pronto, encerrado ou não tem previsão) */
+/**
+ * "Fica pronto por volta das 20:15." A previsão é só de PREPARO (D100): a hora de chegada na casa do cliente não é conhecida.
+ * Some quando o pedido sai da cozinha (a etapa "Saiu para entrega" diz o resto) ou quando não há previsão.
+ */
 export function previsaoDoPedido(pedido) {
-  if (encerrado(pedido.status) || pedido.status === 'pronto' || pedido.status === 'aguardando_retirada') return '';
+  if (!['novo', 'em_preparo'].includes(pedido.status) || !pedido.previsao_minutos) return '';
   const ate = new Date(new Date(pedido.criado_em).getTime() + pedido.previsao_minutos * 60_000);
-  const oQue = { entrega: 'Chega', retirada: 'Fica pronto' }[pedido.tipo] ?? 'Fica pronto';
-  return `${oQue} por volta das ${hora(ate.toISOString())}.`;
+  return `Fica pronto por volta das ${hora(ate.toISOString())}${pedido.tipo === 'entrega' ? ' e então sai para entrega' : ''}.`;
 }
 
 /** Um segmento por etapa do tipo de pedido; o da etapa atual pulsa. Decorativa: o texto ao lado diz a mesma coisa. */

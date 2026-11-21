@@ -22,6 +22,8 @@ final class PainelController
     public const TELAS = [
         'pedidos'       => ['titulo' => 'Pedidos',                 'grupo' => 'Operação', 'perfis' => ['admin', 'atendente']],
         'atendimento'   => ['titulo' => 'Produtos do atendimento', 'grupo' => 'Operação', 'perfis' => ['admin', 'atendente'], 'oculta' => true, 'menu_ativo' => 'pedidos'],
+        'vendas'        => ['titulo' => 'Vendas',                  'grupo' => 'Faturamento', 'perfis' => ['admin']],
+        'fechamento'    => ['titulo' => 'Fechamento do dia',       'grupo' => 'Faturamento', 'perfis' => ['admin']],
         'cardapio'      => ['titulo' => 'Cardápio',                'grupo' => 'Loja',     'perfis' => ['admin']],
         'usuarios'      => ['titulo' => 'Usuários',                'grupo' => 'Loja',     'perfis' => ['admin']],
         'configuracoes' => ['titulo' => 'Configurações',           'grupo' => 'Loja',     'perfis' => ['admin']],
@@ -107,6 +109,7 @@ final class PainelController
             'menuRecolhido' => $req->cookie('painel_menu') === 'recolhido',
             'usuario' => $usuario,
             'nomeLoja' => $config->get('nome_loja', 'Nome do Restaurante'),
+            'logoLoja' => $config->get('logo_loja'),
             'tema' => $config->get('tema', 'italia'),
             'csrf' => Sessao::csrf(),
             'ajustes' => [

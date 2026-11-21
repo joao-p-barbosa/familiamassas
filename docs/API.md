@@ -27,7 +27,7 @@ Loja + cardápio sem nada oculto (esgotados vêm, com `estado: "esgotado"`).
 ```json
 {
   "loja": { "nome": "...", "tema": "italia", "aberta": true, "mensagem": "Aberto até 23:00", "tipos_pedido": ["entrega","retirada"],
-            "taxa_entrega_centavos": 600, "area_entrega": "...", "tempo_entrega_min": 50, "tempo_retirada_min": 25, "whatsapp": "55...", "endereco": "...", "horarios": {} },
+            "entrega_por_raio": null, "area_entrega": "...", "tempo_entrega_min": 50, "tempo_retirada_min": 25, "whatsapp": "55...", "endereco": "...", "horarios": {} },
   "categorias": [], "itens": [], "tamanhos": [], "massas": [], "molhos": [], "ingredientes": []
 }
 ```
@@ -116,6 +116,17 @@ Toda escrita exige o cabeçalho `X-CSRF-Token` (o valor está na `<meta name="cs
 | `POST /api/admin/assistente/testar` | `{pergunta, modelo, historico?}` → uma pergunta a UM modelo, sem tocar em conversa nenhuma: `{ok, texto, modelo, tokens_in, tokens_out, custo_usd, ms, ferramentas, erro}`. Sem chave → `409 sem_chave`; teto atingido → `409 teto`. A tela chama uma vez por modelo, em paralelo. |
 | `POST /api/admin/assistente/recargas` | `{valor_usd, nota?}` → registra uma recarga paga pelo cliente (D72). Valor de US$ 0,01 a US$ 10.000 (aceita vírgula); fora disso `422` com `campos.valor_usd`. Liga o controle de crédito e limpa a marca de "sem crédito". Devolve o mesmo que `GET /api/admin/assistente`. |
 | `DELETE /api/admin/assistente/recargas/{id}` | Tira uma recarga lançada por engano. Devolve o mesmo que o `GET`. |
+
+## Faturamento (D101, só proprietário)
+
+| Rota | O que faz |
+|---|---|
+| `GET /api/admin/vendas?de&ate&canal&pagamento&situacao&pagina` | Período em dias locais (padrão hoje, até 1 ano). Devolve `periodo`, `hoje`, `resumo` (`faturamento_centavos`, `vendas`, `ticket_centavos`, `itens`, `mais_vendido`, `canceladas`, `cancelado_centavos`), `calor` (`horas`, `dias[{nome, rotulo, celulas[{vendas, total, nivel}], vendas, total}]`, `pico`, `melhor_dia`), `por_canal` e `por_pagamento` (`[{chave, rotulo, vendas, total_centavos, ticket_centavos}]`) e os `lancamentos` filtrados (30 por página; cada um com `chave` `pedido:N` ou `conta:N`, valores, `situacao` `ativa` \| `parcial` \| `cancelada` e `itens[{id, nome, quantidade, cancelada, preco_unit_centavos}]`). Os filtros valem só para os lançamentos. |
+| `POST /api/admin/vendas/cancelar` | `{venda, tipo: total \| parcial, itens: [{id, quantidade}], motivo}`. Motivo obrigatório. `409 ja_cancelada`, `409 dia_fechado` (o caixa do dia da venda já foi fechado). |
+| `GET /api/admin/fechamento?mes=AAAA-MM` | Calendário: `mes`, `anterior`, `proximo` (null no mês atual), `hoje`, `dias[{data, dia, semana, estado: fechado \| pendente \| hoje \| futuro \| neutro, valor_centavos}]`, `pendentes` (datas). |
+| `GET /api/admin/fechamento/{data}` | O dia: `estado`, `resumo` (`faturamento_centavos`, `vendas`, `por_pagamento`, `por_canal`, `dinheiro_centavos`), `fechamento` ativo ou null, `anterior` (`{data, contado_centavos}` do último fechamento) e `historico` (fechamentos reabertos). |
+| `POST /api/admin/fechamento/{data}` | `{caixa_inicial_centavos, retiradas_centavos, contado_centavos, observacao}` → fecha o caixa (esperado = inicial + dinheiro − retiradas). `409 ja_fechado`; data futura → `422`. Devolve o dia. |
+| `POST /api/admin/fechamento/{id}/reabrir` | `{motivo?}` → reabre o dia; o fechamento vai para o histórico. Devolve o dia. |
 
 ## Serviços de terceiros usados pelo navegador (só no mapa da entrega)
 

@@ -41,11 +41,12 @@ function desenharLoja() {
 
   const partes = [];
   if (loja.tipos_pedido.includes('entrega')) {
-    partes.push(`<span>${icone('moto', 18)}Entrega em ${loja.tempo_entrega_min} min · ${loja.entrega_por_raio ? 'taxa pela distância' : loja.taxa_entrega_centavos ? reais(loja.taxa_entrega_centavos) : 'grátis'}</span>`);
+    partes.push(`<span>${icone('moto', 18)}Entrega · ${loja.entrega_por_raio ? 'taxa pela distância' : 'grátis'}</span>`);
   }
   if (loja.tipos_pedido.includes('retirada')) {
-    partes.push(`<span>${icone('loja', 18)}Retirada em ${loja.tempo_retirada_min} min</span>`);
+    partes.push(`<span>${icone('loja', 18)}Retirada no balcão</span>`);
   }
+  if (loja.tipos_pedido.some((tipo) => tipo !== 'mesa')) partes.push(`<span>${icone('relogio', 18)}Fica pronto a partir de ${loja.preparo_min} min</span>`);
   if (loja.tipos_pedido.includes('mesa')) {
     partes.push(`<span>${icone('talheres', 18)}Na mesa: pedimos só o seu nome</span>`);
   }

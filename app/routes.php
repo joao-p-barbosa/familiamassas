@@ -8,6 +8,7 @@ use App\Controllers\AdminAtendimentoController;
 use App\Controllers\AdminConfigController;
 use App\Controllers\AdminPedidoController;
 use App\Controllers\AdminUsuarioController;
+use App\Controllers\FaturamentoController;
 use App\Controllers\IntegracoesController;
 use App\Controllers\PainelController;
 use App\Controllers\PublicoController;
@@ -23,6 +24,7 @@ return static function (Roteador $r): void {
     $assistente = new AdminAssistenteController();
     $cardapio = static fn (): AdminCardapioController => new AdminCardapioController();
     $whatsapp = new WhatsAppController();
+    $faturamento = static fn (): FaturamentoController => new FaturamentoController();
 
     // ---------- Páginas do cliente ----------
     $r->get('/', $publico->paginaCardapio(...));
@@ -66,6 +68,14 @@ return static function (Roteador $r): void {
     $r->put('/api/admin/cardapio/{recurso}/{id}', static fn ($req) => $cardapio()->atualizar($req));
     $r->patch('/api/admin/cardapio/{recurso}/{id}/estado', static fn ($req) => $cardapio()->estado($req));
     $r->delete('/api/admin/cardapio/{recurso}/{id}', static fn ($req) => $cardapio()->apagar($req));
+
+    // Faturamento (D101): Vendas, cancelamento de venda e Fechamento do dia
+    $r->get('/api/admin/vendas', static fn ($req) => $faturamento()->vendas($req));
+    $r->post('/api/admin/vendas/cancelar', static fn ($req) => $faturamento()->cancelar($req));
+    $r->get('/api/admin/fechamento', static fn ($req) => $faturamento()->calendario($req));
+    $r->get('/api/admin/fechamento/{data}', static fn ($req) => $faturamento()->dia($req));
+    $r->post('/api/admin/fechamento/{data}', static fn ($req) => $faturamento()->fechar($req));
+    $r->post('/api/admin/fechamento/{id}/reabrir', static fn ($req) => $faturamento()->reabrir($req));
 
     $r->get('/api/admin/configuracoes', $config->ler(...));
     $r->put('/api/admin/configuracoes', $config->salvar(...));

@@ -26,11 +26,10 @@ final class AdminConfigController
             'tema' => $c->get('tema', 'italia'),
             'funcionamento' => $c->get('funcionamento', 'auto'),
             'horarios' => (new LojaService())->horarios(),
-            'taxa_entrega_centavos' => $c->inteiro('taxa_entrega_centavos'),
             'area_entrega' => $c->get('area_entrega'),
             'endereco_loja' => $c->get('endereco_loja'),
-            'tempo_retirada_min' => $c->inteiro('tempo_retirada_min', 25),
-            'tempo_entrega_min' => $c->inteiro('tempo_entrega_min', 50),
+            'logo_loja' => $c->get('logo_loja'),
+            'cozinha_capacidade' => $c->inteiro('cozinha_capacidade', 0),
             'whatsapp_loja' => $c->get('whatsapp_loja'),
             'aceita_entrega' => $c->get('aceita_entrega', '1') === '1',
             'aceita_retirada' => $c->get('aceita_retirada', '1') === '1',
@@ -89,6 +88,12 @@ final class AdminConfigController
             if ($whatsapp === '') { $erros['whatsapp_loja'] = 'Informe o número com DDD, por exemplo (11) 91234-5678.'; }
         }
 
+        // Logo (D99): só um caminho que o upload do painel gerou.
+        $logo = $texto('logo_loja', 60);
+        if ($logo !== '' && !preg_match('#^/uploads/[a-f0-9]{24}\.(webp|jpg|png)$#', $logo)) {
+            $erros['logo_loja'] = 'Envie a logo de novo.';
+        }
+
         $aceita = ['entrega' => !empty($d['aceita_entrega']), 'retirada' => !empty($d['aceita_retirada']), 'mesa' => !empty($d['aceita_mesa'])];
         if (!in_array(true, $aceita, true)) { $erros['aceita'] = 'Deixe pelo menos um tipo de pedido ligado.'; }
 
@@ -97,11 +102,10 @@ final class AdminConfigController
             'tema' => $tema,
             'funcionamento' => $funcionamento,
             'horarios' => json_encode($horarios),
-            'taxa_entrega_centavos' => (string) $numero('taxa_entrega_centavos', 0, 100_000, 'Informe a taxa em reais (0 se for grátis).'),
             'area_entrega' => $texto('area_entrega', 120),
             'endereco_loja' => $texto('endereco_loja', 120),
-            'tempo_retirada_min' => (string) $numero('tempo_retirada_min', 5, 240, 'Informe de 5 a 240 minutos.'),
-            'tempo_entrega_min' => (string) $numero('tempo_entrega_min', 5, 240, 'Informe de 5 a 240 minutos.'),
+            'cozinha_capacidade' => (string) $numero('cozinha_capacidade', 0, 100, 'Informe de 0 a 100 pratos (0 = sem limite).'),
+            'logo_loja' => $logo,
             'whatsapp_loja' => $whatsapp,
             'aceita_entrega' => $aceita['entrega'] ? '1' : '0',
             'aceita_retirada' => $aceita['retirada'] ? '1' : '0',
@@ -115,6 +119,7 @@ final class AdminConfigController
             throw ErroHttp::validacao($erros);
         }
         (new ConfigRepository())->salvar($valores);
+        \App\Services\TempoDePreparo::recalcularFila(\App\Core\Banco::conexao());   // capacidade ou tempos mudaram (D99)
         $this->ler($req);
     }
 

@@ -76,12 +76,11 @@ final class LojaService
             'whatsapp'              => $c->get('whatsapp_loja'),
             'endereco'              => $c->get('endereco_loja'),
             'tipos_pedido'          => $tipos,
-            'taxa_entrega_centavos' => $c->inteiro('taxa_entrega_centavos'),
-            // Taxa por raio (D98): o navegador calcula igual ao servidor, só para mostrar. null = taxa fixa.
+            // Taxa por raio (D98): o navegador calcula igual ao servidor, só para mostrar. null = sem faixas (entrega sem taxa).
             'entrega_por_raio'      => ($taxa = new TaxaDeEntrega($c))->porRaio() ? $taxa->regras() : null,
             'area_entrega'          => $c->get('area_entrega'),
-            'tempo_retirada_min'    => $c->inteiro('tempo_retirada_min', 25),
-            'tempo_entrega_min'     => $c->inteiro('tempo_entrega_min', 50),
+            // "Fica pronto a partir de X min": um prato do maior tempo, atrás da fila da cozinha de agora (D100).
+            'preparo_min'           => TempoDePreparo::estimativaDeUmPrato(null, $c),
             'horarios'              => $this->horarios(),
         ] + $this->estado();
     }

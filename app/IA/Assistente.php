@@ -94,7 +94,11 @@ final class Assistente
      */
     public function responder(string $telefone, string $texto, ?string $nome = null, array $opcoes = []): array
     {
-        @set_time_limit(70);   // até 3 chamadas ao modelo, cada uma com até 25 s
+        // Até 3 chamadas ao modelo, cada uma com até 25 s. Só na requisição web: na linha de comando o limite valeria para o processo
+        // inteiro a partir daqui (um processo longo, como a suíte de testes no Postgres, morreria 70 s depois).
+        if (PHP_SAPI !== 'cli') {
+            @set_time_limit(70);
+        }
         $c = $this->repo->config();
         $modelo = (string) ($opcoes['modelo'] ?? $c['ia_modelo']);
         $origem = (string) ($opcoes['origem'] ?? 'whatsapp');
@@ -319,13 +323,14 @@ final class Assistente
             $tipos = array_filter([$config->get('aceita_entrega', '1') === '1' ? 'entrega' : null, $config->get('aceita_retirada', '1') === '1' ? 'retirada no balcão' : null]);
             $l[] = 'O cliente pode pedir: ' . implode(' ou ', $tipos) . '.';
             if ($config->get('aceita_entrega', '1') === '1') {
-                $taxa = $config->inteiro('taxa_entrega_centavos');
-                $l[] = 'Entrega: taxa ' . ($taxa > 0 ? self::reais($taxa) : 'grátis') . ', cerca de ' . $config->inteiro('tempo_entrega_min', 50) . ' minutos'
+                $taxa = (new \App\Services\TaxaDeEntrega($config))->porRaio() ? 'pela distância (só dá para dizer o valor depois que o cliente manda a localização)' : 'grátis';
+                $l[] = 'Entrega: taxa ' . $taxa . '. Não há hora de chegada: a loja avisa quando o pedido sai para entrega'
                     . (($area = $config->get('area_entrega')) !== '' ? ". Área atendida: {$area}" : '') . '.';
             }
             if ($config->get('aceita_retirada', '1') === '1') {
-                $l[] = 'Retirada: cerca de ' . $config->inteiro('tempo_retirada_min', 25) . ' minutos.';
+                $l[] = 'Retirada no balcão.';
             }
+            $l[] = 'Preparo: o pedido fica pronto a partir de cerca de ' . \App\Services\TempoDePreparo::estimativaDeUmPrato(null, $config) . ' minutos (depende de quantos pratos e da fila da cozinha; a previsão exata aparece depois do pedido).';
         }
         return implode("\n", $l);
     }

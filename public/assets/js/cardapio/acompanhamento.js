@@ -49,6 +49,10 @@ async function consultar() {
   await Promise.all(andando.map(async (p) => {
     try {
       const { itens, ...novo } = await api(`/api/pedidos/${encodeURIComponent(p.codigo)}`);
+      if (novo.previsao_minutos !== p.previsao_minutos && novo.status === p.status) {
+        p.previsao_minutos = novo.previsao_minutos;   // a fila da cozinha andou (D99)
+        mudou = true;
+      }
       if (novo.status !== p.status) {
         Object.assign(p, novo);
         mudou = true;

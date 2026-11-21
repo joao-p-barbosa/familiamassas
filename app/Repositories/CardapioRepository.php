@@ -16,13 +16,13 @@ final class CardapioRepository
     public const RECURSOS = [
         'categorias'   => ['colunas' => ['nome', 'ordem', 'estado'], 'estados' => ['disponivel', 'oculto']],
         'tamanhos'     => ['colunas' => ['nome', 'sigla', 'descricao', 'preco_centavos', 'inclusos', 'ordem', 'estado'], 'estados' => ['disponivel', 'esgotado', 'oculto']],
-        'massas'       => ['colunas' => ['nome', 'descricao', 'acrescimo_centavos', 'ordem', 'estado'], 'estados' => ['disponivel', 'esgotado', 'oculto']],
+        'massas'       => ['colunas' => ['nome', 'descricao', 'acrescimo_centavos', 'preparo_min', 'ordem', 'estado'], 'estados' => ['disponivel', 'esgotado', 'oculto']],
         'molhos'       => ['colunas' => ['nome', 'descricao', 'acrescimo_centavos', 'cor', 'ordem', 'estado'], 'estados' => ['disponivel', 'esgotado', 'oculto']],
         'ingredientes' => ['colunas' => ['nome', 'grupo', 'preco_extra_centavos', 'ordem', 'estado'], 'estados' => ['disponivel', 'esgotado', 'oculto']],
-        'itens'        => ['colunas' => ['categoria_id', 'tipo', 'nome', 'descricao', 'preco_centavos', 'imagem', 'massa_id', 'molho_id', 'ordem', 'estado'], 'estados' => ['disponivel', 'esgotado', 'oculto']],
+        'itens'        => ['colunas' => ['categoria_id', 'tipo', 'nome', 'descricao', 'preco_centavos', 'imagem', 'massa_id', 'molho_id', 'preparo_min', 'ordem', 'estado'], 'estados' => ['disponivel', 'esgotado', 'oculto']],
     ];
 
-    private const INTEIROS = ['id', 'ordem', 'preco_centavos', 'inclusos', 'acrescimo_centavos', 'preco_extra_centavos', 'categoria_id', 'massa_id', 'molho_id'];
+    private const INTEIROS = ['id', 'ordem', 'preco_centavos', 'inclusos', 'acrescimo_centavos', 'preco_extra_centavos', 'categoria_id', 'massa_id', 'molho_id', 'preparo_min'];
 
     /** Cardápio inteiro, do jeito que o painel precisa (inclui ocultos). */
     public function completo(): array

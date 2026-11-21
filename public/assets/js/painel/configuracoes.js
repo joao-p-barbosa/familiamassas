@@ -6,6 +6,8 @@ import { centavosDeTexto, textoDeCentavos, telefone as formatarTelefone } from '
 import { api } from '../shared/api.js';
 import { avisar } from '../shared/avisos.js';
 import { recipienteDaTela, mostrarErro } from './casca.js';
+import { escolherNoMapa } from '../cardapio/mapa.js';
+import { reduzirFoto } from './foto.js';
 
 const conteudo = recipienteDaTela();   // o contêiner desta tela (criado pelo roteador)
 
@@ -21,6 +23,7 @@ const TEMAS = [
 let config = null;
 let horarios = [];     // por dia (0 = domingo): lista de [abre, fecha]
 let temaSalvo = 'italia';
+let logo = '';         // caminho da logo da loja (/uploads/...), '' sem logo
 
 // ---------- Taxa de entrega por distância (D98) ----------
 const dinheiro = (centavos) => (centavos === null || centavos === undefined ? '' : textoDeCentavos(centavos));
@@ -31,20 +34,20 @@ const linhaFaixa = (f = { ate_km: '', taxa_centavos: null }) => `
     <button type="button" class="botao botao--fantasma botao--icone" data-raio="tirar" aria-label="Tirar esta faixa">${icone('lixeira', 18)}</button>
   </div>`;
 
+const logoHtml = (caminho) => (caminho ? `<img src="${esc(caminho)}" alt="Logo atual" width="48" height="48" style="object-fit: contain;">` : '');
+
 function raioHtml(r) {
   const temPonto = r.lat !== null && r.lng !== null;
   return `
     <section class="bloco" id="bloco-raio">
       <h2 class="bloco__titulo">Taxa de entrega pela distância</h2>
-      <p class="bloco__nota">Cadastre faixas de distância da loja até o cliente (em linha reta, pelo ponto que ele marca no mapa ou manda pelo WhatsApp). Sem faixas, vale a taxa fixa acima.</p>
+      <p class="bloco__nota">Cadastre faixas de distância da loja até o cliente (em linha reta, pelo ponto que ele marca no mapa ou manda pelo WhatsApp). É daqui que sai a taxa de entrega: sem faixas, a entrega sai sem taxa.</p>
       <div class="local-loja">
         <p><strong>Local da loja:</strong> <span id="raio-ponto">${temPonto ? `marcado (${r.lat.toFixed(5)}, ${r.lng.toFixed(5)})` : 'ainda não marcado'}</span></p>
         <input type="hidden" name="raio_lat" value="${temPonto ? r.lat : ''}"><input type="hidden" name="raio_lng" value="${temPonto ? r.lng : ''}">
         <div class="impressora__acoes">
-          <button type="button" class="botao botao--secundario botao--p" data-raio="aqui">${icone('pin', 16)}Usar a localização deste aparelho</button>
-          <button type="button" class="botao botao--fantasma botao--p" data-raio="endereco">Achar pelo endereço da loja</button>
+          <button type="button" class="botao botao--secundario botao--p" data-raio="mapa">${icone('pin', 16)}<span>${temPonto ? 'Mudar no mapa' : 'Marcar no mapa'}</span></button>
         </div>
-        <p class="campo__ajuda">“Usar a localização deste aparelho” funciona melhor com o celular ou o computador dentro da loja.</p>
       </div>
       <div id="raio-faixas">${r.faixas.map(linhaFaixa).join('')}</div>
       <div class="impressora__acoes"><button type="button" class="botao botao--secundario botao--p" data-raio="mais">${icone('mais', 16)}Adicionar faixa</button></div>
@@ -81,6 +84,7 @@ function marcarPonto(lat, lng) {
   form.raio_lat.value = lat;
   form.raio_lng.value = lng;
   $('#raio-ponto').textContent = `marcado (${lat.toFixed(5)}, ${lng.toFixed(5)})`;
+  $('[data-raio="mapa"] span').textContent = 'Mudar no mapa';
   avisar('Local da loja marcado. Clique em Salvar para guardar.');
 }
 
@@ -123,6 +127,16 @@ function desenhar() {
           ${campo('whatsapp_loja', 'WhatsApp da loja', c.whatsapp_loja ? formatarTelefone(c.whatsapp_loja) : '', { tipo: 'tel', extra: 'inputmode="numeric"', ajuda: 'O cliente fala com este número pela página do pedido.' })}
         </div>
         ${campo('endereco_loja', 'Endereço do restaurante', c.endereco_loja, { extra: 'maxlength="120"', ajuda: 'Aparece na retirada e é o destino do botão "Como chegar ao restaurante" (Google Maps). Escreva como numa busca: rua, número, bairro e cidade.' })}
+        <div class="campo">
+          <span class="campo__rotulo">Logo da loja</span>
+          <div class="impressora__acoes" style="align-items: center;">
+            <span id="logo-previa">${logoHtml(logo)}</span>
+            <label class="botao botao--secundario botao--p">${icone('mais', 16)}Enviar a logo<input type="file" id="arquivo-logo" accept="image/png,image/jpeg,image/webp" class="so-leitor"></label>
+            <button type="button" class="botao botao--fantasma botao--p" data-tirar-logo ${logo ? '' : 'hidden'}>Tirar a logo</button>
+          </div>
+          <span class="campo__ajuda">Aparece no menu lateral recolhido, no lugar da letra. Prefira uma imagem quadrada (PNG com fundo transparente fica melhor).</span>
+          <span class="campo__erro" id="erro-logo_loja" hidden></span>
+        </div>
       </section>
 
       <section class="bloco">
@@ -147,10 +161,12 @@ function desenhar() {
         <p class="campo__ajuda">O pedido de mesa feito pelo cardápio cai no Salão, com o nome do cliente, para a atendente levar. Pra viagem continua sendo registrado pela atendente.</p>
         <span class="campo__erro" id="erro-aceita" hidden></span>
         <div class="bloco__grade">
-          ${campo('taxa_entrega', 'Taxa de entrega (R$)', textoDeCentavos(c.taxa_entrega_centavos), { extra: 'inputmode="decimal"', ajuda: 'Use 0,00 para entrega grátis.' })}
-          ${campo('area_entrega', 'Área de entrega', c.area_entrega, { extra: 'maxlength="120"', ajuda: 'Texto que o cliente lê ao escolher entrega.' })}
-          ${campo('tempo_entrega_min', 'Tempo de entrega (min)', c.tempo_entrega_min, { extra: 'inputmode="numeric"' })}
-          ${campo('tempo_retirada_min', 'Tempo para retirada (min)', c.tempo_retirada_min, { extra: 'inputmode="numeric"' })}
+          ${campo('area_entrega', 'Área de entrega', c.area_entrega, { extra: 'maxlength="120"', ajuda: 'Texto que o cliente lê ao escolher entrega. A taxa vem das faixas de distância, logo abaixo.' })}
+        </div>
+        <h3 class="campo__rotulo" style="margin-top: var(--e-5);">Capacidade da cozinha</h3>
+        <p class="bloco__nota">A previsão que o cliente vê é a hora em que o pedido fica pronto. Ela sai de uma linha do tempo da cozinha: os pratos entram na ordem dos pedidos e cada um ocupa uma boca pelo tempo de preparo dele (cadastrado em Cardápio › Massas e nos pratos da casa). Bebidas e sobremesas não contam. Quem chega depois não muda a previsão de quem já pediu; quando um pedido sai da cozinha, quem está atrás adianta.</p>
+        <div class="bloco__grade">
+          ${campo('cozinha_capacidade', 'Pratos ao mesmo tempo', c.cozinha_capacidade, { extra: 'inputmode="numeric"', ajuda: 'Quantos pratos a cozinha prepara juntos (bocas). 0 = sem limite.' })}
         </div>
       </section>
 
@@ -188,8 +204,7 @@ function desenhar() {
 function mostrarErros(form, erros) {
   for (const el of $$('.campo__erro', form)) {
     const nome = el.id.replace('erro-', '');
-    // O servidor fala em "taxa_entrega_centavos"; o campo da tela chama "taxa_entrega".
-    const mensagem = erros[nome] ?? erros[`${nome}_centavos`];
+    const mensagem = erros[nome];
     el.hidden = !mensagem;
     el.textContent = mensagem ?? '';
     form.querySelector(`[name="${nome}"]`)?.setAttribute('aria-invalid', mensagem ? 'true' : 'false');
@@ -204,6 +219,7 @@ async function carregar() {
     config = await api('/api/admin/configuracoes');
     horarios = Array.from({ length: 7 }, (_, d) => (config.horarios[d] ?? []).map((faixa) => [...faixa]));
     temaSalvo = config.tema;
+    logo = config.logo_loja;
     desenhar();
   } catch (erro) {
     mostrarErro(erro);
@@ -230,10 +246,6 @@ delegar(conteudo, 'change', 'input[name="tema"]', (e, entrada) => {
   document.documentElement.dataset.theme = entrada.value;
   $('#nota-salvar').textContent = entrada.value === temaSalvo ? '' : 'Tema em prévia. Salve para valer no cardápio.';
 });
-delegar(conteudo, 'focusout', 'input[name="taxa_entrega"]', (e, entrada) => {
-  const valor = centavosDeTexto(entrada.value);
-  if (valor !== null) entrada.value = textoDeCentavos(valor);
-});
 delegar(conteudo, 'input', 'input[name="whatsapp_loja"]', (e, entrada) => {
   entrada.value = formatarTelefone(entrada.value);
 });
@@ -245,29 +257,40 @@ delegar(conteudo, 'click', '[data-raio]', async (e, botao) => {
     $('#raio-faixas [data-faixa-raio]:last-child input')?.focus();
   } else if (acao === 'tirar') {
     botao.closest('[data-faixa-raio]').remove();
-  } else if (acao === 'aqui') {
-    if (!navigator.geolocation) { avisar('Este aparelho não informa a localização.', { tipo: 'erro' }); return; }
-    botao.setAttribute('aria-busy', 'true');
-    navigator.geolocation.getCurrentPosition(
-      (p) => { botao.removeAttribute('aria-busy'); marcarPonto(p.coords.latitude, p.coords.longitude); },
-      () => { botao.removeAttribute('aria-busy'); avisar('Não deu para pegar a localização. Permita o acesso ou use o endereço da loja.', { tipo: 'erro' }); },
-      { enableHighAccuracy: true, timeout: 15000 },
-    );
-  } else if (acao === 'endereco') {
-    const endereco = $('#form-config').endereco_loja.value.trim();
-    if (!endereco) { avisar('Preencha o endereço da loja primeiro (com a cidade).', { tipo: 'erro' }); return; }
-    botao.setAttribute('aria-busy', 'true');
-    try {
-      const r = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=br&q=${encodeURIComponent(endereco)}`, { headers: { Accept: 'application/json' } });
-      const [achado] = r.ok ? await r.json() : [];
-      if (achado) marcarPonto(Number(achado.lat), Number(achado.lon));
-      else avisar('Não achamos esse endereço no mapa. Escreva com a cidade (ex.: Rua X, 100, Centro, Campinas) ou use a localização do aparelho.', { tipo: 'erro', duracao: 7000 });
-    } catch {
-      avisar('Sem conexão com o mapa agora. Tente de novo.', { tipo: 'erro' });
-    } finally {
-      botao.removeAttribute('aria-busy');
-    }
+  } else if (acao === 'mapa') {
+    const form = $('#form-config');
+    const atual = form.raio_lat.value === '' ? null : { lat: Number(form.raio_lat.value), lng: Number(form.raio_lng.value) };
+    const ponto = await escolherNoMapa({ inicial: atual, enderecoDaLoja: form.endereco_loja.value.trim(), loja: true });
+    if (ponto) marcarPonto(ponto.lat, ponto.lng);
   }
+});
+
+// Logo da loja (D99): enviada como as fotos do cardápio; só vale depois de salvar.
+function mostrarLogo() {
+  $('#logo-previa').innerHTML = logoHtml(logo);
+  $('[data-tirar-logo]').hidden = !logo;
+}
+delegar(conteudo, 'change', '#arquivo-logo', async (e, entrada) => {
+  const arquivo = entrada.files?.[0];
+  entrada.value = '';
+  if (!arquivo) return;
+  const erro = $('#erro-logo_loja');
+  erro.hidden = true;
+  try {
+    const formulario = new FormData();
+    formulario.append('imagem', await reduzirFoto(arquivo, 256), 'logo');
+    logo = (await api('/api/admin/upload', { metodo: 'POST', formulario })).caminho;
+    mostrarLogo();
+    $('#nota-salvar').textContent = 'Logo nova. Salve para valer.';
+  } catch (falha) {
+    erro.textContent = falha.campos?.imagem ?? 'Não conseguimos ler esta imagem. Tente outra.';
+    erro.hidden = false;
+  }
+});
+delegar(conteudo, 'click', '[data-tirar-logo]', () => {
+  logo = '';
+  mostrarLogo();
+  $('#nota-salvar').textContent = 'Logo retirada. Salve para valer.';
 });
 
 conteudo.addEventListener('submit', async (e) => {
@@ -275,11 +298,6 @@ conteudo.addEventListener('submit', async (e) => {
   const form = e.target;
   const botao = form.querySelector('button[type="submit"]');
 
-  const taxa = centavosDeTexto(form.taxa_entrega.value);
-  if (taxa === null) {
-    mostrarErros(form, { taxa_entrega: 'Digite um valor, por exemplo 6,00.' });
-    return;
-  }
   const raio = lerRaio(form);
   if (raio.erro) {
     mostrarErros(form, { entrega_raio: raio.erro });
@@ -293,8 +311,8 @@ conteudo.addEventListener('submit', async (e) => {
         nome_loja: form.nome_loja.value, whatsapp_loja: form.whatsapp_loja.value, endereco_loja: form.endereco_loja.value,
         funcionamento: form.funcionamento.value, horarios,
         aceita_entrega: form.aceita_entrega.checked, aceita_retirada: form.aceita_retirada.checked, aceita_mesa: form.aceita_mesa.checked,
-        taxa_entrega_centavos: taxa, area_entrega: form.area_entrega.value,
-        tempo_entrega_min: form.tempo_entrega_min.value, tempo_retirada_min: form.tempo_retirada_min.value,
+        area_entrega: form.area_entrega.value, logo_loja: logo,
+        cozinha_capacidade: form.cozinha_capacidade.value,
         tema: form.tema.value,
         polling_segundos: form.polling_segundos.value,
         entrega_raio: raio.raio,
@@ -302,12 +320,15 @@ conteudo.addEventListener('submit', async (e) => {
     });
     horarios = Array.from({ length: 7 }, (_, d) => (config.horarios[d] ?? []).map((faixa) => [...faixa]));
     temaSalvo = config.tema;
+    logo = config.logo_loja;
     const rolagem = window.scrollY;
     desenhar();
     window.scrollTo(0, rolagem);
     // O nome da loja aparece no menu lateral (e na barra de cima do celular): atualiza sem recarregar.
     $$('.lateral__marca-texto, .barra-topo__marca').forEach((el) => (el.textContent = config.nome_loja));
-    $$('.lateral__marca-inicial').forEach((el) => (el.textContent = config.nome_loja.charAt(0).toUpperCase()));
+    $$('.lateral__marca-inicial').forEach((el) => {
+      el.innerHTML = config.logo_loja ? `<img src="${esc(config.logo_loja)}" alt="" class="lateral__marca-logo">` : esc(config.nome_loja.charAt(0).toUpperCase());
+    });
     $('.lateral__marca')?.setAttribute('title', config.nome_loja);
     avisar('Configurações salvas');
   } catch (erro) {

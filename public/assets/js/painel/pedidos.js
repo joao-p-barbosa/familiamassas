@@ -103,7 +103,11 @@ function montarTela() {
   conteudo.innerHTML = `
     <div class="cabecalho-tela">
       <h1 class="cabecalho-tela__titulo">Pedidos</h1>
-      <button type="button" class="botao botao--g" data-novo-salao>${icone('mais', 18)}Novo pedido salão</button>
+      <div class="impressora__acoes">
+        <button type="button" class="botao botao--g" data-novo-salao>${icone('mais', 18)}Novo pedido salão</button>
+        <!-- Pedido por telefone, entrega ou retirada: a atendente faz pelo cardápio digital, com mapa e taxa iguais aos do cliente. -->
+        <a class="botao botao--g botao--secundario" href="/" target="_blank" rel="noopener">${icone('externo', 18)}Pedido externo</a>
+      </div>
     </div>
     <div id="fechamento"></div>
     <div class="cabecalho-tela">${ferramentasHtml()}</div>

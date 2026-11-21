@@ -68,6 +68,7 @@ final class PedidoRepository
         }
         $pdo->prepare('INSERT INTO pedido_status_historico (pedido_id, status, motivo, usuario_id, criado_em) VALUES (?, ?, NULL, ?, ?)')
             ->execute([$id, 'novo', $usuarioId, $agora]);
+        TempoDePreparo::recalcularFila($pdo, null, $id);   // a previsão dele, atrás de quem já estava na fila (D100)
 
         return ['id' => $id, 'codigo' => $pedido['codigo']];
     }
@@ -182,6 +183,7 @@ final class PedidoRepository
             }
             $pdo->prepare('INSERT INTO pedido_status_historico (pedido_id, status, motivo, usuario_id, criado_em) VALUES (?, ?, ?, ?, ?)')
                 ->execute([$id, $para, $motivo, $usuarioId, $agora]);
+            TempoDePreparo::recalcularFila($pdo);   // saiu (ou voltou) da cozinha: a fila anda e as previsões mudam (D99)
             return true;
         });
     }
@@ -266,7 +268,7 @@ final class PedidoRepository
 
         return array_map(static function (array $p) use ($itens, $historico, $linhasDeTempo, $comHistorico, $contas, $doIfood): array {
             $id = (int) $p['id'];
-            foreach (['id', 'cliente_id', 'atendimento_id', 'criado_por', 'troco_para_centavos', 'subtotal_centavos', 'taxa_entrega_centavos', 'total_centavos'] as $coluna) {
+            foreach (['id', 'cliente_id', 'atendimento_id', 'criado_por', 'troco_para_centavos', 'subtotal_centavos', 'taxa_entrega_centavos', 'total_centavos', 'previsao_minutos'] as $coluna) {
                 $p[$coluna] = $p[$coluna] === null ? null : (int) $p[$coluna];
             }
             foreach (['entrega_lat', 'entrega_lng'] as $coluna) {
