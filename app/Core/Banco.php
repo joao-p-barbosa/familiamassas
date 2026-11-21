@@ -19,7 +19,7 @@ final class Banco
      * 1 = esquema da rodada de 12/11 (manhã) · 2 = atendimentos do salão e proteínas separadas.
      * Migração nova deve funcionar nos dois bancos (o PDO que ela recebe diz qual é: ATTR_DRIVER_NAME).
      */
-    public const VERSAO_DO_ESQUEMA = 11;
+    public const VERSAO_DO_ESQUEMA = 12;
 
     /** Chave do bloqueio do Postgres que serializa a criação e a migração do banco (pg_advisory_xact_lock). */
     private const TRAVA_DO_ESQUEMA = 726451;
@@ -180,6 +180,16 @@ final class Banco
     private static function prepararEsquema(PDO $pdo, ?string $arquivo): void
     {
         // O caso de quase toda requisição: o banco já está na versão certa. Nada a fazer e nada a trancar.
+        // No Postgres basta ler a versão (uma ida ao banco); se a tabela não existe, o caminho completo abaixo decide.
+        if (self::ehPostgres($pdo)) {
+            try {
+                if ((int) $pdo->query('SELECT versao FROM esquema_versao WHERE id = 1')->fetchColumn() === self::VERSAO_DO_ESQUEMA) {
+                    return;
+                }
+            } catch (\PDOException) {
+                // banco novo ou anterior à numeração de versões
+            }
+        }
         if (self::temTabela($pdo, 'pedidos') && self::versaoDoBanco($pdo) === self::VERSAO_DO_ESQUEMA) {
             return;
         }

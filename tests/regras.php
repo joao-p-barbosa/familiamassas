@@ -271,6 +271,15 @@ conferir('Fechar o caixa: esperado = inicial + dinheiro − retiradas; contado R
     $fechado['estado'], $fechado['fechamento']['esperado_centavos'], $fechado['fechamento']['diferenca_centavos'],
 ], ['fechado', 10000 + $depois['dinheiro_centavos'] - 2000, -500]);
 conferir('Não fecha o mesmo dia duas vezes', codigoDoErro(fn () => $fat->fechar($hojeFat, ['caixa_inicial_centavos' => 0, 'retiradas_centavos' => 0, 'contado_centavos' => 0], $donoFat)), '409 ja_fechado');
+$duplicado = static function () use ($pdoFila, $hojeFat): string {
+    try {
+        $pdoFila->prepare("INSERT INTO fechamentos_caixa (data, caixa_inicial_centavos, vendas_dinheiro_centavos, retiradas_centavos, esperado_centavos, contado_centavos, diferenca_centavos, faturamento_centavos, fechado_em) VALUES (?, 0, 0, 0, 0, 0, 0, 0, '2026-01-01 00:00:00')")->execute([$hojeFat]);
+        return 'gravou';
+    } catch (PDOException) {
+        return 'recusou';
+    }
+};
+conferir('O próprio banco recusa um segundo fechamento ativo no mesmo dia (dois cliques ao mesmo tempo não passam juntos)', $duplicado(), 'recusou');
 conferir('Dia fechado não aceita cancelamento: precisa reabrir', codigoDoErro(fn () => $fat->cancelar("pedido:$vendaY", 'total', [], 'Depois de fechar', $donoFat)), '409 dia_fechado');
 conferir('No calendário, hoje aparece fechado, com o valor do fechamento', array_values(array_filter($fat->calendario(substr($hojeFat, 0, 7))['dias'], static fn (array $d): bool => $d['data'] === $hojeFat))[0]['estado'], 'fechado');
 $reaberto = $fat->reabrir($fechado['fechamento']['id'], 'Conferir de novo', $donoFat);
@@ -1718,7 +1727,7 @@ foreach ([['A1', 'Mesa 5', 'local', '5', 'pix', 'concluido', 'balcao'], ['A2', '
 }
 
 $aplicadas = App\Core\Banco::migrar($antigo, $arquivoAntigo);
-conferir('Banco da versão 1 recebe as migrações 002 a 011', $aplicadas, [2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+conferir('Banco da versão 1 recebe as migrações 002 a 012', $aplicadas, [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
 conferir('A versão do banco passa a ser a atual', (int) $antigo->query('PRAGMA user_version')->fetchColumn(), App\Core\Banco::VERSAO_DO_ESQUEMA);
 conferir('Uma cópia do banco antigo foi guardada antes de mexer', count(glob($pastaMigracao . '/backups/antigo-antes-da-v2-*.sqlite') ?: []), 1);
 conferir('Rodar de novo não faz nada', App\Core\Banco::migrar($antigo, $arquivoAntigo), []);

@@ -267,63 +267,70 @@ final class FaturamentoService
             throw ErroHttp::naoEncontrado('Venda não encontrada.');
         }
         [$deConta, $id] = [$m[1] === 'conta', (int) $m[2]];
-        $pdo = Banco::conexao();
 
-        if ($deConta) {
-            $sql = $pdo->prepare("SELECT total_centavos AS total, encerrado_em AS em FROM atendimentos WHERE id = ? AND status = 'encerrado'");
-        } else {
-            $sql = $pdo->prepare("SELECT total_centavos AS total, criado_em AS em, status FROM pedidos WHERE id = ? AND atendimento_id IS NULL AND status IN ('concluido', 'cancelado')");
-        }
-        $sql->execute([$id]);
-        $venda = $sql->fetch() ?: throw ErroHttp::naoEncontrado('Venda não encontrada.');
-        if (($venda['status'] ?? '') === 'cancelado') {
-            throw new ErroHttp(409, 'ja_cancelada', 'Esta venda já está cancelada.');
-        }
-        if ($this->fechamentoAtivo(self::local($venda['em'])->format('Y-m-d')) !== null) {
-            throw new ErroHttp(409, 'dia_fechado', 'O caixa deste dia já foi fechado. Reabra o dia em Fechamento do dia para cancelar.');
-        }
-        $jaCancelado = $this->canceladoPorVenda($pdo)[$chave] ?? 0;
-        $restante = (int) $venda['total'] - $jaCancelado;
-        if ($restante <= 0) {
-            throw new ErroHttp(409, 'ja_cancelada', 'Esta venda já está cancelada.');
-        }
-
-        // Os itens da venda que ainda podem ser cancelados.
-        $consulta = $deConta
-            ? $pdo->prepare("SELECT i.id, i.nome, i.quantidade, i.quantidade_cancelada, i.preco_unit_centavos FROM itens_pedido i JOIN pedidos p ON p.id = i.pedido_id WHERE p.atendimento_id = ? AND p.status <> 'cancelado'")
-            : $pdo->prepare('SELECT id, nome, quantidade, quantidade_cancelada, preco_unit_centavos FROM itens_pedido WHERE pedido_id = ?');
-        $consulta->execute([$id]);
-        $daVenda = array_column($consulta->fetchAll(), null, 'id');
-
-        $escolhidos = [];
-        if ($tipo === 'total') {
-            foreach ($daVenda as $i) {
-                if ((int) $i['quantidade'] > (int) $i['quantidade_cancelada']) {
-                    $escolhidos[] = ['id' => (int) $i['id'], 'nome' => $i['nome'], 'quantidade' => (int) $i['quantidade'] - (int) $i['quantidade_cancelada']];
-                }
+        // Tudo numa transação que começa travando a linha da venda: dois cancelamentos ao mesmo tempo (clique duplo, duas pessoas)
+        // ficam em fila, e o segundo já confere o que o primeiro cancelou.
+        $venda = Banco::transacao(function (\PDO $pdo) use ($deConta, $id, $chave, $tipo, $itens, $motivo, $usuario): array {
+            $trava = $pdo->prepare($deConta
+                ? "UPDATE atendimentos SET atualizado_em = atualizado_em WHERE id = ? AND status = 'encerrado'"
+                : "UPDATE pedidos SET atualizado_em = atualizado_em WHERE id = ? AND atendimento_id IS NULL AND status IN ('concluido', 'cancelado')");
+            $trava->execute([$id]);
+            if ($trava->rowCount() === 0) {
+                throw ErroHttp::naoEncontrado('Venda não encontrada.');
             }
-            $valor = $restante;   // o total inteiro que falta, com a taxa de entrega
-        } else {
-            $valor = 0;
-            foreach ($itens as $pedido) {
-                $item = $daVenda[(int) ($pedido['id'] ?? 0)] ?? null;
-                $q = (int) ($pedido['quantidade'] ?? 0);
-                if ($q <= 0) {
-                    continue;
-                }
-                if ($item === null || $q > (int) $item['quantidade'] - (int) $item['quantidade_cancelada']) {
-                    throw ErroHttp::validacao(['itens' => 'Um item escolhido não pode ser cancelado nessa quantidade.']);
-                }
-                $escolhidos[] = ['id' => (int) $item['id'], 'nome' => $item['nome'], 'quantidade' => $q];
-                $valor += $q * (int) $item['preco_unit_centavos'];
+            $sql = $pdo->prepare($deConta
+                ? 'SELECT total_centavos AS total, encerrado_em AS em FROM atendimentos WHERE id = ?'
+                : 'SELECT total_centavos AS total, criado_em AS em, status FROM pedidos WHERE id = ?');
+            $sql->execute([$id]);
+            $venda = $sql->fetch();
+            if (($venda['status'] ?? '') === 'cancelado') {
+                throw new ErroHttp(409, 'ja_cancelada', 'Esta venda já está cancelada.');
             }
-            if ($escolhidos === []) {
-                throw ErroHttp::validacao(['itens' => 'Escolha pelo menos um item para cancelar.']);
+            if ($this->fechamentoAtivo(self::local($venda['em'])->format('Y-m-d')) !== null) {
+                throw new ErroHttp(409, 'dia_fechado', 'O caixa deste dia já foi fechado. Reabra o dia em Fechamento do dia para cancelar.');
             }
-            $valor = min($valor, $restante);
-        }
+            $soma = $pdo->prepare('SELECT COALESCE(SUM(valor_centavos), 0) FROM cancelamentos WHERE ' . ($deConta ? 'atendimento_id' : 'pedido_id') . ' = ?');
+            $soma->execute([$id]);
+            $restante = (int) $venda['total'] - (int) $soma->fetchColumn();
+            if ($restante <= 0) {
+                throw new ErroHttp(409, 'ja_cancelada', 'Esta venda já está cancelada.');
+            }
 
-        Banco::transacao(function (\PDO $pdo) use ($deConta, $id, $tipo, $escolhidos, $valor, $motivo, $usuario, $venda): void {
+            // Os itens da venda que ainda podem ser cancelados.
+            $consulta = $deConta
+                ? $pdo->prepare("SELECT i.id, i.nome, i.quantidade, i.quantidade_cancelada, i.preco_unit_centavos FROM itens_pedido i JOIN pedidos p ON p.id = i.pedido_id WHERE p.atendimento_id = ? AND p.status <> 'cancelado'")
+                : $pdo->prepare('SELECT id, nome, quantidade, quantidade_cancelada, preco_unit_centavos FROM itens_pedido WHERE pedido_id = ?');
+            $consulta->execute([$id]);
+            $daVenda = array_column($consulta->fetchAll(), null, 'id');
+
+            $escolhidos = [];
+            if ($tipo === 'total') {
+                foreach ($daVenda as $i) {
+                    if ((int) $i['quantidade'] > (int) $i['quantidade_cancelada']) {
+                        $escolhidos[] = ['id' => (int) $i['id'], 'nome' => $i['nome'], 'quantidade' => (int) $i['quantidade'] - (int) $i['quantidade_cancelada']];
+                    }
+                }
+                $valor = $restante;   // o total inteiro que falta, com a taxa de entrega
+            } else {
+                $valor = 0;
+                foreach ($itens as $pedido) {
+                    $item = $daVenda[(int) ($pedido['id'] ?? 0)] ?? null;
+                    $q = (int) ($pedido['quantidade'] ?? 0);
+                    if ($q <= 0) {
+                        continue;
+                    }
+                    if ($item === null || $q > (int) $item['quantidade'] - (int) $item['quantidade_cancelada']) {
+                        throw ErroHttp::validacao(['itens' => 'Um item escolhido não pode ser cancelado nessa quantidade.']);
+                    }
+                    $escolhidos[] = ['id' => (int) $item['id'], 'nome' => $item['nome'], 'quantidade' => $q];
+                    $valor += $q * (int) $item['preco_unit_centavos'];
+                }
+                if ($escolhidos === []) {
+                    throw ErroHttp::validacao(['itens' => 'Escolha pelo menos um item para cancelar.']);
+                }
+                $valor = min($valor, $restante);
+            }
+
             $marca = $pdo->prepare('UPDATE itens_pedido SET quantidade_cancelada = quantidade_cancelada + ? WHERE id = ?');
             foreach ($escolhidos as $e) {
                 $marca->execute([$e['quantidade'], $e['id']]);
@@ -332,6 +339,7 @@ final class FaturamentoService
                 $deConta ? null : $id, $deConta ? $id : null, $tipo, $valor,
                 json_encode($escolhidos, JSON_UNESCAPED_UNICODE), $motivo, $usuario['id'], Relogio::agora(),
             ]);
+            return $venda;
         });
         if (!$deConta && $tipo === 'total') {
             // O pedido também fica Cancelado (histórico com o motivo); sem aviso ao cliente: a venda já tinha sido entregue.
@@ -425,6 +433,19 @@ final class FaturamentoService
         }
         $resumo = $this->resumoDoDia($data);
         $esperado = $inicial + $resumo['dinheiro_centavos'] - $retiradas;
+        try {
+            $this->gravarFechamento($data, $inicial, $retiradas, $contado, $esperado, $resumo, $d, $usuario);
+        } catch (\PDOException $e) {
+            if (in_array($e->getCode(), ['23505', '23000'], true)) {   // idx_fechamentos_um_por_dia: outro fechamento chegou antes
+                throw new ErroHttp(409, 'ja_fechado', 'O caixa deste dia já foi fechado.');
+            }
+            throw $e;
+        }
+        return $this->dia($data);
+    }
+
+    private function gravarFechamento(string $data, int $inicial, int $retiradas, int $contado, int $esperado, array $resumo, array $d, array $usuario): void
+    {
         Banco::transacao(function (\PDO $pdo) use ($data, $inicial, $retiradas, $contado, $esperado, $resumo, $d, $usuario): void {
             $existe = $pdo->prepare('SELECT 1 FROM fechamentos_caixa WHERE data = ? AND cancelado_em IS NULL');
             $existe->execute([$data]);
@@ -437,7 +458,6 @@ final class FaturamentoService
                 mb_substr(trim((string) ($d['observacao'] ?? '')), 0, 500), $usuario['id'], Relogio::agora(),
             ]);
         });
-        return $this->dia($data);
     }
 
     public function reabrir(int $id, string $motivo, array $usuario): array

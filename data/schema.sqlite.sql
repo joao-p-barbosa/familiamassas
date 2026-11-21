@@ -167,6 +167,7 @@ CREATE TABLE pedidos (
 );
 CREATE INDEX idx_pedidos_atualizado ON pedidos (atualizado_em);
 CREATE INDEX idx_pedidos_status ON pedidos (status);
+CREATE INDEX idx_pedidos_criado ON pedidos (criado_em);
 CREATE INDEX idx_pedidos_telefone ON pedidos (cliente_telefone);
 CREATE INDEX idx_pedidos_atendimento ON pedidos (atendimento_id);
 
@@ -398,6 +399,7 @@ CREATE TABLE fechamentos_caixa (
   motivo_cancelamento      TEXT
 );
 CREATE INDEX idx_fechamentos_data ON fechamentos_caixa (data);
+CREATE UNIQUE INDEX idx_fechamentos_um_por_dia ON fechamentos_caixa (data) WHERE cancelado_em IS NULL;
 
 CREATE TABLE cancelamentos (
   id             INTEGER PRIMARY KEY AUTOINCREMENT,
