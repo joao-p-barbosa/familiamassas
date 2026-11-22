@@ -95,9 +95,10 @@ export function comandaHtml(pedido, { largura = ajustes.comanda_largura_mm, comP
         <p class="comanda__secao">Resumo do pedido</p>
         ${resumo}
       </div>
-      ${comPreco ? `
+      ${comPreco || !ifood ? `
       <div class="comanda__bloco">
-        ${pedido.taxa_entrega_centavos ? `<p class="comanda__meta"><span>Taxa de entrega</span><span>${reais(pedido.taxa_entrega_centavos)}</span></p>` : ''}
+        ${pedido.taxa_entrega_centavos ? `<p class="comanda__meta"><span>Taxa de entrega</span><span>${reais(pedido.taxa_entrega_centavos)}</span></p>`
+          : (pedido.observacoes ?? '').startsWith('TAXA DE ENTREGA A CONFIRMAR') ? '<p class="comanda__meta"><span>Taxa de entrega</span><span>a confirmar</span></p>' : ''}
         <p class="comanda__total"><span>TOTAL</span><span>${reais(pedido.total_centavos)}</span></p>
       </div>` : ''}
       ${ifood ? '' : `<p class="comanda__tipo">${pedido.pagamento === 'caixa' ? (pedido.tipo === 'local' ? 'Pagamento na mesa' : 'Pagamento na conta') : `Pagamento: ${esc(PAGAMENTOS[pedido.pagamento] ?? pedido.pagamento)}${troco}`}</p>`}

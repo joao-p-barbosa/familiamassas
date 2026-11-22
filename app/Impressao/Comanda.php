@@ -5,6 +5,7 @@ namespace App\Impressao;
 
 use App\Core\Relogio;
 use App\Repositories\CardapioRepository;
+use App\Services\PedidoService;
 
 /**
  * A comanda como uma lista de linhas, para o agente de impressão desenhar (D80). É o mesmo conteúdo da comanda do navegador
@@ -122,10 +123,13 @@ final class Comanda
             }
             $l[] = $linha;
         }
-        if ($comPreco) {
+        // D118: o total sai sempre no resumo (mesmo na comanda sem preço por item). No iFood, quem manda é o "pago ou cobrar".
+        if ($comPreco || $ifood === null) {
             $l[] = ['t' => '', 'e' => 'espaco'];
             if ((int) $pedido['taxa_entrega_centavos'] > 0) {
                 $l[] = ['t' => 'Taxa de entrega', 'e' => 'normal', 'd' => self::reais((int) $pedido['taxa_entrega_centavos'])];
+            } elseif (str_starts_with((string) ($pedido['observacoes'] ?? ''), PedidoService::TAXA_A_CONFIRMAR)) {
+                $l[] = ['t' => 'Taxa de entrega', 'e' => 'normal', 'd' => 'a confirmar'];
             }
             $l[] = ['t' => 'TOTAL', 'e' => 'destaque', 'd' => self::reais((int) $pedido['total_centavos'])];
         }

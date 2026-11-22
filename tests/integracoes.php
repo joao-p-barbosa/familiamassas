@@ -492,7 +492,12 @@ $comPreco = $texto(Comanda::linhas($comum, ['nome_loja' => 'Família Massas', 'c
 conferir('Comanda comum com preço: total, telefone e o pagamento num quadro em destaque (D97)', [str_contains($comPreco, 'TOTAL | R$ 24,90'), str_contains($comPreco, 'PAGAMENTO: PIX'), str_contains($comPreco, '(11) 91234-5678')], [true, true, true]);
 $semPreco = Comanda::linhas($comum, ['nome_loja' => 'X', 'com_preco' => false]);
 $quadroPagamento = array_values(array_filter($semPreco, static fn (array $l): bool => str_starts_with($l['t'], 'PAGAMENTO')));
-conferir('O pagamento sai mesmo na comanda sem preço, no estilo de quadro', [$quadroPagamento[0]['t'] ?? null, $quadroPagamento[0]['e'] ?? null, str_contains($texto($semPreco), 'TOTAL')], ['PAGAMENTO: PIX', 'caixa', false]);
+conferir('Comanda sem preço por item: o pagamento sai no quadro e o TOTAL sai no resumo mesmo assim (D118)', [$quadroPagamento[0]['t'] ?? null, $quadroPagamento[0]['e'] ?? null, str_contains($texto($semPreco), 'TOTAL | R$ 24,90')], ['PAGAMENTO: PIX', 'caixa', true]);
+$aConfirmar = $comum;
+$aConfirmar['tipo'] = 'entrega';
+$aConfirmar['taxa_entrega_centavos'] = 0;
+$aConfirmar['observacoes'] = App\Services\PedidoService::TAXA_A_CONFIRMAR;
+conferir('Entrega sem localização: o resumo mostra a taxa a confirmar antes do total (D118)', str_contains($texto(Comanda::linhas($aConfirmar, ['nome_loja' => 'X', 'com_preco' => false])), 'Taxa de entrega | a confirmar'), true);
 conferir('Dinheiro com troco, pedido da mesa ("na mesa", D112) e salão pra viagem', [
     Comanda::pagamentoEmDestaque(['pagamento' => 'dinheiro', 'troco_para_centavos' => 10000]), Comanda::pagamentoEmDestaque(['pagamento' => 'caixa', 'tipo' => 'local', 'troco_para_centavos' => null]),
     Comanda::pagamentoEmDestaque(['pagamento' => 'dinheiro', 'troco_para_centavos' => null]), Comanda::pagamentoEmDestaque(['pagamento' => 'caixa', 'tipo' => 'viagem', 'troco_para_centavos' => null]),
