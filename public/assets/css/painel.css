@@ -376,6 +376,17 @@
   .painel--recolhido .lateral__marca::after {
     content: none;
   }
+  /* Com logo (D115): a logo ocupa o lugar da inicial, sem a bolinha de fundo. */
+  .painel--recolhido .lateral__marca:has(.lateral__marca-logo) {
+    background: none;
+    border-radius: 0;
+    width: 3rem;
+    height: 3rem;
+  }
+  .painel--recolhido .lateral__marca-logo {
+    width: 3rem;
+    height: 3rem;
+  }
   .painel--recolhido .lateral__marca-inicial {
     display: block;
     font-size: var(--texto-5);

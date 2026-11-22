@@ -50,6 +50,13 @@ final class PrecoService
         foreach (array_unique(array_map('intval', $ids)) as $id) {
             $ingredientes[] = $this->disponivel($cardapio['ingredientes'], $id, 'ingrediente');
         }
+        // Limite por grupo (D115): acompanhamentos até 8; tempero à vontade.
+        foreach (array_count_values(array_map(static fn (array $i): string => (string) $i['grupo'], $ingredientes)) as $grupo => $quantos) {
+            $limite = self::limiteDoGrupo((string) $grupo);
+            if ($limite !== null && $quantos > $limite) {
+                throw new ErroHttp(422, 'montagem_invalida', "Escolha até {$limite} em " . mb_strtolower((string) $grupo) . '.');
+            }
+        }
         // Na ordem do cardápio, para a comanda sair igual não importa a ordem do clique.
         usort($ingredientes, static fn (array $a, array $b): int => [$a['ordem'], $a['id']] <=> [$b['ordem'], $b['id']]);
         // O valor de cada opção neste tamanho (D108) substitui o do cadastro em tudo que segue (preço, extras, comanda).
@@ -109,6 +116,30 @@ final class PrecoService
     }
 
     /** Os molhos escolhidos (D110): a lista molho_ids ou, no formato antigo, o molho_id. Sem repetir. @return list<int> */
+    /** Máximo de escolhas por grupo de ingredientes (D115), pelo começo do nome do grupo. Grupo fora da lista: sem limite. */
+    public const LIMITES_POR_GRUPO = ['acompanhamento' => 8];
+
+    public static function limiteDoGrupo(string $grupo): ?int
+    {
+        $nome = mb_strtolower(trim($grupo));
+        foreach (self::LIMITES_POR_GRUPO as $comeco => $limite) {
+            if (str_starts_with($nome, $comeco)) {
+                return $limite;
+            }
+        }
+        return null;
+    }
+
+    /** O que vai entre parênteses ao lado do grupo (D115): "(escolha até 8)", "(à vontade, sem limite)" no tempero, ou nada. */
+    public static function dicaDoGrupo(string $grupo): string
+    {
+        $limite = self::limiteDoGrupo($grupo);
+        if ($limite !== null) {
+            return "(escolha até {$limite})";
+        }
+        return str_starts_with(mb_strtolower(trim($grupo)), 'tempero') && !str_contains($grupo, '(') ? '(à vontade, sem limite)' : '';
+    }
+
     public static function idsDosMolhos(array $escolha): array
     {
         $ids = $escolha['molho_ids'] ?? null;

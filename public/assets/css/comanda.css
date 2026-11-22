@@ -63,8 +63,18 @@
 .comanda__cliente {
   font-weight: 700;
 }
+/* D112: um traço separa um prato do outro; o prato traz só o que foi escolhido, uma linha por seção. */
 .comanda__item + .comanda__item {
-  margin-top: 3mm;
+  margin-top: 2mm;
+  padding-top: 2mm;
+  border-top: 0.4mm dashed #000000;
+}
+.comanda__escolha {
+  margin-top: 0.5mm;
+}
+.comanda__escolha--lista {
+  margin-top: 0;
+  padding-left: 3mm;
 }
 .comanda__item-nome {
   display: flex;

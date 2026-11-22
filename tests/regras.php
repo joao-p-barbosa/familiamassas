@@ -153,6 +153,15 @@ try {
 } catch (App\Core\ErroHttp $e) {
     conferir('Sem nenhum molho o prato é recusado', 'recusou', 'recusou');
 }
+// D115: acompanhamentos até 8; tempero à vontade.
+$acomps = array_column(array_values(array_filter($cardapio['ingredientes'], static fn (array $i): bool => $i['grupo'] === 'Acompanhamentos' && $i['estado'] === 'disponivel')), 'id');
+$comAcomps = static fn (int $n): array => ['tamanho_id' => $id('tamanhos', 'Meio'), 'massa_id' => $id('massas', 'Penne'), 'molho_ids' => [$id('molhos', 'Bolonhesa')], 'ingrediente_ids' => array_slice($acomps, 0, $n)];
+conferir('Limite por grupo: acompanhamentos até 8, tempero sem limite, e o texto entre parênteses', [
+    count($acomps) >= 9, count($preco->montar($cardapio, $comAcomps(8))['montagem']['inclusos']) + count($preco->montar($cardapio, $comAcomps(8))['montagem']['extras']),
+    codigoDoErro(fn () => $preco->montar($cardapio, $comAcomps(9))),
+    App\Services\PrecoService::limiteDoGrupo('Acompanhamentos'), App\Services\PrecoService::limiteDoGrupo('Tempero'),
+    App\Services\PrecoService::dicaDoGrupo('Acompanhamentos'), App\Services\PrecoService::dicaDoGrupo('Tempero'), App\Services\PrecoService::dicaDoGrupo('Tempero (quanto quiser)'), App\Services\PrecoService::dicaDoGrupo('Queijos'),
+], [true, 8, '422 montagem_invalida', 8, null, '(escolha até 8)', '(à vontade, sem limite)', '', '']);
 // D108: acréscimo por tamanho. No cardápio de teste (em memória): Bacon 3 no Meio e 5 no Inteiro; Brócolis grátis no Meio e 2 no
 // Inteiro; Bolonhesa 3 no Meio e 4 no Inteiro. Massa sem tabela (Penne) usa o valor do cadastro.
 $cardapioTam = $cardapio;
@@ -1346,16 +1355,47 @@ $diz('2', null, $fonePin);
 conferir('No WhatsApp, a escolha de entrega não fala de taxa: ela vem depois da localização', str_contains($tela(), 'taxa'), false);
 $diz($opcao('Entrega'), null, $fonePin);
 $diz('Rui', null, $fonePin);
-conferir('Sem o pin não dá para seguir (a taxa depende dele); pin longe demais: fora da área', [
-    $diz('0', null, $fonePin), str_contains($tela(), 'precisamos da sua localização'), $diz('', ['lat' => -23.6400, 'lng' => -46.6300], $fonePin), str_contains($tela(), 'fora da nossa área'),
-], ['local', true, 'local', true]);
+conferir('A localização é um pedido, não exigência (D112): "0" segue para o endereço escrito; pin longe demais: fora da área', [
+    $diz('0', null, $fonePin), str_contains($tela(), 'Escreva o endereço'), $diz('', ['lat' => -23.6400, 'lng' => -46.6300], $fonePin), str_contains($tela(), 'fora da nossa área'),
+], ['endereco', true, 'local', true]);
 conferir('Pin a 2 km: mostra a distância e a taxa da faixa', [$diz('', ['lat' => -23.5680, 'lng' => -46.6300], $fonePin), str_contains($tela(), 'taxa R$ 8,00')], ['endereco_numero', true]);
 $pdoFx->exec("DELETE FROM whatsapp_sessoes WHERE telefone = '{$fonePin}'");
+// D112: só com o endereço escrito o pedido fecha; a taxa fica a confirmar e a comanda avisa.
+$foneSemPin = '5511966660023';
+$diz('cardapio', null, $foneSemPin);
+$diz($opcao('Bebidas'), null, $foneSemPin);
+$diz($opcao('Água mineral'), null, $foneSemPin);
+$diz('1', null, $foneSemPin);
+$diz('2', null, $foneSemPin);
+$diz($opcao('Entrega'), null, $foneSemPin);
+$diz('Rui', null, $foneSemPin);
+conferir('Endereço escrito que o mapa não acha (D115): o bot pede a localização uma vez, com educação', [$diz('Rua das Flores, 120, Vila Nova, apto 3', null, $foneSemPin), str_contains($tela(), 'Pelo endereço não consegui achar aqui no mapa'), str_contains($tela(), 'compartilhar a localização, por favor?')],
+    ['local_confirma', true, true]);
+$semPin = [$diz('0', null, $foneSemPin), $diz('1', null, $foneSemPin), str_contains($tela(), 'Taxa de entrega — a confirmar na entrega'), $diz('1', null, $foneSemPin)];
+$ultimoSemPin = $pdoFx->query('SELECT taxa_entrega_centavos, observacoes, endereco_complemento FROM pedidos ORDER BY id DESC LIMIT 1')->fetch();
+conferir('Sem mandar a localização: não trava; resumo com a taxa a confirmar na entrega e a comanda avisa a loja', [...$semPin, (int) $ultimoSemPin['taxa_entrega_centavos'], str_starts_with((string) $ultimoSemPin['observacoes'], 'TAXA DE ENTREGA A CONFIRMAR NA ENTREGA'), $ultimoSemPin['endereco_complemento']],
+    ['pagamento', 'resumo', true, 'pedido_criado', 0, true, 'apto 3']);
+// Mandou a localização depois do pedido: a taxa sai pela distância e o endereço escrito fica.
+$foneComPin = '5511966660024';
+$diz('cardapio', null, $foneComPin);
+$diz($opcao('Bebidas'), null, $foneComPin);
+$diz($opcao('Água mineral'), null, $foneComPin);
+$diz('1', null, $foneComPin);
+$diz('2', null, $foneComPin);
+$diz($opcao('Entrega'), null, $foneComPin);
+$diz('Rui', null, $foneComPin);
+$diz('Rua das Flores, 120, Vila Nova', null, $foneComPin);
+conferir('Pediu a localização e o cliente mandou: taxa da faixa (2 km, R$ 8,00) e segue para o pagamento, com a rua escrita', [
+    $diz('', ['lat' => -23.5680, 'lng' => -46.6300], $foneComPin), str_contains($tela(), 'Taxa de entrega: R$ 8,00'), (new App\WhatsApp\FluxoPedido())->ativo($foneComPin),
+], ['pagamento', true, true]);
+$pdoFx->exec("DELETE FROM whatsapp_sessoes WHERE telefone = '{$foneComPin}'");
 $pedidoRaio = ['tipo' => 'entrega', 'cliente' => ['nome' => 'Rui', 'telefone' => '(11) 91234-5678'], 'pagamento' => ['forma' => 'pix'], 'itens' => [['tipo' => 'simples', 'item_id' => $id('itens', 'Tiramisù'), 'quantidade' => 1]]];
 conferir('Cardápio digital: a taxa do pedido sai da distância; sem o ponto, pede para marcar no mapa', [
     (int) (new App\Repositories\PedidoRepository())->porId((new PedidoService())->criar($pedidoRaio + ['endereco' => ['rua' => 'Rua A', 'numero' => '1', 'bairro' => 'Centro', 'lat' => -23.5545, 'lng' => -46.6300]])['id'])['taxa_entrega_centavos'],
     array_keys(camposDoErro(fn () => (new PedidoService())->criar($pedidoRaio + ['endereco' => ['rua' => 'Rua A', 'numero' => '1', 'bairro' => 'Centro']]))),
-], [300, ['tipo']]);
+    // "taxa a confirmar" só vale para o bot (telefone verificado); o site continua pedindo o mapa
+    array_keys(camposDoErro(fn () => (new PedidoService())->criar($pedidoRaio + ['taxa_a_confirmar' => true, 'endereco' => ['rua' => 'Rua A', 'numero' => '1', 'bairro' => 'Centro']]))),
+], [300, ['tipo'], ['tipo']]);
 (new ConfigRepository())->salvar(['loja_lat' => '', 'loja_lng' => '', 'entrega_faixas' => '']);
 App\Services\Geocodificador::$transporte = static fn (string $url): ?string => null;
 

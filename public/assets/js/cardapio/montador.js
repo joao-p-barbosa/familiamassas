@@ -4,7 +4,7 @@
 import { $, $$, esc, delegar } from '../shared/dom.js';
 import { icone, iconeMassa, iconePorcao } from '../shared/icones.js';
 import { reais, acrescimo, plural } from '../shared/formato.js';
-import { calcularMontagem, precoDoPrato, noTamanho, faixa, idsDosMolhos } from '../shared/preco.js';
+import { calcularMontagem, precoDoPrato, noTamanho, faixa, idsDosMolhos, limiteDoGrupo, dicaDoGrupo } from '../shared/preco.js';
 import { abrirFolha, fecharFolha } from '../shared/folha.js';
 import { avisar } from '../shared/avisos.js';
 import { estado, adicionarAoCarrinho, atualizarLinha } from './estado.js';
@@ -219,7 +219,7 @@ const CONTEUDO = {
       <div class="contador" id="montador-contador" role="status" aria-live="polite"></div>
       ${[...grupos].map(([grupo, lista]) => `
         <fieldset class="grupo-opcoes grupo-opcoes--duas">
-          <legend class="grupo-opcoes__titulo">${esc(grupo)}</legend>
+          <legend class="grupo-opcoes__titulo">${esc(grupo)}${dicaDoGrupo(grupo) ? ` <span class="grupo-opcoes__dica">${dicaDoGrupo(grupo)}</span>` : ''}</legend>
           ${lista.map((i) => `
             <label class="opcao opcao--caixa">
               <input class="opcao__entrada" type="checkbox" name="ingrediente" value="${i.id}" ${m.escolha.ingrediente_ids.includes(i.id) ? 'checked' : ''} ${disponivel(i) ? '' : 'disabled'}>
@@ -402,6 +402,16 @@ delegar(dialogo, 'change', 'input, textarea', (e, campo) => {
   if (campo.name === 'ingrediente' || campo.name === 'molho') {
     const id = Number(campo.value);
     const chave = campo.name === 'molho' ? 'molho_ids' : 'ingrediente_ids';
+    if (campo.name === 'ingrediente' && campo.checked) {   // D115: acompanhamentos até 8
+      const grupo = estado.cardapio.ingredientes.find((i) => i.id === id)?.grupo;
+      const limite = limiteDoGrupo(grupo);
+      const noGrupo = m.escolha.ingrediente_ids.filter((x) => estado.cardapio.ingredientes.find((i) => i.id === x)?.grupo === grupo).length;
+      if (limite !== null && noGrupo >= limite) {
+        campo.checked = false;
+        avisar(`Escolha até ${limite} em ${String(grupo).toLowerCase()}.`);
+        return;
+      }
+    }
     m.escolha[chave] = campo.checked ? [...m.escolha[chave], id] : m.escolha[chave].filter((x) => x !== id);
   } else if (campo.name === 'observacoes') {
     m.escolha.observacoes = campo.value.trim();

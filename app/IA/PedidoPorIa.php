@@ -36,9 +36,9 @@ final class PedidoPorIa
     /** Regras que entram no prompt quando a IA faz o pedido (no lugar de "você não monta pedido"). */
     public const REGRAS = "- Você MONTA O PEDIDO do cliente pela conversa, com as ferramentas. Quem calcula preço e total é o sistema: nunca some valores nem diga um total que não veio de uma ferramenta.\n"
         . "- Se o cliente já mandar o pedido na primeira mensagem, coloque tudo de uma vez (adicionar_ao_pedido aceita vários itens) e pergunte só o que faltar.\n"
-        . "- Use só os códigos do CARDÁPIO. Se o cliente pedir algo que não existe, ou estiver em dúvida entre opções, pergunte em vez de escolher por ele. Prato da casa precisa do tamanho; o \"Monte sua massa\" precisa de tamanho, uma massa e um ou mais molhos (o cliente pode misturar molhos; cada um soma o seu valor).\n"
+        . "- Use só os códigos do CARDÁPIO. Se o cliente pedir algo que não existe, ou estiver em dúvida entre opções, pergunte em vez de escolher por ele. Prato da casa precisa do tamanho; o \"Monte sua massa\" precisa de tamanho, uma massa e um ou mais molhos (o cliente pode misturar molhos; cada um soma o seu valor). Acompanhamentos: no máximo 8 por prato; tempero é à vontade, sem limite.\n"
         . "- Para fechar, o pedido precisa de: itens, entrega ou retirada, nome e forma de pagamento (e endereço, se for entrega). Pergunte o que faltar, uma ou duas coisas por vez.\n"
-        . "- Entrega: peça a localização pelo WhatsApp (clipe 📎 > Localização) ou o endereço com rua, número e bairro. Dinheiro: pergunte se precisa de troco e para quanto.\n"
+        . "- Entrega: peça o endereço com rua, número e bairro, ou a localização pelo WhatsApp (clipe 📎 > Localização). A localização é um pedido, nunca uma exigência: se o cliente já escreveu o endereço, não insista nela, só pergunte o complemento (apto, bloco) ou um ponto de referência e siga. Dinheiro: pergunte se precisa de troco e para quanto.\n"
         . "- Com tudo completo, chame mostrar_resumo: o sistema manda o resumo com o total logo depois da sua mensagem (não repita os itens nem o total). Só chame confirmar_pedido quando o cliente responder que confirma DEPOIS de ver o resumo. Se ele mudar algo, ajuste e mostre o resumo de novo.\n"
         . "- Não pergunte o telefone: o sistema já tem o número desta conversa.\n";
 
@@ -231,8 +231,8 @@ final class PedidoPorIa
         $escreveuRua = trim((string) ($args['rua'] ?? '')) !== '';
         // Endereço escrito sem pin (ou diferente do pin): acha o ponto pelo endereço, para a taxa por distância.
         if ($escreveuRua && (empty($e['lat']) || !empty($e['aproximado'])) && ($e['rua'] ?? '') !== '' && ($e['bairro'] ?? '') !== '') {
-            $ponto = Geocodificador::coordenadas("{$e['rua']}, " . ($e['numero'] ?? '') . ", {$e['bairro']}", $this->cidadeDaLoja());
-            if ($ponto !== null && $this->pertoDaLoja($ponto)) {
+            $ponto = (new TaxaDeEntrega($this->config))->pontoDoEndereco($e['rua'], (string) ($e['numero'] ?? ''), $e['bairro']);
+            if ($ponto !== null) {
                 $e = array_merge($e, $ponto, ['aproximado' => true]);
             }
         }
@@ -241,7 +241,12 @@ final class PedidoPorIa
         $taxa = new TaxaDeEntrega($this->config);
         $r = 'Entrega anotada' . ($faltam !== [] ? '. Falta: ' . implode(', ', $faltam) . '.' : '.');
         if ($taxa->porRaio() && empty($e['lat'])) {
-            return $r . ' Não achei esse endereço no mapa: peça ao cliente para mandar a localização pelo WhatsApp (clipe 📎 > Localização), que é por ela que sai a taxa.';
+            // D115: não achou no mapa. Pede a localização UMA vez; se o cliente não mandar, segue e a taxa fica a confirmar na entrega.
+            if (empty($s['pediu_local'])) {
+                $s['pediu_local'] = true;
+                return $r . ' Não achei esse endereço no mapa. Peça a localização uma vez, com estas palavras ou parecidas: "Pelo endereço não consegui achar aqui no mapa, consegue compartilhar a localização, por favor? (clipe 📎 > Localização)". Se ele não mandar, siga com o pedido: a taxa fica a confirmar na entrega.';
+            }
+            return $r . ' Continua sem a localização: não peça de novo. Siga com o pedido; a taxa de entrega fica a confirmar quando o motoboy chegar.';
         }
         $calculo = $taxa->calcular($e['lat'] ?? null, $e['lng'] ?? null);
         if (!$calculo['atende']) {
@@ -310,6 +315,7 @@ final class PedidoPorIa
                 'pagamento' => $s['pagamento'],
                 'observacoes' => '',
                 'itens' => $s['carrinho'],
+                'taxa_a_confirmar' => $this->taxaAConfirmar($s),
                 'total_esperado_centavos' => $totais['total'],
                 't' => (new TokenWhatsApp())->gerar($telefone),   // telefone verificado da conversa: origem "whatsapp"
             ]);
@@ -351,17 +357,10 @@ final class PedidoPorIa
             . (empty($e['numero']) ? ' Pergunte o número da casa e o complemento.' : '') . ']';
     }
 
-    private function cidadeDaLoja(): string
+    /** Entrega sem ponto no mapa, com taxa por distância: a taxa fica a confirmar pela loja (D112). */
+    private function taxaAConfirmar(array $s): bool
     {
-        $partes = array_map('trim', explode(',', $this->config->get('endereco_loja')));
-        return implode(', ', array_slice($partes, -2));
-    }
-
-    /** O ponto achado pelo endereço escrito está perto da loja? (rua de mesmo nome em outra cidade fica de fora) */
-    private function pertoDaLoja(array $ponto): bool
-    {
-        $r = (new TaxaDeEntrega($this->config))->regras();
-        return $r['lat'] === null || TaxaDeEntrega::km($r['lat'], $r['lng'], $ponto['lat'], $ponto['lng']) <= 60;
+        return ($s['tipo'] ?? '') === 'entrega' && empty($s['endereco']['lat']) && (new TaxaDeEntrega($this->config))->porRaio();
     }
 
     // ---------- Carrinho e resumo ----------
@@ -431,7 +430,6 @@ final class PedidoPorIa
             'itens' => $s['carrinho'] === [],
             'entrega ou retirada' => !isset($s['tipo']),
             'endereço com rua, número e bairro' => ($s['tipo'] ?? '') === 'entrega' && (($e['rua'] ?? '') === '' || ($e['numero'] ?? '') === '' || ($e['bairro'] ?? '') === ''),
-            'localização para a taxa de entrega' => ($s['tipo'] ?? '') === 'entrega' && empty($e['lat']) && (new TaxaDeEntrega($this->config))->porRaio(),
             'nome' => ($s['nome'] ?? '') === '',
             'forma de pagamento' => !isset($s['pagamento']['forma']),
         ]));
@@ -447,7 +445,8 @@ final class PedidoPorIa
         }
         if ($s['tipo'] === 'entrega') {
             $e = $s['endereco'];
-            $l[] = 'Entrega: ' . self::reais($t['taxa']) . (!empty($e['aproximado']) ? ' (calculada pelo endereço escrito)' : '');
+            $l[] = $this->taxaAConfirmar($s) ? 'Entrega: taxa a confirmar na entrega (sem a localização não deu para calcular)'
+                : 'Entrega: ' . self::reais($t['taxa']) . (!empty($e['aproximado']) ? ' (calculada pelo endereço escrito)' : '');
         }
         $l[] = '*Total: ' . self::reais($t['total']) . '*';
         $l[] = '';
@@ -480,7 +479,7 @@ final class PedidoPorIa
         $l[] = 'Entrega ou retirada: ' . ($s['tipo'] ?? 'não definido') . '.';
         if (($s['tipo'] ?? '') === 'entrega') {
             $e = $s['endereco'] ?? [];
-            $l[] = 'Endereço: ' . (($e['rua'] ?? '') !== '' ? trim("{$e['rua']}, " . ($e['numero'] ?? '?') . ' – ' . ($e['bairro'] ?? '?')) : 'não informado') . (!empty($e['lat']) ? ' (com localização)' : ' (sem localização)') . '.';
+            $l[] = 'Endereço: ' . (($e['rua'] ?? '') !== '' ? trim("{$e['rua']}, " . ($e['numero'] ?? '?') . ' – ' . ($e['bairro'] ?? '?')) : 'não informado') . (!empty($e['lat']) ? ' (com localização)' : (!empty($s['pediu_local']) ? ' (sem localização; já foi pedida uma vez, não peça de novo: a taxa fica a confirmar na entrega)' : ' (sem localização)')) . '.';
         }
         $l[] = 'Nome: ' . ($s['nome'] ?? 'não informado') . (empty($s['nome']) && !empty($s['nome_whatsapp']) ? " (no WhatsApp aparece \"{$s['nome_whatsapp']}\": confirme se é esse)" : '') . '.';
         $l[] = 'Pagamento: ' . (isset($s['pagamento']['forma']) ? self::PAGAMENTOS[$s['pagamento']['forma']] : 'não informado') . '.';

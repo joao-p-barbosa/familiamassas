@@ -284,6 +284,13 @@ Como testar o resto:
 - Salão (D107): Pedidos › Novo pedido salão › nome › Mesa: não pede mais o número; o cartão mostra o nome do cliente.
 - Mesa pelo cardápio (D96, conferido): no cardápio do cliente, Mesa › nome › pedido; aparece na coluna Salão e a atendente fecha a conta.
 - Resumo e troco na comanda (D111): faça um pedido com dinheiro e troco para 100; a comanda sai com "RESUMO DO PEDIDO" (uma linha por item, com valor) antes do pagamento e "PAGAMENTO: DINHEIRO, TROCO PARA R$ 100,00". Sem troco, sai "SEM TROCO". Painel › Impressora › comanda de teste mostra o resumo.
+- Comanda enxuta (D112): imprima a comanda de teste; cada prato sai com uma linha por seção, só o escolhido, e um traço entre os pratos. Pedido da mesa sai "PAGAMENTO NA MESA".
+- Grupo do ingrediente (D113): Cardápio › Ingredientes › Novo ingrediente; o campo Grupo lista os grupos e tem "+ Novo grupo…".
+- Localização opcional (D114): no WhatsApp, peça uma entrega e só escreva o endereço; o bot pede o complemento e fecha. Se o endereço não for achado no mapa, o resumo mostra "taxa a confirmar" e a comanda sai com o aviso.
+- Localização pedida uma vez (D115): no WhatsApp, escreva um endereço que o mapa não acha; o bot pede a localização uma vez. Responda 0: o pedido fecha com a taxa a confirmar na entrega. Mande o pin: sai a taxa da faixa.
+- Comanda em lista (D115): prato com vários acompanhamentos sai "Acompanhamentos:" e um por linha embaixo.
+- Limite de acompanhamentos (D115): no cardápio, "Acompanhamentos (escolha até 8)"; o 9º não marca. No WhatsApp, marcar 9 pede para marcar de novo.
+- Logo no menu recolhido (D115): com a logo enviada em Configurações › Loja, recolha o menu lateral; aparece a logo no lugar do "F".
 - Mais de um molho (D110): no "Monte seu prato", marque Sugo e Bolonhesa; a revisão mostra "Molhos: Sugo e Bolonhesa" com os dois acréscimos somados, e a comanda da cozinha marca os dois. No WhatsApp (passo a passo), a enquete do molho é de marcar.
 - Bot mais humano (D109): mande "quero uma massa" e "obrigado"; as respostas devem vir curtas, sem "Ótima escolha!", sem "Posso ajudar em mais algo?" e sem travessão.
 - Acréscimos por tamanho (D108): Cardápio › Preços dos pratos › "Acréscimos por tamanho": ponha Bacon 5,00 no Inteiro e salve; no cardápio do cliente, o Bacon mostra "+ R$ 3,00 a R$ 5,00" e o passo do tamanho soma o valor certo de cada um.

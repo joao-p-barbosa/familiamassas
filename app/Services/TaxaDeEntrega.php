@@ -11,7 +11,8 @@ use App\Repositories\ConfigRepository;
  * mapa ou mandou pelo WhatsApp. O navegador calcula igual só para mostrar (public/assets/js/shared/taxa.js); vale o do servidor.
  *
  * Sem faixas cadastradas ou sem o ponto da loja, a entrega sai sem taxa (não há mais taxa fixa: o valor vem só das faixas).
- * Com faixas, o pedido exige o ponto do cliente (PedidoService e o WhatsApp recusam sem ele).
+ * Com faixas, o cardápio digital exige o ponto do cliente. No WhatsApp o bot tenta achar o ponto pelo endereço escrito, pede a
+ * localização uma vez e, sem ela, a taxa fica a confirmar na entrega (D114/D115).
  *
  * Configuração: entrega_faixas = {"faixas": [{"ate_km": 1, "taxa_centavos": 300}, ...], "alem_centavos": 1200 | null},
  * loja_lat e loja_lng.
@@ -19,6 +20,25 @@ use App\Repositories\ConfigRepository;
 final class TaxaDeEntrega
 {
     public function __construct(private readonly ConfigRepository $config = new ConfigRepository()) {}
+
+    /**
+     * O ponto de um endereço escrito, para a taxa por distância (D115). Busca na cidade da loja e descarta o que cair a mais de
+     * 60 km dela (rua de mesmo nome em outra cidade). Devolve null se não achou.
+     * @return array{lat: float, lng: float}|null
+     */
+    public function pontoDoEndereco(string $rua, string $numero, string $bairro): ?array
+    {
+        if (trim($rua) === '' || trim($bairro) === '') {
+            return null;
+        }
+        $partes = array_map('trim', explode(',', $this->config->get('endereco_loja')));
+        $ponto = Geocodificador::coordenadas("{$rua}, {$numero}, {$bairro}", implode(', ', array_slice($partes, -2)));
+        if ($ponto === null) {
+            return null;
+        }
+        $r = $this->regras();
+        return $r['lat'] === null || self::km($r['lat'], $r['lng'], $ponto['lat'], $ponto['lng']) <= 60 ? $ponto : null;
+    }
 
     /** @return array{faixas: list<array{ate_km: float, taxa_centavos: int}>, alem_centavos: ?int, lat: ?float, lng: ?float} */
     public function regras(): array

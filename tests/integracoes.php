@@ -493,17 +493,17 @@ conferir('Comanda comum com preço: total, telefone e o pagamento num quadro em 
 $semPreco = Comanda::linhas($comum, ['nome_loja' => 'X', 'com_preco' => false]);
 $quadroPagamento = array_values(array_filter($semPreco, static fn (array $l): bool => str_starts_with($l['t'], 'PAGAMENTO')));
 conferir('O pagamento sai mesmo na comanda sem preço, no estilo de quadro', [$quadroPagamento[0]['t'] ?? null, $quadroPagamento[0]['e'] ?? null, str_contains($texto($semPreco), 'TOTAL')], ['PAGAMENTO: PIX', 'caixa', false]);
-conferir('Dinheiro com troco e pedido do salão', [
-    Comanda::pagamentoEmDestaque(['pagamento' => 'dinheiro', 'troco_para_centavos' => 10000]), Comanda::pagamentoEmDestaque(['pagamento' => 'caixa', 'troco_para_centavos' => null]),
-    Comanda::pagamentoEmDestaque(['pagamento' => 'dinheiro', 'troco_para_centavos' => null]),
-], ['PAGAMENTO: DINHEIRO, TROCO PARA R$ 100,00', 'PAGAMENTO NA CONTA', 'PAGAMENTO: DINHEIRO, SEM TROCO']);
+conferir('Dinheiro com troco, pedido da mesa ("na mesa", D112) e salão pra viagem', [
+    Comanda::pagamentoEmDestaque(['pagamento' => 'dinheiro', 'troco_para_centavos' => 10000]), Comanda::pagamentoEmDestaque(['pagamento' => 'caixa', 'tipo' => 'local', 'troco_para_centavos' => null]),
+    Comanda::pagamentoEmDestaque(['pagamento' => 'dinheiro', 'troco_para_centavos' => null]), Comanda::pagamentoEmDestaque(['pagamento' => 'caixa', 'tipo' => 'viagem', 'troco_para_centavos' => null]),
+], ['PAGAMENTO: DINHEIRO, TROCO PARA R$ 100,00', 'PAGAMENTO NA MESA', 'PAGAMENTO: DINHEIRO, SEM TROCO', 'PAGAMENTO NA CONTA']);
 
 // D111: o resumo do pedido vem depois dos pratos e antes do pagamento, uma linha por item com o valor.
 $linhasTeste = Comanda::teste(['nome_loja' => 'X', 'com_preco' => true]);
 $textos = array_column($linhasTeste, 't');
 $posResumo = array_search('RESUMO DO PEDIDO', $textos, true);
 $posPagamento = array_key_first(array_filter($textos, static fn (string $t): bool => str_starts_with($t, 'PAGAMENTO')));
-$posUltimoPrato = max(array_keys(array_filter($textos, static fn (string $t): bool => str_starts_with($t, '■ ') || str_starts_with($t, '□ '))));
+$posUltimoPrato = max(array_keys(array_filter($textos, static fn (string $t): bool => str_starts_with($t, 'Molho: '))));
 conferir('Resumo do pedido: depois das escolhas dos ingredientes e antes do pagamento', [$posResumo !== false && $posResumo > $posUltimoPrato, $posResumo < $posPagamento], [true, true]);
 $doResumo = array_values(array_filter(array_slice($linhasTeste, (int) $posResumo + 1, 4), static fn (array $l): bool => str_contains($l['t'], 'x ')));
 conferir('No resumo: Monte seu prato pela massa e tamanho, prato da casa pelo nome e tamanho, bebida pelo nome, cada um com o valor', array_map(static fn (array $l): string => $l['t'] . ' | ' . ($l['d'] ?? ''), $doResumo), [
@@ -523,29 +523,34 @@ $montagemLista = [
 ];
 $secoes = Comanda::checklist($montagemLista, $catalogoComanda);
 $marcadas = static fn (array $secoes): array => array_map(static fn (array $s): array => [$s['titulo'], array_column(array_filter($s['opcoes'], static fn (array $o): bool => $o['marcada']), 'nome'), count($s['opcoes'])], $secoes);
-conferir('Lista de marcar: todas as opções de cada seção, só a escolhida marcada, na ordem do panfleto (molho por último)', $marcadas($secoes), [
-    ['Tamanho', ['Meio'], 2], ['Massa', ['Nhoque'], 6], ['Proteínas', ['Carne seca'], 4], ['Acompanhamentos', ['Milho'], 13], ['Queijos', [], 4], ['Molho', ['Pesto'], 6],
+conferir('Só o que foi escolhido (D112), na ordem do panfleto (molho por último); grupo sem escolha (Queijos) não sai', $marcadas($secoes), [
+    ['Tamanho', ['Meio'], 1], ['Massa', ['Nhoque'], 1], ['Proteínas', ['Carne seca'], 1], ['Acompanhamentos', ['Milho'], 1], ['Molho', ['Pesto'], 1],
 ]);
 $orfa = $montagemLista;
 $orfa['massa'] = ['id' => 99999, 'nome' => 'Rondelli'];
 $orfa['extras'] = [['id' => 88888, 'nome' => 'Trufa']];
 $secoesOrfas = $marcadas(Comanda::checklist($orfa, $catalogoComanda));
-conferir('O que o cliente pediu e saiu do cardápio continua na comanda, marcado (a cozinha nunca perde o pedido)', [$secoesOrfas[1][1], $secoesOrfas[1][2], end($secoesOrfas)[0], $secoesOrfas[count($secoesOrfas) - 2]], [['Rondelli'], 7, 'Molho', ['Outros', ['Trufa'], 1]]);
+conferir('O que o cliente pediu e saiu do cardápio continua na comanda, marcado (a cozinha nunca perde o pedido)', [$secoesOrfas[1][1], $secoesOrfas[1][2], end($secoesOrfas)[0], $secoesOrfas[count($secoesOrfas) - 2]], [['Rondelli'], 1, 'Molho', ['Outros', ['Trufa'], 1]]);
 Banco::conexao()->exec("INSERT INTO ingredientes (nome, grupo, preco_extra_centavos, ordem) VALUES ('Orégano', 'Tempero (quanto quiser)', 0, 999)");
-$comTempero = array_column(Comanda::checklist($montagemLista), 'titulo');
-conferir('Grupo "Tempero..." do cardápio sai depois dos ingredientes e antes do molho', array_slice($comTempero, -3), ['Queijos', 'Tempero (quanto quiser)', 'Molho']);
+$comOregano = $montagemLista;
+$comOregano['inclusos'][] = ['nome' => 'Orégano'];
+$comTempero = array_column(Comanda::checklist($comOregano), 'titulo');
+conferir('Grupo "Tempero..." do cardápio sai depois dos ingredientes e antes do molho', array_slice($comTempero, -3), ['Acompanhamentos', 'Tempero (quanto quiser)', 'Molho']);
 Banco::conexao()->exec("DELETE FROM ingredientes WHERE nome = 'Orégano'");
 $linhasLista = Comanda::linhas(['id' => 7, 'tipo' => 'retirada', 'mesa' => null, 'origem' => 'cardapio', 'criado_em' => '2026-11-20T12:00:00Z', 'cliente_nome' => 'Ana', 'cliente_telefone' => '',
     'observacoes' => '', 'taxa_entrega_centavos' => 0, 'total_centavos' => 0, 'pagamento' => 'pix', 'troco_para_centavos' => null,
     'itens' => [['nome' => 'Monte seu prato', 'quantidade' => 2, 'preco_unit_centavos' => 0, 'observacoes' => '', 'montagem' => $montagemLista]]], ['nome_loja' => 'X', 'com_preco' => false]);
-$opcoesImpressas = array_values(array_filter($linhasLista, static fn (array $l): bool => isset($l['c'])));
-$nhoque = array_values(array_filter($opcoesImpressas, static fn (array $l): bool => $l['n'] === 'Nhoque'))[0];
-$penne = array_values(array_filter($opcoesImpressas, static fn (array $l): bool => $l['n'] === 'Penne'))[0];
-conferir('Linhas da comanda: escolhida com quadrado cheio e negrito, as outras vazias; o símbolo vai também no texto (agente antigo)', [
-    $nhoque['t'], $nhoque['c'], $nhoque['e'], $penne['t'], $penne['c'], $penne['e'], count($opcoesImpressas), str_contains($texto($linhasLista), '2x Monte seu prato'),
-], ['■ Nhoque', 'cheia', 'negrito', '□ Penne', 'vazia', 'normal', 35, true]);
-$semMarcadas = array_filter($opcoesImpressas, static fn (array $l): bool => $l['c'] === 'cheia');
-conferir('Cinco quadrados cheios: tamanho, massa, o ingrediente sem custo, a proteína paga e o molho', count($semMarcadas), 5);
+$textoLista = $texto($linhasLista);
+conferir('Prato na comanda: uma linha por seção, só o escolhido (D112); nada da lista inteira', [
+    str_contains($textoLista, '2x Monte seu prato'), str_contains($textoLista, 'Massa: Nhoque'), str_contains($textoLista, 'Proteínas: Carne seca'),
+    str_contains($textoLista, 'Molho: Pesto'), str_contains($textoLista, 'Penne'), str_contains($textoLista, 'Queijos'), str_contains($textoLista, '□'),
+], [true, true, true, true, false, false, false]);
+$posLista = array_search('- Bacon', $textos, true);
+conferir('Mais de uma escolha no grupo sai em lista, um por linha, sem vírgula (D115)', [$posLista !== false, str_ends_with((string) $textos[array_key_last(array_filter(array_slice($textos, 0, (int) $posLista, true), static fn (string $t): bool => !str_starts_with($t, '- ')))], ':'), count(array_filter($textos, static fn (string $t): bool => str_contains($t, 'Bacon,')))], [true, true, 0]);
+$estilos = array_column($linhasTeste, 'e');
+$posPrimeiro = array_search('1x Monte seu prato', $textos, true);
+$posSegundo = array_search('1x Lasanha da casa', $textos, true);
+conferir('Um traço separa um prato do outro (D112)', [$posSegundo > $posPrimeiro, $estilos[$posSegundo - 1]], [true, 'linha']);
 
 echo "\nAGENTE DE IMPRESSÃO\n";
 $agente = new AgenteImpressao();

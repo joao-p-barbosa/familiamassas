@@ -10,6 +10,20 @@
 const achar = (lista, id) => lista.find((o) => o.id === id) ?? null;
 
 /** Os molhos escolhidos: a lista molho_ids ou, no formato antigo (carrinho salvo antes), o molho_id. */
+// Máximo de escolhas por grupo de ingredientes (D115), igual ao PrecoService::LIMITES_POR_GRUPO. Grupo fora da lista: sem limite.
+export const LIMITES_POR_GRUPO = { acompanhamento: 8 };
+export function limiteDoGrupo(grupo) {
+  const nome = String(grupo ?? '').trim().toLowerCase();
+  const achado = Object.entries(LIMITES_POR_GRUPO).find(([comeco]) => nome.startsWith(comeco));
+  return achado ? achado[1] : null;
+}
+/** O que vai entre parênteses ao lado do grupo: "(escolha até 8)", "(à vontade, sem limite)" no tempero, ou nada. */
+export function dicaDoGrupo(grupo) {
+  const limite = limiteDoGrupo(grupo);
+  if (limite !== null) return `(escolha até ${limite})`;
+  return String(grupo ?? '').trim().toLowerCase().startsWith('tempero') && !String(grupo).includes('(') ? '(à vontade, sem limite)' : '';
+}
+
 export const idsDosMolhos = (escolha) => [...new Set(escolha.molho_ids ?? (escolha.molho_id ? [escolha.molho_id] : []))];
 
 /** "Sugo", "Sugo e Bolonhesa", "Sugo, Bolonhesa e Pesto". */

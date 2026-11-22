@@ -13,10 +13,9 @@ use App\Repositories\CardapioRepository;
  *   estilos: loja | numero | caixa (tipo do pedido, em destaque) | destaque | negrito | normal | pequeno | linha (separador) | espaco
  *   alinhamento: e (esquerda, padrão) | c (centro)
  *
- * Prato montado (D95): a cozinha recebe uma lista de marcar, como o panfleto. Cada seção (Tamanho, Massa, Ingredientes por grupo,
- * Molho) traz TODAS as opções do cardápio; a escolhida sai com um quadrado cheio e em negrito, as outras com o quadrado vazio.
- * A linha leva o símbolo também como texto ("■ ", "□ ") para o agente v3, que não desenha quadrados e imprime o texto.
- *   c: cheia | vazia (marca da opção)   n: o nome, sem o símbolo
+ * Prato montado (D95, enxugado no D112): uma linha por seção, na ordem do panfleto (Tamanho, Massa, Ingredientes por grupo, Molho),
+ * só com o que foi escolhido ("Massa: Nhoque", "Acompanhamentos: Milho, Brócolis"). Seção sem escolha não sai.
+ * Entre um prato e outro, um traço (estilo linha).
  *
  * D111: depois dos pratos, antes do pagamento, o "RESUMO DO PEDIDO": uma linha por item ("1x Nhoque (Meio)", "2x Coca-Cola lata"),
  * com o valor (se a comanda leva preço), a taxa e o total. Dinheiro sai com "troco para R$ ..." ou "sem troco".
@@ -82,20 +81,26 @@ final class Comanda
 
         // ---- Itens ----
         $l[] = ['t' => '', 'e' => 'linha'];
-        foreach ($pedido['itens'] as $item) {
+        foreach ($pedido['itens'] as $n => $item) {
+            if ($n > 0) {
+                $l[] = ['t' => '', 'e' => 'linha'];   // D112: um traço separa um prato do outro
+            }
             $l[] = ['t' => $item['quantidade'] . 'x ' . $item['nome'], 'e' => 'destaque'];   // o valor vai no resumo (D111)
             $m = $item['montagem'];
             if (is_array($m)) {
                 $catalogo ??= (new CardapioRepository())->publico();
+                // D112/D115: só o que foi escolhido. Uma escolha: na mesma linha ("Massa: Nhoque"); mais de uma: em lista,
+                // um item por linha ("Acompanhamentos:" e embaixo "- Milho", "- Brócolis").
                 foreach ($item['checklist'] ?? self::checklist($m, $catalogo) as $secao) {
-                    $l[] = ['t' => mb_strtoupper($secao['titulo']), 'e' => 'negrito', 'a' => 'c'];
-                    foreach ($secao['opcoes'] as $opcao) {
-                        // t traz o símbolo como texto (agente antigo imprime assim); c e n são para o agente novo desenhar o quadrado.
-                        $l[] = $opcao['marcada']
-                            ? ['t' => '■ ' . $opcao['nome'], 'e' => 'negrito', 'c' => 'cheia', 'n' => $opcao['nome']]
-                            : ['t' => '□ ' . $opcao['nome'], 'e' => 'normal', 'c' => 'vazia', 'n' => $opcao['nome']];
+                    $nomes = array_column($secao['opcoes'], 'nome');
+                    if (count($nomes) === 1) {
+                        $l[] = ['t' => $secao['titulo'] . ': ' . $nomes[0], 'e' => 'negrito'];
+                        continue;
                     }
-                    $l[] = ['t' => '', 'e' => 'espaco'];
+                    $l[] = ['t' => $secao['titulo'] . ':', 'e' => 'negrito'];
+                    foreach ($nomes as $nome) {
+                        $l[] = ['t' => '- ' . $nome, 'e' => 'negrito'];
+                    }
                 }
             }
             if (($item['observacoes'] ?? '') !== '') {
@@ -170,7 +175,8 @@ final class Comanda
                     $opcoes[] = ['nome' => (string) $e['nome'], 'marcada' => true];
                 }
             }
-            return ['titulo' => $titulo, 'opcoes' => $opcoes];
+            // D112: a comanda leva só o que foi escolhido (a lista inteira deixava o papel gigante).
+            return ['titulo' => $titulo, 'opcoes' => array_values(array_filter($opcoes, static fn (array $o): bool => $o['marcada']))];
         };
         $um = static fn (mixed $v): array => is_array($v) && isset($v['nome']) ? [$v] : [];
         $visiveis = static fn (array $l): array => array_values(array_filter($l, static fn (array $o): bool => ($o['estado'] ?? 'disponivel') !== 'oculto'));
@@ -196,7 +202,7 @@ final class Comanda
             $secoes[] = $secao('Outros', [], $restantes);
         }
         $secoes[] = $secao('Molho', $visiveis($catalogo['molhos'] ?? []), isset($m['molhos']) && is_array($m['molhos']) ? $m['molhos'] : $um($m['molho'] ?? null));   // D110: mais de um molho
-        return $secoes;
+        return array_values(array_filter($secoes, static fn (array $s): bool => $s['opcoes'] !== []));   // seção sem escolha não sai
     }
 
     /** Põe a lista de marcar em cada prato montado do pedido (para a comanda impressa pelo navegador, que não conhece o cardápio). */
@@ -242,11 +248,11 @@ final class Comanda
         return $linhas;
     }
 
-    /** "PAGAMENTO: PIX", "PAGAMENTO: DINHEIRO - TROCO PARA R$ 100,00", "PAGAMENTO NA CONTA" (salão e mesa). */
+    /** "PAGAMENTO: PIX", "PAGAMENTO: DINHEIRO, TROCO PARA R$ 100,00", "PAGAMENTO NA MESA" (D112; salão pra viagem: "NA CONTA"). */
     public static function pagamentoEmDestaque(array $pedido): string
     {
         if ($pedido['pagamento'] === 'caixa') {
-            return 'PAGAMENTO NA CONTA';
+            return ($pedido['tipo'] ?? 'local') === 'local' ? 'PAGAMENTO NA MESA' : 'PAGAMENTO NA CONTA';
         }
         $forma = mb_strtoupper(self::PAGAMENTOS[$pedido['pagamento']] ?? (string) $pedido['pagamento']);
         $troco = '';

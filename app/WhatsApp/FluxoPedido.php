@@ -44,7 +44,7 @@ final class FluxoPedido
         'menu' => 'escolhendo um item do cardápio', 'prato_tamanho' => 'escolhendo o tamanho do prato', 'monte_tamanho' => 'escolhendo o tamanho da massa',
         'monte_massa' => 'escolhendo a massa', 'monte_molho' => 'escolhendo o molho', 'monte_grupo' => 'escolhendo os ingredientes',
         'simples' => 'escolhendo bebida ou sobremesa', 'quantidade' => 'dizendo a quantidade', 'mais' => 'decidindo se pede mais itens',
-        'tipo' => 'escolhendo entrega ou retirada', 'nome' => 'dizendo o nome', 'local' => 'mandando a localização', 'endereco' => 'digitando o endereço', 'endereco_numero' => 'dizendo o número da casa e o complemento',
+        'tipo' => 'escolhendo entrega ou retirada', 'nome' => 'dizendo o nome', 'local' => 'mandando a localização', 'endereco' => 'digitando o endereço', 'local_confirma' => 'mandando a localização (o endereço não foi achado no mapa) ou respondendo 0', 'endereco_numero' => 'dizendo o número da casa e o complemento',
         'pagamento' => 'escolhendo a forma de pagamento', 'troco' => 'dizendo o troco', 'resumo' => 'conferindo o resumo do pedido',
     ];
 
@@ -201,6 +201,14 @@ final class FluxoPedido
                     if (!isset($s['opcoes'][$n - 1])) {
                         return false;
                     }
+                }
+                $grupo = $this->grupos()[$s['grupo']];
+                $limite = PrecoService::limiteDoGrupo($grupo);
+                if ($limite !== null && count(array_unique($escolhas)) > $limite) {   // D115: acompanhamentos até 8
+                    $s['aviso'] = "Pode escolher até {$limite} em " . mb_strtolower($grupo) . '. Marque de novo, por favor.';
+                    return true;
+                }
+                foreach ($escolhas as $n) {
                     $s['atual']['ingrediente_ids'][] = $s['opcoes'][$n - 1];
                 }
                 $s['grupo']++;
@@ -259,10 +267,7 @@ final class FluxoPedido
             case 'local':
                 if ($local !== null) {
                     return $this->recebeuPin($s, $local);
-                } elseif ($texto === '0' && (new TaxaDeEntrega($this->config))->porRaio()) {
-                    $s['aviso'] = 'Para calcular a taxa de entrega, precisamos da sua localização. 📍';
-                    return true;
-                } elseif ($texto !== '0') {
+                } elseif ($texto !== '0') {   // D112: a localização é um pedido; "0" ou o endereço escrito seguem
                     if (substr_count($texto, ',') < 2) {
                         return false;
                     }
@@ -300,6 +305,20 @@ final class FluxoPedido
                 $s['endereco'] = array_merge($s['endereco'] ?? [], [
                     'rua' => $partes[0], 'numero' => $partes[1], 'bairro' => $partes[2], 'complemento' => implode(', ', array_slice($partes, 3)),
                 ]);
+                return $this->conferirPontoDoEndereco($s);
+
+            case 'local_confirma':
+                // D115: o endereço escrito não foi achado no mapa; a localização foi pedida uma vez. Pin: calcula a taxa.
+                // Qualquer outra resposta segue sem ela, e a taxa fica a confirmar na entrega.
+                if ($local !== null) {
+                    $calculo = (new TaxaDeEntrega($this->config))->calcular($local['lat'], $local['lng']);
+                    if (!$calculo['atende']) {
+                        $s['aviso'] = 'Esse local fica a ' . TaxaDeEntrega::kmTexto((float) $calculo['km']) . ' da loja, fora da nossa área de entrega. 😕 Mande outra localização ou responda *cancelar*.';
+                        return true;
+                    }
+                    $s['endereco'] = array_merge($s['endereco'], ['lat' => $local['lat'], 'lng' => $local['lng']]);
+                    $s['aviso'] = '📍 Recebi a localização! Taxa de entrega: ' . self::reais($calculo['taxa_centavos']) . '.';
+                }
                 $s['etapa'] = 'pagamento';
                 return true;
 
@@ -355,6 +374,7 @@ final class FluxoPedido
             'pagamento' => $s['pagamento'],
             'observacoes' => '',
             'itens' => array_column($s['carrinho'], 'payload'),
+            'taxa_a_confirmar' => $this->taxaAConfirmar($s),
             'total_esperado_centavos' => $s['total_mostrado'] ?? null,
             't' => (new TokenWhatsApp())->gerar($telefone),   // telefone verificado da conversa: origem "whatsapp"
         ];
@@ -572,14 +592,15 @@ final class FluxoPedido
 
             case 'monte_grupo':
                 $grupo = $this->grupos()[$s['grupo']];
-                $linhas[] = "*{$grupo}* — pode escolher vários (ex.: 1, 3) ou 0 para nenhum.";
+                $dica = PrecoService::dicaDoGrupo($grupo);   // D115: "(escolha até 8)", "(à vontade, sem limite)"
+                $linhas[] = "*{$grupo}*" . ($dica !== '' ? " {$dica}" : '') . ' — pode escolher vários (ex.: 1, 3) ou 0 para nenhum.';
                 if ($s['grupo'] === 0) {
                     $ambos('Escolha quantos quiser. Os que têm preço ao lado são cobrados à parte.');
                 }
                 foreach ($this->disponiveis(array_filter($catalogo['ingredientes'], static fn (array $i): bool => $i['grupo'] === $grupo)) as $i) {
                     $lista($i['id'], $i['nome'] . self::acrescimoTexto($i, 'preco_extra_centavos', $catalogo['tamanhos']));
                 }
-                $pergunta = "{$grupo}: marque o que quiser e toque em ✅ Pronto";
+                $pergunta = "{$grupo}" . ($dica !== '' ? " {$dica}" : '') . ': marque o que quiser e toque em ✅ Pronto';
                 $multipla = true;
                 break;
 
@@ -640,10 +661,9 @@ final class FluxoPedido
                 break;
 
             case 'local':
-                $linhas[] = 'Mande a sua localização para a entrega: 📎 › *Localização* › *Enviar localização atual*. Pegamos o endereço dela.';
-                if (!(new TaxaDeEntrega($this->config))->porRaio()) {
-                    $linhas[] = 'Se preferir não mandar, responda 0.';
-                }
+                $linhas[] = 'Se puder, mande a sua localização: 📎 › *Localização* › *Enviar localização atual*. Pegamos o endereço dela'
+                    . ((new TaxaDeEntrega($this->config))->porRaio() ? ' e já calculamos a taxa.' : '.');
+                $linhas[] = 'Ou escreva o endereço: *rua, número, bairro, complemento*. Se preferir só escrever depois, responda 0.';
                 break;
 
             case 'endereco_numero':
@@ -654,6 +674,11 @@ final class FluxoPedido
                     ? "O número é *{$e['numero']}*? Responda o número e o complemento, se tiver (ex.: {$e['numero']}, apto 12)."
                     : 'Qual o número da casa? Se tiver complemento, mande junto (ex.: 120, apto 12).';
                 $linhas[] = 'Se a rua não for essa, escreva o endereço inteiro: rua, número, bairro.';
+                break;
+
+            case 'local_confirma':
+                $linhas[] = 'Pelo endereço não consegui achar aqui no mapa. 😕 Consegue compartilhar a localização, por favor? 📎 › *Localização* › *Enviar localização atual*.';
+                $linhas[] = 'Se não puder, responda 0: a taxa de entrega fica para confirmar na entrega.';
                 break;
 
             case 'endereco':
@@ -682,7 +707,9 @@ final class FluxoPedido
                 foreach ($s['carrinho'] as $item) {
                     $ambos("• {$item['quantidade']}× {$item['nome']} — " . self::reais($item['preco'] * $item['quantidade']));
                 }
-                if ($s['tipo'] === 'entrega' && ($taxa = $this->taxa($s)) > 0) {
+                if ($s['tipo'] === 'entrega' && $this->taxaAConfirmar($s)) {
+                    $ambos('• Taxa de entrega — a confirmar na entrega (sem a localização não deu para calcular)');
+                } elseif ($s['tipo'] === 'entrega' && ($taxa = $this->taxa($s)) > 0) {
                     $ambos('• Taxa de entrega — ' . self::reais($taxa));
                 }
                 $ambos('*Total: ' . self::reais($s['total_mostrado']) . '*');
@@ -799,6 +826,39 @@ final class FluxoPedido
     private function taxa(array $s): int
     {
         return (new TaxaDeEntrega($this->config))->calcular($s['endereco']['lat'] ?? null, $s['endereco']['lng'] ?? null)['taxa_centavos'];
+    }
+
+    /** Entrega sem pin, com taxa por distância: a taxa fica a confirmar pela loja, sem travar o pedido (D112). */
+    private function taxaAConfirmar(array $s): bool
+    {
+        return ($s['tipo'] ?? '') === 'entrega' && empty($s['endereco']['lat']) && (new TaxaDeEntrega($this->config))->porRaio();
+    }
+
+    /**
+     * Endereço escrito (D115): com taxa por distância e sem pin, tenta achar o ponto pelo endereço. Achou: segue com a taxa
+     * calculada (ou avisa se fica fora da área). Não achou: pede a localização uma vez (etapa local_confirma).
+     */
+    private function conferirPontoDoEndereco(array &$s): bool
+    {
+        $taxa = new TaxaDeEntrega($this->config);
+        $e = $s['endereco'];
+        if (!$taxa->porRaio() || !empty($e['lat'])) {
+            $s['etapa'] = 'pagamento';
+            return true;
+        }
+        $ponto = $taxa->pontoDoEndereco($e['rua'], (string) $e['numero'], $e['bairro']);
+        if ($ponto === null) {
+            $s['etapa'] = 'local_confirma';
+            return true;
+        }
+        $calculo = $taxa->calcular($ponto['lat'], $ponto['lng']);
+        if (!$calculo['atende']) {
+            $s['aviso'] = 'Esse endereço fica a ' . TaxaDeEntrega::kmTexto((float) $calculo['km']) . ' da loja, fora da nossa área de entrega. 😕 Escreva outro endereço ou responda *cancelar*.';
+            return true;
+        }
+        $s['endereco'] = array_merge($e, $ponto);
+        $s['etapa'] = 'pagamento';
+        return true;
     }
 
     /**

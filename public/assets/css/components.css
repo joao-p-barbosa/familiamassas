@@ -1093,6 +1093,11 @@ dialog.folha[data-arrastando] {
   font-weight: 700;
   font-size: var(--texto-4);
 }
+/* D115: o limite do grupo ao lado do nome, ex.: "(escolha até 8)". */
+.grupo-opcoes__dica {
+  font-weight: 400;
+  color: var(--cor-texto-2);
+}
 .bloco__titulo {
   font-size: var(--texto-5);
   font-weight: 700;

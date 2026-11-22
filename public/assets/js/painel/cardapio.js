@@ -197,6 +197,7 @@ async function carregar() {
 }
 
 // ---------- Formulário (painel lateral) ----------
+const NOVO_GRUPO = '__novo__';
 const campoTexto = (nome, rotulo, valor, { ajuda = '', extra = '', opcional = false } = {}) => `
   <label class="campo">
     <span class="campo__rotulo">${rotulo}${opcional ? ' <span class="campo__opcional">(opcional)</span>' : ''}</span>
@@ -249,13 +250,20 @@ function camposDoRecurso(recurso, r) {
           </label>
         </div>${estado}`;
     case 'ingredientes': {
-      const grupos = [...new Set(dados.ingredientes.map((i) => i.grupo))];
+      // D112: lista de verdade dos grupos que já existem (o <datalist> só mostrava o grupo já escrito no campo) e "Novo grupo".
+      const grupos = [...new Set(dados.ingredientes.map((i) => i.grupo).filter(Boolean))];
+      const atual = r?.grupo ?? grupos[0] ?? '';
+      const novo = grupos.length === 0;
       return `${nome}
         <div class="formulario__par">
-          ${campoTexto('grupo', 'Grupo', r?.grupo ?? grupos[0] ?? '', { extra: 'maxlength="40" list="lista-grupos"', ajuda: 'Ex.: Proteínas, Vegetais, Queijos.' })}
+          <div class="formulario">
+            ${campoSelecao('grupo', 'Grupo', [...grupos.map((g) => [g, g]), [NOVO_GRUPO, '+ Novo grupo…']], novo ? NOVO_GRUPO : atual)}
+            <div id="campo-grupo-novo" ${novo ? '' : 'hidden'}>
+              ${campoTexto('grupo_novo', 'Nome do grupo novo', '', { extra: 'maxlength="40" placeholder="Ex.: Vegetais"' })}
+            </div>
+          </div>
           ${campoPreco('preco_extra_centavos', 'Preço a mais (R$)', r?.preco_extra_centavos ?? 0, 'Somado ao Monte sua massa. Deixe 0,00 se vem sem custo.')}
-        </div>
-        <datalist id="lista-grupos">${grupos.map((g) => `<option value="${esc(g)}">`).join('')}</datalist>${estado}`;
+        </div>${estado}`;
     }
     case 'itens': {
       const tipo = r?.tipo ?? 'simples';
@@ -345,7 +353,8 @@ function lerFormulario(form) {
       v.cor = form.cor.value;
       break;
     case 'ingredientes':
-      v.grupo = form.grupo.value.trim();
+      v.grupo = form.grupo.value === NOVO_GRUPO ? form.grupo_novo.value.trim() : form.grupo.value;
+      if (form.grupo.value === NOVO_GRUPO && !v.grupo) erros.grupo_novo = 'Digite o nome do grupo.';
       v.preco_extra_centavos = dinheiro('preco_extra_centavos');
       break;
     case 'itens':
@@ -454,6 +463,10 @@ delegar(conteudo, 'click', '[data-ordem]', async (e, botao) => {
   }
 });
 
+delegar(lateral, 'change', 'select[name="grupo"]', (e, selecao) => {
+  $('#campo-grupo-novo').hidden = selecao.value !== NOVO_GRUPO;
+  if (selecao.value === NOVO_GRUPO) lateral.querySelector('[name="grupo_novo"]')?.focus();
+});
 delegar(lateral, 'change', 'select[name="tipo"]', (e, selecao) => {
   lateral.querySelectorAll('[data-so]').forEach((bloco) => (bloco.hidden = bloco.dataset.so !== selecao.value));
 });

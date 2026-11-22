@@ -43,8 +43,9 @@ export function comandaHtml(pedido, { largura = ajustes.comanda_largura_mm, comP
         <p class="comanda__item-nome"><span>${item.quantidade}x ${esc(item.nome)}</span></p>
         ${m && item.checklist ? `
         <div class="comanda__lista">${item.checklist.map((secao) => `
-          <p class="comanda__secao">${esc(secao.titulo)}</p>
-          ${secao.opcoes.map((o) => `<p class="comanda__opcao" ${o.marcada ? 'data-marcada' : ''}><span class="comanda__quadrado" aria-hidden="true"></span>${esc(o.nome)}</p>`).join('')}`).join('')}
+          ${secao.opcoes.length === 1
+            ? `<p class="comanda__escolha"><b>${esc(secao.titulo)}:</b> ${esc(secao.opcoes[0].nome)}</p>`
+            : `<p class="comanda__escolha"><b>${esc(secao.titulo)}:</b></p>${secao.opcoes.map((o) => `<p class="comanda__escolha comanda__escolha--lista">- ${esc(o.nome)}</p>`).join('')}`}`).join('')}
         </div>` : m ? `
         <ul class="comanda__montagem">
           <li><b>${esc(m.tamanho.nome)}</b>${m.tamanho.descricao ? ` (${esc(m.tamanho.descricao)})` : ''}</li>
@@ -99,7 +100,7 @@ export function comandaHtml(pedido, { largura = ajustes.comanda_largura_mm, comP
         ${pedido.taxa_entrega_centavos ? `<p class="comanda__meta"><span>Taxa de entrega</span><span>${reais(pedido.taxa_entrega_centavos)}</span></p>` : ''}
         <p class="comanda__total"><span>TOTAL</span><span>${reais(pedido.total_centavos)}</span></p>
       </div>` : ''}
-      ${ifood ? '' : `<p class="comanda__tipo">${pedido.pagamento === 'caixa' ? 'Pagamento na conta' : `Pagamento: ${esc(PAGAMENTOS[pedido.pagamento] ?? pedido.pagamento)}${troco}`}</p>`}
+      ${ifood ? '' : `<p class="comanda__tipo">${pedido.pagamento === 'caixa' ? (pedido.tipo === 'local' ? 'Pagamento na mesa' : 'Pagamento na conta') : `Pagamento: ${esc(PAGAMENTOS[pedido.pagamento] ?? pedido.pagamento)}${troco}`}</p>`}
       ${ifoodPagamento}
       ${reimpressao ? `<p class="comanda__via">Reimpressão · ${hora(new Date().toISOString())}</p>` : ''}
     </div>`;

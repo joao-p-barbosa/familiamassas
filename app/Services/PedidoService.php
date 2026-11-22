@@ -60,6 +60,9 @@ final class PedidoService
      * tudo é recalculado com o cardápio atual.
      * @return array{id:int, codigo:string}
      */
+    /** Vai na observação do pedido de entrega sem localização (D112): a comanda e o painel mostram que a taxa ainda não foi cobrada. */
+    public const TAXA_A_CONFIRMAR = 'TAXA DE ENTREGA A CONFIRMAR NA ENTREGA (cliente sem localização).';
+
     public function criar(array $dados): array
     {
         if (!$this->loja->estado()['aberta']) {
@@ -113,11 +116,16 @@ final class PedidoService
         ['itens' => $itens, 'subtotal' => $subtotal] = $this->validarItens($dados);
 
         // Taxa por raio (D98): pela distância do ponto marcado; sem ponto (ou sem faixas), a taxa fixa.
+        // D112: o bot do WhatsApp fecha a entrega só com o endereço escrito (a localização é um pedido, não uma exigência).
+        // Sem o ponto, a taxa sai a confirmar: a loja combina com o cliente e a comanda avisa. Só com o telefone verificado.
         $taxa = 0;
+        $taxaAConfirmar = false;
         if ($tipo === 'entrega') {
             $porRaio = new TaxaDeEntrega($this->config);
             $calculo = $porRaio->calcular($lat, $lng);
-            if ($porRaio->porRaio() && $lat === null) {
+            if ($porRaio->porRaio() && $lat === null && !empty($dados['taxa_a_confirmar']) && $telefoneDoToken !== null) {
+                $taxaAConfirmar = true;
+            } elseif ($porRaio->porRaio() && $lat === null) {
                 $erros['tipo'] = 'Marque o local da entrega no mapa: a taxa depende da distância.';
             } elseif (!$calculo['atende']) {
                 $erros['tipo'] = 'Esse endereço fica a ' . TaxaDeEntrega::kmTexto((float) $calculo['km']) . ' da loja, fora da nossa área de entrega. Escolha retirada, se puder.';
@@ -168,7 +176,7 @@ final class PedidoService
             'pagamento' => $forma,
             'troco_para_centavos' => $trocoPara,
             // Observação do pedido só existe na entrega (ponto de referência, interfone...). Na retirada não há campo.
-            'observacoes' => $tipo === 'entrega' ? self::texto($dados['observacoes'] ?? '', 300) : '',
+            'observacoes' => $tipo === 'entrega' ? trim(($taxaAConfirmar ? self::TAXA_A_CONFIRMAR . ' ' : '') . self::texto($dados['observacoes'] ?? '', 300)) : '',
             'subtotal_centavos' => $subtotal,
             'taxa_entrega_centavos' => $taxa,
             'total_centavos' => $total,
