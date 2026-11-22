@@ -41,13 +41,15 @@ Loja + cardápio sem nada oculto (esgotados vêm, com `estado: "esgotado"`).
   "pagamento": { "forma": "dinheiro", "troco_para_centavos": 10000 },
   "observacoes": "",
   "itens": [
-    { "tipo": "montado", "item_id": null, "tamanho_id": 2, "massa_id": 1, "molho_id": 2, "ingrediente_ids": [1,2,7], "quantidade": 1, "observacoes": "" },
+    { "tipo": "montado", "item_id": null, "tamanho_id": 2, "massa_id": 1, "molho_ids": [2, 3], "ingrediente_ids": [1,2,7], "quantidade": 1, "observacoes": "" },
     { "tipo": "simples", "item_id": 8, "quantidade": 2, "observacoes": "" }
   ],
   "total_esperado_centavos": 5990,
   "t": ""
 }
 ```
+
+`molho_ids`: um ou mais molhos (D110); o formato antigo `"molho_id": 2` continua aceito.
 - `tipo`: só `entrega` ou `retirada` (D35). Mesa e pra viagem são do salão (`POST /api/admin/atendimentos`). `pagamento.forma`: `pix`, `cartao` ou `dinheiro` (`caixa` é só do salão).
 - `endereco.lat` e `endereco.lng` (opcionais): o local marcado no mapa. Valor ausente ou fora do planeta é ignorado, e o endereço digitado continua valendo (D39).
 - `observacoes` só vale na entrega; na retirada o servidor descarta (D36).

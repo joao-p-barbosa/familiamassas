@@ -495,7 +495,22 @@ $quadroPagamento = array_values(array_filter($semPreco, static fn (array $l): bo
 conferir('O pagamento sai mesmo na comanda sem preço, no estilo de quadro', [$quadroPagamento[0]['t'] ?? null, $quadroPagamento[0]['e'] ?? null, str_contains($texto($semPreco), 'TOTAL')], ['PAGAMENTO: PIX', 'caixa', false]);
 conferir('Dinheiro com troco e pedido do salão', [
     Comanda::pagamentoEmDestaque(['pagamento' => 'dinheiro', 'troco_para_centavos' => 10000]), Comanda::pagamentoEmDestaque(['pagamento' => 'caixa', 'troco_para_centavos' => null]),
-], ['PAGAMENTO: DINHEIRO - TROCO PARA R$ 100,00', 'PAGAMENTO NA CONTA']);
+    Comanda::pagamentoEmDestaque(['pagamento' => 'dinheiro', 'troco_para_centavos' => null]),
+], ['PAGAMENTO: DINHEIRO, TROCO PARA R$ 100,00', 'PAGAMENTO NA CONTA', 'PAGAMENTO: DINHEIRO, SEM TROCO']);
+
+// D111: o resumo do pedido vem depois dos pratos e antes do pagamento, uma linha por item com o valor.
+$linhasTeste = Comanda::teste(['nome_loja' => 'X', 'com_preco' => true]);
+$textos = array_column($linhasTeste, 't');
+$posResumo = array_search('RESUMO DO PEDIDO', $textos, true);
+$posPagamento = array_key_first(array_filter($textos, static fn (string $t): bool => str_starts_with($t, 'PAGAMENTO')));
+$posUltimoPrato = max(array_keys(array_filter($textos, static fn (string $t): bool => str_starts_with($t, '■ ') || str_starts_with($t, '□ '))));
+conferir('Resumo do pedido: depois das escolhas dos ingredientes e antes do pagamento', [$posResumo !== false && $posResumo > $posUltimoPrato, $posResumo < $posPagamento], [true, true]);
+$doResumo = array_values(array_filter(array_slice($linhasTeste, (int) $posResumo + 1, 4), static fn (array $l): bool => str_contains($l['t'], 'x ')));
+conferir('No resumo: Monte seu prato pela massa e tamanho, prato da casa pelo nome e tamanho, bebida pelo nome, cada um com o valor', array_map(static fn (array $l): string => $l['t'] . ' | ' . ($l['d'] ?? ''), $doResumo), [
+    '1x Penne (Inteiro) | R$ 46,90', '1x Lasanha da casa (Meio) | R$ 29,90', '2x Refrigerante lata | R$ 13,00',
+]);
+conferir('Os pratos lá em cima saem sem valor (o valor está no resumo)', array_values(array_filter($linhasTeste, static fn (array $l): bool => $l['t'] === '1x Monte seu prato'))[0]['d'] ?? null, null);
+conferir('Comanda do navegador recebe o nome curto do resumo', Comanda::comChecklist(['itens' => [['nome' => 'Monte seu prato', 'item_id' => null, 'montagem' => ['tamanho' => ['nome' => 'Meio'], 'massa' => ['nome' => 'Nhoque'], 'molho' => ['nome' => 'Sugo'], 'inclusos' => [], 'extras' => []]]]])['itens'][0]['nome_resumo'], 'Nhoque (Meio)');
 conferir('Comanda de teste tem acentos (o agente precisa imprimi-los)', str_contains($texto(Comanda::teste(['nome_loja' => 'X', 'com_preco' => true])), 'ação, pão'), true);
 
 echo "\nCOMANDA COMO LISTA DE MARCAR (D95)\n";

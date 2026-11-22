@@ -283,4 +283,7 @@ Como testar o resto:
 - Caixa: Fechamento do dia › Fechar o caixa de hoje: só o caixa inicial.
 - Salão (D107): Pedidos › Novo pedido salão › nome › Mesa: não pede mais o número; o cartão mostra o nome do cliente.
 - Mesa pelo cardápio (D96, conferido): no cardápio do cliente, Mesa › nome › pedido; aparece na coluna Salão e a atendente fecha a conta.
+- Resumo e troco na comanda (D111): faça um pedido com dinheiro e troco para 100; a comanda sai com "RESUMO DO PEDIDO" (uma linha por item, com valor) antes do pagamento e "PAGAMENTO: DINHEIRO, TROCO PARA R$ 100,00". Sem troco, sai "SEM TROCO". Painel › Impressora › comanda de teste mostra o resumo.
+- Mais de um molho (D110): no "Monte seu prato", marque Sugo e Bolonhesa; a revisão mostra "Molhos: Sugo e Bolonhesa" com os dois acréscimos somados, e a comanda da cozinha marca os dois. No WhatsApp (passo a passo), a enquete do molho é de marcar.
+- Bot mais humano (D109): mande "quero uma massa" e "obrigado"; as respostas devem vir curtas, sem "Ótima escolha!", sem "Posso ajudar em mais algo?" e sem travessão.
 - Acréscimos por tamanho (D108): Cardápio › Preços dos pratos › "Acréscimos por tamanho": ponha Bacon 5,00 no Inteiro e salve; no cardápio do cliente, o Bacon mostra "+ R$ 3,00 a R$ 5,00" e o passo do tamanho soma o valor certo de cada um.

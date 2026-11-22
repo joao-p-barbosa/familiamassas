@@ -15,12 +15,15 @@ use App\Core\ErroHttp;
  *                    Ingrediente com preço 0 vem sem custo ("inclusos"); os de preço maior que 0 são os "extras".
  *   D108: cada acréscimo pode ter um valor por tamanho (opcao['precos']); tamanho sem valor usa o do cadastro.
  *         Um ingrediente pode ser incluso no Meio e extra no Inteiro.
+ *   D110: o cliente pode escolher mais de um molho (molho_ids); cada um soma o seu acréscimo. A massa continua uma só.
+ *         A montagem guarda a lista em "molhos" e, em "molho", os nomes juntos ("Sugo e Bolonhesa") com a soma dos acréscimos,
+ *         para as telas e comandas que mostram uma linha só. Pedido antigo (molho_id) continua valendo.
  */
 final class PrecoService
 {
     /**
      * @param array $cardapio resultado de CardapioRepository::publico()
-     * @param array{item_id?:mixed, tamanho_id?:mixed, massa_id?:mixed, molho_id?:mixed, ingrediente_ids?:mixed} $escolha
+     * @param array{item_id?:mixed, tamanho_id?:mixed, massa_id?:mixed, molho_ids?:mixed, molho_id?:mixed, ingrediente_ids?:mixed} $escolha
      * @return array{preco_centavos:int, montagem:array}
      */
     public function montar(array $cardapio, array $escolha): array
@@ -30,7 +33,14 @@ final class PrecoService
             return $this->pratoDaCasa($cardapio, (int) $escolha['item_id'], $tamanho);
         }
         $massa = $this->disponivel($cardapio['massas'], $escolha['massa_id'] ?? null, 'massa');
-        $molho = $this->disponivel($cardapio['molhos'], $escolha['molho_id'] ?? null, 'molho');
+        $molhos = [];
+        foreach (self::idsDosMolhos($escolha) as $id) {
+            $molhos[] = $this->disponivel($cardapio['molhos'], $id, 'molho');
+        }
+        if ($molhos === []) {
+            throw new ErroHttp(422, 'montagem_invalida', 'Escolha de molho não encontrada. Atualize o cardápio e tente de novo.');
+        }
+        usort($molhos, static fn (array $a, array $b): int => [$a['ordem'], $a['id']] <=> [$b['ordem'], $b['id']]);
 
         $ids = $escolha['ingrediente_ids'] ?? [];
         if (!is_array($ids) || count($ids) > 30) {
@@ -45,12 +55,13 @@ final class PrecoService
         // O valor de cada opção neste tamanho (D108) substitui o do cadastro em tudo que segue (preço, extras, comanda).
         $t = (int) $tamanho['id'];
         $massa['acrescimo_centavos'] = self::noTamanho($massa, 'acrescimo_centavos', $t);
-        $molho['acrescimo_centavos'] = self::noTamanho($molho, 'acrescimo_centavos', $t);
+        $molhos = array_map(static fn (array $o): array => ['acrescimo_centavos' => self::noTamanho($o, 'acrescimo_centavos', $t)] + $o, $molhos);
+        $valorMolhos = array_sum(array_column($molhos, 'acrescimo_centavos'));
         $ingredientes = array_map(static fn (array $i): array => ['preco_extra_centavos' => self::noTamanho($i, 'preco_extra_centavos', $t)] + $i, $ingredientes);
         $extras = array_values(array_filter($ingredientes, static fn (array $i): bool => $i['preco_extra_centavos'] > 0));
         $inclusos = array_values(array_filter($ingredientes, static fn (array $i): bool => $i['preco_extra_centavos'] === 0));
 
-        $preco = $tamanho['preco_centavos'] + $massa['acrescimo_centavos'] + $molho['acrescimo_centavos']
+        $preco = $tamanho['preco_centavos'] + $massa['acrescimo_centavos'] + $valorMolhos
             + array_sum(array_column($extras, 'preco_extra_centavos'));
 
         return [
@@ -58,7 +69,8 @@ final class PrecoService
             'montagem' => [
                 'tamanho' => self::tamanho($tamanho, $tamanho['preco_centavos']),
                 'massa'   => ['id' => $massa['id'], 'nome' => $massa['nome'], 'acrescimo_centavos' => $massa['acrescimo_centavos']],
-                'molho'   => ['id' => $molho['id'], 'nome' => $molho['nome'], 'acrescimo_centavos' => $molho['acrescimo_centavos']],
+                'molho'   => ['id' => $molhos[0]['id'], 'nome' => self::juntar(array_column($molhos, 'nome')), 'acrescimo_centavos' => $valorMolhos],
+                'molhos'  => array_map(static fn (array $o): array => ['id' => $o['id'], 'nome' => $o['nome'], 'acrescimo_centavos' => $o['acrescimo_centavos']], $molhos),
                 'inclusos' => array_map([self::class, 'resumo'], $inclusos),
                 'extras'   => array_map([self::class, 'resumo'], $extras),
             ],
@@ -94,6 +106,26 @@ final class PrecoService
                 'extras'   => [],
             ],
         ];
+    }
+
+    /** Os molhos escolhidos (D110): a lista molho_ids ou, no formato antigo, o molho_id. Sem repetir. @return list<int> */
+    public static function idsDosMolhos(array $escolha): array
+    {
+        $ids = $escolha['molho_ids'] ?? null;
+        if ($ids === null) {
+            $ids = isset($escolha['molho_id']) ? [$escolha['molho_id']] : [];
+        }
+        if (!is_array($ids) || count($ids) > 10) {
+            throw new ErroHttp(422, 'montagem_invalida', 'A lista de molhos do prato não é válida.');
+        }
+        return array_values(array_unique(array_map('intval', $ids)));
+    }
+
+    /** "Sugo", "Sugo e Bolonhesa", "Sugo, Bolonhesa e Pesto". @param list<string> $nomes */
+    public static function juntar(array $nomes): string
+    {
+        $ultimo = array_pop($nomes);
+        return $nomes === [] ? (string) $ultimo : implode(', ', $nomes) . ' e ' . $ultimo;
     }
 
     /** Valor de uma massa, molho ou ingrediente num tamanho (D108): o da tabela por tamanho ou, sem ele, o do cadastro. */

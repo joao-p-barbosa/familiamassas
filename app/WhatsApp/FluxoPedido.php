@@ -168,12 +168,26 @@ final class FluxoPedido
                 return true;
 
             case 'monte_massa':
-            case 'monte_molho':
                 if ($escolhida === null) {
                     return false;
                 }
-                $s['atual'][$etapa === 'monte_massa' ? 'massa_id' : 'molho_id'] = $escolhida;
-                $s['etapa'] = $etapa === 'monte_massa' ? 'monte_molho' : 'monte_grupo';
+                $s['atual']['massa_id'] = $escolhida;
+                $s['etapa'] = 'monte_molho';
+                return true;
+
+            case 'monte_molho':   // D110: pode mais de um molho (enquete de marcar, como os ingredientes); pelo menos um
+                $escolhas = self::listaDeNumeros($texto);
+                if ($escolhas === null || $escolhas === []) {
+                    return false;
+                }
+                $s['atual']['molho_ids'] = [];
+                foreach ($escolhas as $n) {
+                    if (!isset($s['opcoes'][$n - 1])) {
+                        return false;
+                    }
+                    $s['atual']['molho_ids'][] = $s['opcoes'][$n - 1];
+                }
+                $s['etapa'] = 'monte_grupo';
                 $s['grupo'] = 0;
                 $s['atual']['ingrediente_ids'] = [];
                 return true;
@@ -444,8 +458,9 @@ final class FluxoPedido
         $endereco = 'O endereço de entrega, separado por vírgulas: rua, número, bairro, complemento. Rua, número e bairro são obrigatórios; '
             . 'o complemento (apartamento, bloco, ponto de referência) é opcional. Ex.: Rua das Flores, 120, Vila Nova, portão azul';
         return match ($s['etapa']) {
-            'menu', 'prato_tamanho', 'monte_tamanho', 'monte_massa', 'monte_molho', 'simples', 'mais', 'tipo', 'pagamento'
+            'menu', 'prato_tamanho', 'monte_tamanho', 'monte_massa', 'simples', 'mais', 'tipo', 'pagamento'
                 => $opcoes !== '' ? "Só o número da opção escolhida (ex.: 2). As opções:\n{$opcoes}" : null,
+            'monte_molho' => "Os números dos molhos escolhidos, separados por vírgula (ex.: 1 ou 1, 3). Pelo menos um. As opções:\n{$opcoes}",
             'monte_grupo' => "Os números dos ingredientes escolhidos, separados por vírgula (ex.: 1, 3), ou 0 para nenhum deste grupo. As opções:\n{$opcoes}",
             'quantidade' => 'Só a quantidade, um número inteiro de 1 a 20 (ex.: 2).',
             'local', 'endereco' => $endereco,
@@ -546,12 +561,13 @@ final class FluxoPedido
             case 'monte_massa':
             case 'monte_molho':
                 $massa = $s['etapa'] === 'monte_massa';
-                $titulo = $massa ? 'Monte a sua massa 🍝 Primeiro, qual massa? (escolha 1)' : 'Qual molho? (escolha 1)';
-                $linhas[] = $massa ? '*Monte a sua massa* 🍝 Primeiro, qual massa?' : $titulo;
+                $titulo = $massa ? 'Monte a sua massa 🍝 Primeiro, qual massa? (escolha 1)' : 'Qual molho? Pode marcar mais de um e tocar em ✅ Pronto';
+                $linhas[] = $massa ? '*Monte a sua massa* 🍝 Primeiro, qual massa?' : '*Molho*: pode escolher mais de um (ex.: 1, 3).';
                 foreach ($this->disponiveis($catalogo[$massa ? 'massas' : 'molhos']) as $o) {
                     $lista($o['id'], $o['nome'] . self::acrescimoTexto($o, 'acrescimo_centavos', $catalogo['tamanhos']));
                 }
                 $pergunta = $titulo;
+                $multipla = !$massa;
                 break;
 
             case 'monte_grupo':
@@ -685,7 +701,7 @@ final class FluxoPedido
         }
 
         $s['rotulos'] = $rotulos;   // o texto de cada opção, para a IA ler uma resposta fora do formato (D89)
-        $enquete = $pergunta !== null && $this->usaEnquete() ? self::enquete($pergunta, $rotulos, $multipla, !$semNumero) : null;
+        $enquete = $pergunta !== null && $this->usaEnquete() ? self::enquete($pergunta, $rotulos, $multipla, !$semNumero, $s['etapa'] === 'monte_molho' ? '✅ Pronto' : '✅ Pronto (ou nenhum)') : null;
         if ($enquete !== null) {
             $s['enquete'] = $enquete['tag'];
         }
@@ -714,14 +730,14 @@ final class FluxoPedido
      * @param list<string> $rotulos
      * @return array{pergunta:string, opcoes:list<string>, tag:string}|null
      */
-    private static function enquete(string $pergunta, array $rotulos, bool $multipla, bool $numerar = true): ?array
+    private static function enquete(string $pergunta, array $rotulos, bool $multipla, bool $numerar = true, string $pronto = '✅ Pronto (ou nenhum)'): ?array
     {
         $opcoes = [];
         foreach ($rotulos as $i => $rotulo) {
             $opcoes[] = self::cortar(($numerar ? ($i + 1) . '. ' : '') . self::semMarcas($rotulo), self::ENQUETE_MAX_OPCAO);
         }
         if ($multipla) {
-            $opcoes[] = '✅ Pronto (ou nenhum)';
+            $opcoes[] = $pronto;   // o conector acha o "Pronto" pela posição (a última), não pelo texto
         }
         if (count($opcoes) < 2 || count($opcoes) > self::ENQUETE_MAX_OPCOES) {
             return null;
@@ -845,9 +861,9 @@ final class FluxoPedido
         $ingredientes = array_column(array_merge($m['inclusos'], $m['extras']), 'nome');
         $nome = isset($atual['item_id'])
             ? $this->itemDoCardapio($atual['item_id'])['nome'] . " ({$m['tamanho']['nome']})"
-            : "Monte a sua massa ({$m['tamanho']['nome']}): {$m['massa']['nome']}, molho {$m['molho']['nome']}" . ($ingredientes !== [] ? ', ' . implode(', ', $ingredientes) : '');
+            : "Monte a sua massa ({$m['tamanho']['nome']}): {$m['massa']['nome']}, " . (count($m['molhos'] ?? []) > 1 ? 'molhos ' : 'molho ') . "{$m['molho']['nome']}" . ($ingredientes !== [] ? ', ' . implode(', ', $ingredientes) : '');
         return ['payload' => ['tipo' => 'montado', 'item_id' => $atual['item_id'] ?? null, 'tamanho_id' => $atual['tamanho_id'], 'massa_id' => $atual['massa_id'] ?? null,
-            'molho_id' => $atual['molho_id'] ?? null, 'ingrediente_ids' => $atual['ingrediente_ids'] ?? [], 'quantidade' => $quantidade, 'observacoes' => ''],
+            'molho_ids' => PrecoService::idsDosMolhos($atual), 'ingrediente_ids' => $atual['ingrediente_ids'] ?? [], 'quantidade' => $quantidade, 'observacoes' => ''],
             'nome' => $nome, 'preco' => $montado['preco_centavos'], 'quantidade' => $quantidade];
     }
 

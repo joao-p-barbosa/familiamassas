@@ -633,114 +633,170 @@
             "escolha": {
                 "tamanho_id": 1,
                 "massa_id": 1,
-                "molho_id": 1,
-                "ingrediente_ids": []
+                "ingrediente_ids": [],
+                "molho_id": 1
             },
             "preco": 2490,
-            "extras": []
+            "extras": [],
+            "molho": "Sugo"
         },
         {
             "descricao": "Ingredientes sem preço não mudam o valor",
             "escolha": {
                 "tamanho_id": 1,
                 "massa_id": 1,
-                "molho_id": 1,
                 "ingrediente_ids": [
                     8,
                     10,
                     18,
                     11,
                     9
-                ]
+                ],
+                "molho_id": 1
             },
             "preco": 2490,
-            "extras": []
+            "extras": [],
+            "molho": "Sugo"
         },
         {
             "descricao": "Carne seca soma o preço dela",
             "escolha": {
                 "tamanho_id": 1,
                 "massa_id": 1,
-                "molho_id": 1,
                 "ingrediente_ids": [
                     3,
                     10
-                ]
+                ],
+                "molho_id": 1
             },
             "preco": 3190,
             "extras": [
                 "Carne seca"
-            ]
+            ],
+            "molho": "Sugo"
         },
         {
             "descricao": "Inteiro, bolonhesa (+3,00), camarão e bacon: os dois somam",
             "escolha": {
                 "tamanho_id": 2,
                 "massa_id": 1,
-                "molho_id": 2,
                 "ingrediente_ids": [
                     4,
                     8,
                     5,
                     10
-                ]
+                ],
+                "molho_id": 2
             },
             "preco": 5490,
             "extras": [
                 "Camarão",
                 "Bacon"
-            ]
+            ],
+            "molho": "Bolonhesa"
         },
         {
             "descricao": "Mesma montagem em outra ordem de clique: mesmo preço e mesma ordem",
             "escolha": {
                 "tamanho_id": 2,
                 "massa_id": 1,
-                "molho_id": 2,
                 "ingrediente_ids": [
                     10,
                     5,
                     8,
                     4
-                ]
+                ],
+                "molho_id": 2
             },
             "preco": 5490,
             "extras": [
                 "Camarão",
                 "Bacon"
-            ]
+            ],
+            "molho": "Bolonhesa"
         },
         {
             "descricao": "Inteiro, nhoque (+4,00), quatro queijos (+5,00), sem ingrediente pago",
             "escolha": {
                 "tamanho_id": 2,
                 "massa_id": 5,
-                "molho_id": 6,
                 "ingrediente_ids": [
                     8,
                     18
-                ]
+                ],
+                "molho_id": 6
             },
             "preco": 4890,
-            "extras": []
+            "extras": [],
+            "molho": "Quatro queijos"
         },
         {
             "descricao": "Ingrediente repetido conta uma vez só",
             "escolha": {
                 "tamanho_id": 1,
                 "massa_id": 1,
-                "molho_id": 1,
                 "ingrediente_ids": [
                     5,
                     5,
                     5,
                     5
-                ]
+                ],
+                "molho_id": 1
             },
             "preco": 2790,
             "extras": [
                 "Bacon"
-            ]
+            ],
+            "molho": "Sugo"
+        },
+        {
+            "descricao": "Dois molhos: Sugo e Bolonhesa somam só o da Bolonhesa",
+            "escolha": {
+                "tamanho_id": 1,
+                "massa_id": 1,
+                "ingrediente_ids": [],
+                "molho_ids": [
+                    1,
+                    2
+                ]
+            },
+            "preco": 2790,
+            "extras": [],
+            "molho": "Sugo e Bolonhesa"
+        },
+        {
+            "descricao": "Bolonhesa e Quatro queijos no Inteiro, com Bacon: 3 + 5 + 3",
+            "escolha": {
+                "tamanho_id": 2,
+                "massa_id": 1,
+                "ingrediente_ids": [
+                    5
+                ],
+                "molho_ids": [
+                    6,
+                    2
+                ]
+            },
+            "preco": 5090,
+            "extras": [
+                "Bacon"
+            ],
+            "molho": "Bolonhesa e Quatro queijos"
+        },
+        {
+            "descricao": "Molho repetido na lista conta uma vez só",
+            "escolha": {
+                "tamanho_id": 1,
+                "massa_id": 1,
+                "ingrediente_ids": [],
+                "molho_ids": [
+                    2,
+                    2
+                ]
+            },
+            "preco": 2790,
+            "extras": [],
+            "molho": "Bolonhesa"
         }
     ],
     "por_tamanho": {

@@ -17,6 +17,9 @@ use App\Repositories\CardapioRepository;
  * Molho) traz TODAS as opções do cardápio; a escolhida sai com um quadrado cheio e em negrito, as outras com o quadrado vazio.
  * A linha leva o símbolo também como texto ("■ ", "□ ") para o agente v3, que não desenha quadrados e imprime o texto.
  *   c: cheia | vazia (marca da opção)   n: o nome, sem o símbolo
+ *
+ * D111: depois dos pratos, antes do pagamento, o "RESUMO DO PEDIDO": uma linha por item ("1x Nhoque (Meio)", "2x Coca-Cola lata"),
+ * com o valor (se a comanda leva preço), a taxa e o total. Dinheiro sai com "troco para R$ ..." ou "sem troco".
  */
 final class Comanda
 {
@@ -80,11 +83,7 @@ final class Comanda
         // ---- Itens ----
         $l[] = ['t' => '', 'e' => 'linha'];
         foreach ($pedido['itens'] as $item) {
-            $linha = ['t' => $item['quantidade'] . 'x ' . $item['nome'], 'e' => 'destaque'];
-            if ($comPreco) {
-                $linha['d'] = self::reais($item['preco_unit_centavos'] * $item['quantidade']);
-            }
-            $l[] = $linha;
+            $l[] = ['t' => $item['quantidade'] . 'x ' . $item['nome'], 'e' => 'destaque'];   // o valor vai no resumo (D111)
             $m = $item['montagem'];
             if (is_array($m)) {
                 $catalogo ??= (new CardapioRepository())->publico();
@@ -108,9 +107,18 @@ final class Comanda
             $l[] = ['t' => 'OBS DO PEDIDO: ' . $pedido['observacoes'], 'e' => 'negrito'];
         }
 
-        // ---- Valores e pagamento ----
+        // ---- Resumo do pedido (D111) e valores ----
+        $l[] = ['t' => '', 'e' => 'linha'];
+        $l[] = ['t' => 'RESUMO DO PEDIDO', 'e' => 'negrito', 'a' => 'c'];
+        foreach ($pedido['itens'] as $item) {
+            $linha = ['t' => $item['quantidade'] . 'x ' . self::nomeNoResumo($item), 'e' => 'normal'];
+            if ($comPreco) {
+                $linha['d'] = self::reais($item['preco_unit_centavos'] * $item['quantidade']);
+            }
+            $l[] = $linha;
+        }
         if ($comPreco) {
-            $l[] = ['t' => '', 'e' => 'linha'];
+            $l[] = ['t' => '', 'e' => 'espaco'];
             if ((int) $pedido['taxa_entrega_centavos'] > 0) {
                 $l[] = ['t' => 'Taxa de entrega', 'e' => 'normal', 'd' => self::reais((int) $pedido['taxa_entrega_centavos'])];
             }
@@ -187,7 +195,7 @@ final class Comanda
         if ($restantes !== []) {
             $secoes[] = $secao('Outros', [], $restantes);
         }
-        $secoes[] = $secao('Molho', $visiveis($catalogo['molhos'] ?? []), $um($m['molho'] ?? null));
+        $secoes[] = $secao('Molho', $visiveis($catalogo['molhos'] ?? []), isset($m['molhos']) && is_array($m['molhos']) ? $m['molhos'] : $um($m['molho'] ?? null));   // D110: mais de um molho
         return $secoes;
     }
 
@@ -203,6 +211,7 @@ final class Comanda
                 $catalogo ??= (new CardapioRepository())->publico();
                 $pedido['itens'][$i]['checklist'] = self::checklist($item['montagem'], $catalogo);
             }
+            $pedido['itens'][$i]['nome_resumo'] = self::nomeNoResumo($item);
         }
         return $pedido;
     }
@@ -214,11 +223,14 @@ final class Comanda
             'id' => 0, 'tipo' => 'entrega', 'mesa' => null, 'origem' => 'cardapio', 'criado_em' => Relogio::iso(Relogio::agora()),
             'cliente_nome' => 'Comanda de teste', 'cliente_telefone' => '5511912345678',
             'endereco_rua' => 'Rua de Exemplo', 'endereco_numero' => '100', 'endereco_bairro' => 'Centro', 'endereco_complemento' => 'Apto 12', 'endereco_referencia' => '',
-            'observacoes' => 'Tocar o interfone', 'pagamento' => 'dinheiro', 'troco_para_centavos' => 10000, 'taxa_entrega_centavos' => 600, 'total_centavos' => 5990,
+            'observacoes' => 'Tocar o interfone', 'pagamento' => 'dinheiro', 'troco_para_centavos' => 10000, 'taxa_entrega_centavos' => 600, 'total_centavos' => 8980,
             'itens' => [
                 ['nome' => 'Monte seu prato', 'quantidade' => 1, 'preco_unit_centavos' => 4690, 'observacoes' => 'Molho à parte', 'montagem' => [
                     'tamanho' => ['nome' => 'Inteiro', 'descricao' => 'serve 2 pessoas · 550 g'], 'massa' => ['nome' => 'Penne'], 'molho' => ['nome' => 'Bolonhesa'],
                     'inclusos' => [['nome' => 'Picadinho de frango'], ['nome' => 'Bacon'], ['nome' => 'Muçarela']], 'extras' => [['nome' => 'Brócolis']],
+                ]],
+                ['nome' => 'Lasanha da casa', 'item_id' => 5, 'quantidade' => 1, 'preco_unit_centavos' => 2990, 'observacoes' => '', 'montagem' => [
+                    'tamanho' => ['nome' => 'Meio'], 'massa' => ['nome' => 'Lasanha'], 'molho' => ['nome' => 'Bolonhesa'], 'inclusos' => [], 'extras' => [],
                 ]],
                 ['nome' => 'Refrigerante lata', 'quantidade' => 2, 'preco_unit_centavos' => 650, 'observacoes' => '', 'montagem' => null],
             ],
@@ -237,8 +249,26 @@ final class Comanda
             return 'PAGAMENTO NA CONTA';
         }
         $forma = mb_strtoupper(self::PAGAMENTOS[$pedido['pagamento']] ?? (string) $pedido['pagamento']);
-        $troco = $pedido['pagamento'] === 'dinheiro' && $pedido['troco_para_centavos'] ? ' - TROCO PARA ' . self::reais((int) $pedido['troco_para_centavos']) : '';
+        $troco = '';
+        if ($pedido['pagamento'] === 'dinheiro') {
+            $troco = $pedido['troco_para_centavos'] ? ', TROCO PARA ' . self::reais((int) $pedido['troco_para_centavos']) : ', SEM TROCO';
+        }
         return "PAGAMENTO: {$forma}{$troco}";
+    }
+
+    /**
+     * O item numa linha curta, para o resumo (D111). Monte seu prato: a massa e o tamanho ("Nhoque (Meio)"); prato da casa: o nome e o
+     * tamanho ("Lasanha (Inteiro)"); bebida e sobremesa: o nome.
+     */
+    public static function nomeNoResumo(array $item): string
+    {
+        $m = $item['montagem'] ?? null;
+        if (!is_array($m)) {
+            return (string) $item['nome'];
+        }
+        $tamanho = trim((string) ($m['tamanho']['nome'] ?? ''));
+        $base = empty($item['item_id']) && !empty($m['massa']['nome']) ? (string) $m['massa']['nome'] : (string) $item['nome'];
+        return $base . ($tamanho !== '' ? " ({$tamanho})" : '');
     }
 
     private static function reais(int $centavos): string

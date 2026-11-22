@@ -36,7 +36,7 @@ final class PedidoPorIa
     /** Regras que entram no prompt quando a IA faz o pedido (no lugar de "você não monta pedido"). */
     public const REGRAS = "- Você MONTA O PEDIDO do cliente pela conversa, com as ferramentas. Quem calcula preço e total é o sistema: nunca some valores nem diga um total que não veio de uma ferramenta.\n"
         . "- Se o cliente já mandar o pedido na primeira mensagem, coloque tudo de uma vez (adicionar_ao_pedido aceita vários itens) e pergunte só o que faltar.\n"
-        . "- Use só os códigos do CARDÁPIO. Se o cliente pedir algo que não existe, ou estiver em dúvida entre opções, pergunte em vez de escolher por ele. Prato da casa precisa do tamanho; o \"Monte sua massa\" precisa de tamanho, massa e molho.\n"
+        . "- Use só os códigos do CARDÁPIO. Se o cliente pedir algo que não existe, ou estiver em dúvida entre opções, pergunte em vez de escolher por ele. Prato da casa precisa do tamanho; o \"Monte sua massa\" precisa de tamanho, uma massa e um ou mais molhos (o cliente pode misturar molhos; cada um soma o seu valor).\n"
         . "- Para fechar, o pedido precisa de: itens, entrega ou retirada, nome e forma de pagamento (e endereço, se for entrega). Pergunte o que faltar, uma ou duas coisas por vez.\n"
         . "- Entrega: peça a localização pelo WhatsApp (clipe 📎 > Localização) ou o endereço com rua, número e bairro. Dinheiro: pergunte se precisa de troco e para quanto.\n"
         . "- Com tudo completo, chame mostrar_resumo: o sistema manda o resumo com o total logo depois da sua mensagem (não repita os itens nem o total). Só chame confirmar_pedido quando o cliente responder que confirma DEPOIS de ver o resumo. Se ele mudar algo, ajuste e mostre o resumo de novo.\n"
@@ -120,10 +120,10 @@ final class PedidoPorIa
         $nada = ['type' => 'object', 'properties' => new \stdClass(), 'required' => []];
         $f = static fn (string $nome, string $descricao, array $parametros): array => ['type' => 'function', 'function' => ['name' => $nome, 'description' => $descricao, 'parameters' => $parametros]];
         return [
-            $f('adicionar_ao_pedido', 'Coloca um ou mais itens no pedido. Para bebida/sobremesa: item_id e quantidade. Para prato da casa: item_id, tamanho_id e quantidade. Para "Monte sua massa": sem item_id, com tamanho_id, massa_id, molho_id, ingrediente_ids e quantidade. Devolve o pedido com os preços do sistema.', [
+            $f('adicionar_ao_pedido', 'Coloca um ou mais itens no pedido. Para bebida/sobremesa: item_id e quantidade. Para prato da casa: item_id, tamanho_id e quantidade. Para "Monte sua massa": sem item_id, com tamanho_id, massa_id, molho_ids (um ou mais molhos), ingrediente_ids e quantidade. Devolve o pedido com os preços do sistema.', [
                 'type' => 'object',
                 'properties' => ['itens' => ['type' => 'array', 'items' => ['type' => 'object', 'properties' => [
-                    'item_id' => $inteiro, 'tamanho_id' => $inteiro, 'massa_id' => $inteiro, 'molho_id' => $inteiro,
+                    'item_id' => $inteiro, 'tamanho_id' => $inteiro, 'massa_id' => $inteiro, 'molho_ids' => ['type' => 'array', 'items' => $inteiro],
                     'ingrediente_ids' => ['type' => 'array', 'items' => $inteiro], 'quantidade' => $inteiro,
                     'observacao' => ['type' => 'string', 'description' => 'Pedido do cliente para este item, como "sem cebola". Opcional.'],
                 ], 'required' => ['quantidade']]]],
@@ -376,7 +376,7 @@ final class PedidoPorIa
             return ['tipo' => 'simples', 'item_id' => $item, 'quantidade' => $quantidade, 'observacoes' => $observacao];
         }
         return ['tipo' => 'montado', 'item_id' => $item, 'tamanho_id' => $temTamanho ? (int) $i['tamanho_id'] : null,
-            'massa_id' => isset($i['massa_id']) ? (int) $i['massa_id'] : null, 'molho_id' => isset($i['molho_id']) ? (int) $i['molho_id'] : null,
+            'massa_id' => isset($i['massa_id']) ? (int) $i['massa_id'] : null, 'molho_ids' => array_values(array_map('intval', array_filter((array) ($i['molho_ids'] ?? $i['molho_id'] ?? []), 'is_numeric'))),
             'ingrediente_ids' => array_values(array_map('intval', array_filter((array) ($i['ingrediente_ids'] ?? []), 'is_numeric'))),
             'quantidade' => $quantidade, 'observacoes' => $observacao];
     }
@@ -394,7 +394,7 @@ final class PedidoPorIa
             return "{$linha['nome']} ({$m['tamanho']['nome']})" . $obs;
         }
         $ingredientes = array_column(array_merge($m['inclusos'] ?? [], $m['extras'] ?? []), 'nome');
-        return "Monte sua massa ({$m['tamanho']['nome']}): {$m['massa']['nome']}, molho {$m['molho']['nome']}" . ($ingredientes !== [] ? ', ' . implode(', ', $ingredientes) : '') . $obs;
+        return "Monte sua massa ({$m['tamanho']['nome']}): {$m['massa']['nome']}, " . (count($m['molhos'] ?? []) > 1 ? 'molhos ' : 'molho ') . "{$m['molho']['nome']}" . ($ingredientes !== [] ? ', ' . implode(', ', $ingredientes) : '') . $obs;
     }
 
     /** @return array{linhas:list<array{nome:string, quantidade:int, total:int}>, subtotal:int, taxa:int, total:int} com os preços de agora */

@@ -247,8 +247,53 @@ final class Assistente
         $texto = (string) preg_replace(['#<function=[^>]*>.*?</function>#si', '#<tool_call>.*?</tool_call>#si', '#<\|python_tag\|>[^\n]*#i'], '', $texto);
         $texto = (string) preg_replace('/\*\*(.+?)\*\*/s', '*$1*', $texto);
         $texto = (string) preg_replace('/^#{1,6}\s*/m', '', $texto);
-        return mb_substr(trim($texto), 0, 1500);
+        return mb_substr(self::humanizar(trim($texto)), 0, 1500);
     }
+
+    /**
+     * Rede de segurança do jeito de escrever (D109): o prompt pede, mas o modelo às vezes escapa. Troca o travessão por vírgula
+     * e tira a frase de despedida de robô do fim ("Posso ajudar em mais alguma coisa?"). Não mexe em número, preço nem link.
+     */
+    public static function humanizar(string $texto): string
+    {
+        $texto = (string) preg_replace('/\s+[—–]\s+/u', ', ', $texto);
+        $texto = (string) preg_replace('/[—–]/u', ', ', $texto);
+        $despedida = '/(?:^|(?<=[.!?😊🙂👍🍝])\s+|\n+)(?:'
+            . 'posso (?:te )?ajudar (?:em|com) (?:mais )?(?:alguma|algo)[^\n]*'
+            . '|(?:fico|estou|estamos|seguimos) (?:à|a) (?:sua )?disposição[^\n]*'
+            . '|qualquer (?:outra )?dúvida[^\n]*'
+            . '|se precisar de (?:mais )?(?:alguma coisa|algo)[^\n]*'
+            . '|espero (?:ter )?ajudado[^\n]*'
+            . ')$/iu';
+        $sem = trim((string) preg_replace($despedida, '', $texto));
+        return $sem !== '' ? $sem : $texto;
+    }
+
+    /**
+     * Como escrever para parecer gente (D109). Adaptado da skill "humanizer" (github.com/blader/humanizer, MIT): os padrões que
+     * entregam texto de IA, trocados por exemplos de balcão em português. Vale para todos os tons; o tom escolhido muda o resto.
+     */
+    public const JEITO_DE_ESCREVER = "COMO ESCREVER (você está no WhatsApp, não num e-mail)\n"
+        . "- Escreva como alguém da casa digitando no celular: frases curtas, palavras do dia a dia, \"você\". Pode usar \"tá\", \"beleza\", \"pode deixar\", \"certinho\", \"show\", sem forçar gíria.\n"
+        . "- Vá direto ao ponto. Não abra com elogio ou confirmação vazia (\"Ótima escolha!\", \"Perfeito!\", \"Claro!\", \"Entendido.\", \"Certamente!\") e não feche com oferta de ajuda (\"Posso ajudar em mais algo?\", \"Fico à disposição\", \"Qualquer dúvida estou aqui\").\n"
+        . "- Não repita o que o cliente acabou de dizer nem anuncie o que vai fazer (\"Vou anotar o seu pedido...\"). Faça e siga para a próxima pergunta.\n"
+        . "- Uma pergunta por mensagem (duas, no máximo, se forem curtas). Não mande lista, tópico nem rótulo em negrito (\"*Pagamento:*\").\n"
+        . "- Nunca use travessão (— ou –). Use vírgula, ponto ou dois-pontos.\n"
+        . "- Sem palavra de escritório: nada de \"prezado\", \"solicitação\", \"informamos\", \"gostaria de\", \"realizar\", \"efetuar\", \"conforme\", \"segue\", \"devidamente\", \"aguardo seu retorno\".\n"
+        . "- Fale na primeira pessoa (\"anotei\", \"já coloquei\"), não \"o sistema registrou\" nem \"o item foi adicionado\".\n"
+        . "- Ao anotar um item, confirme em poucas palavras com o preço que a ferramenta devolveu. Não repita o pedido inteiro a cada mensagem: o resumo completo chega no fim.\n"
+        . "- Emoji: no máximo um, e só quando cair bem (🍝 😊 👍). Muitas mensagens vão sem nenhum.\n"
+        . "- Não comece duas mensagens seguidas do mesmo jeito. Se o cliente escreve informal, curto ou sem acento, acompanhe.\n"
+        . "EXEMPLOS (evite → prefira; entre colchetes vai o que vier do CARDÁPIO e das ferramentas)\n"
+        . "Cliente: quero um [prato] inteiro\n"
+        . "Evite: \"Ótima escolha! Adicionei 1 [prato] (Inteiro) ao seu pedido. Gostaria de adicionar mais algum item? Estou à disposição!\"\n"
+        . "Prefira: \"Anotei um [prato] inteiro, [preço] 😊 Vai mais alguma coisa ou fecho assim?\"\n"
+        . "Cliente: vcs entregam no centro?\n"
+        . "Evite: \"Sim! Realizamos entregas na região central. Para prosseguir, por gentileza, informe seu endereço completo.\"\n"
+        . "Prefira: \"Entregamos sim! Me manda a localização ou o endereço com rua, número e bairro que eu já vejo a taxa.\"\n"
+        . "Cliente: obrigado\n"
+        . "Evite: \"Eu que agradeço! Fico à disposição para qualquer dúvida. Tenha um excelente dia!\"\n"
+        . "Prefira: \"Imagina! Bom apetite 🍝\"";
 
     /** O prompt do sistema, montado do zero a cada resposta. Também serve para o dono ver o que o modelo recebe. */
     public function prompt(?array $c = null, bool $primeira = false, ?string $nomeDoCliente = null, bool $pedido = false): string
@@ -261,12 +306,12 @@ final class Assistente
             'profissional' => 'profissional e cordial',
             'bem_humorado' => 'leve e bem-humorado, com um toque de humor sem exagero e nunca à custa do cliente',
             'personalizado' => trim($c['ia_tom_texto']) !== '' ? trim($c['ia_tom_texto']) : 'simpático e acolhedor',
-            default => 'simpático e acolhedor, como quem atende no balcão',
+            default => 'amigável e informal, como um atendente simpático da casa respondendo pelo celular',
         };
         $tamanho = match ($c['ia_tamanho']) {
             'padrao' => 'resposta direta, de até um parágrafo curto',
             'detalhada' => 'pode explicar com mais detalhe, sem enrolar',
-            default => 'no máximo 2 ou 3 frases',
+            default => 'curtas, de 1 ou 2 frases, como mensagem de WhatsApp',
         };
 
         $p = [];
@@ -276,6 +321,7 @@ final class Assistente
             ? 'Você atende os clientes da loja pelo WhatsApp: anota o pedido conversando, como um atendente do balcão, e tira dúvidas sobre o cardápio, os horários e a entrega.'
             : trim($c['ia_papel']);
         $p[] = "Tom de voz: {$tom}. Tamanho das respostas: {$tamanho}. Escreva em português do Brasil, em texto simples (sem títulos nem tabelas; no WhatsApp o negrito é *assim*).";
+        $p[] = self::JEITO_DE_ESCREVER;
         if ($primeira) {
             $abertura = trim($c['ia_saudacao']);
             $p[] = 'Esta é a primeira mensagem da conversa.' . ($abertura !== '' ? " Comece com: \"{$abertura}\"." : '')

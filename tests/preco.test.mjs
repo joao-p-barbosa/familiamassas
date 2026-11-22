@@ -15,7 +15,8 @@ const conferir = (descricao, obtido, esperado) => {
 console.log('\nPREÇO NO NAVEGADOR = PREÇO NO SERVIDOR');
 for (const caso of casos) {
   const r = calcularMontagem(cardapio, caso.escolha);
-  conferir(caso.descricao, [r.preco, r.extras.map((i) => i.nome)], [caso.preco, caso.extras]);
+  // O nome do molho também tem de bater: com mais de um (D110), "Bolonhesa e Quatro queijos" igual ao do servidor.
+  conferir(caso.descricao, [r.preco, r.extras.map((i) => i.nome), r.molho?.nome], [caso.preco, caso.extras, caso.molho]);
 }
 
 console.log('\nACRÉSCIMO POR TAMANHO (D108)');

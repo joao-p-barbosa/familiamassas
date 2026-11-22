@@ -40,7 +40,7 @@ export function comandaHtml(pedido, { largura = ajustes.comanda_largura_mm, comP
     const nomes = (lista) => lista.map((i) => esc(i.nome)).join(', ');
     return `
       <div class="comanda__item">
-        <p class="comanda__item-nome"><span>${item.quantidade}x ${esc(item.nome)}</span>${comPreco ? `<span>${reais(item.preco_unit_centavos * item.quantidade)}</span>` : ''}</p>
+        <p class="comanda__item-nome"><span>${item.quantidade}x ${esc(item.nome)}</span></p>
         ${m && item.checklist ? `
         <div class="comanda__lista">${item.checklist.map((secao) => `
           <p class="comanda__secao">${esc(secao.titulo)}</p>
@@ -58,7 +58,9 @@ export function comandaHtml(pedido, { largura = ajustes.comanda_largura_mm, comP
       </div>`;
   }).join('');
 
-  const troco = pedido.pagamento === 'dinheiro' && pedido.troco_para_centavos ? ` · troco para ${reais(pedido.troco_para_centavos)}` : '';
+  const troco = pedido.pagamento !== 'dinheiro' ? '' : pedido.troco_para_centavos ? `, troco para ${reais(pedido.troco_para_centavos)}` : ', sem troco';
+  // Resumo do pedido (D111): uma linha por item, com o valor; o nome curto vem do servidor (Comanda::nomeNoResumo).
+  const resumo = pedido.itens.map((item) => `<p class="comanda__meta"><span>${item.quantidade}x ${esc(item.nome_resumo ?? item.nome)}</span>${comPreco ? `<span>${reais(item.preco_unit_centavos * item.quantidade)}</span>` : ''}</p>`).join('');
   // Pedido do iFood: número do app, quem entrega, código de coleta e "pago ou cobrar" (sai mesmo na comanda sem preço).
   const ifood = pedido.ifood;
   const doIfood = ifood ? `
@@ -88,6 +90,10 @@ export function comandaHtml(pedido, { largura = ajustes.comanda_largura_mm, comP
       </div>
       <div class="comanda__bloco">${itens}</div>
       ${pedido.observacoes ? `<div class="comanda__bloco"><p class="comanda__obs">OBS DO PEDIDO: ${esc(pedido.observacoes)}</p></div>` : ''}
+      <div class="comanda__bloco">
+        <p class="comanda__secao">Resumo do pedido</p>
+        ${resumo}
+      </div>
       ${comPreco ? `
       <div class="comanda__bloco">
         ${pedido.taxa_entrega_centavos ? `<p class="comanda__meta"><span>Taxa de entrega</span><span>${reais(pedido.taxa_entrega_centavos)}</span></p>` : ''}

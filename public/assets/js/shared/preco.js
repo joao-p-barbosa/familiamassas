@@ -5,8 +5,17 @@
 //   Monte sua massa: tamanho + acréscimo da massa + acréscimo do molho + preço de cada ingrediente.
 //                    Ingrediente de preço 0 é "incluso"; os de preço maior que 0 são os "extras".
 //   D108: cada acréscimo pode ter valor por tamanho (opcao.precos); tamanho sem valor usa o do cadastro.
+//   D110: mais de um molho (molho_ids), cada um soma o seu acréscimo. "molho" junta os nomes e a soma; "molhos" é a lista.
 
 const achar = (lista, id) => lista.find((o) => o.id === id) ?? null;
+
+/** Os molhos escolhidos: a lista molho_ids ou, no formato antigo (carrinho salvo antes), o molho_id. */
+export const idsDosMolhos = (escolha) => [...new Set(escolha.molho_ids ?? (escolha.molho_id ? [escolha.molho_id] : []))];
+
+/** "Sugo", "Sugo e Bolonhesa", "Sugo, Bolonhesa e Pesto". */
+export function juntar(nomes) {
+  return nomes.length < 2 ? (nomes[0] ?? '') : `${nomes.slice(0, -1).join(', ')} e ${nomes[nomes.length - 1]}`;
+}
 
 /** Valor de uma massa, molho ou ingrediente num tamanho (D108): o da tabela por tamanho ou, sem ele, o do cadastro. */
 export const noTamanho = (opcao, campo, tamanhoId) => opcao?.precos?.find((p) => p.tamanho_id === tamanhoId)?.preco_centavos ?? opcao?.[campo] ?? 0;
@@ -22,7 +31,7 @@ export const precoDoPrato = (item, tamanhoId) => item.precos?.find((p) => p.tama
 
 /**
  * @param {{ tamanhos: any[], massas: any[], molhos: any[], ingredientes: any[], itens: any[] }} cardapio
- * @param {{ item_id?: number|null, tamanho_id?: number|null, massa_id?: number|null, molho_id?: number|null, ingrediente_ids?: number[] }} escolha
+ * @param {{ item_id?: number|null, tamanho_id?: number|null, massa_id?: number|null, molho_ids?: number[], molho_id?: number|null, ingrediente_ids?: number[] }} escolha
  */
 export function calcularMontagem(cardapio, escolha) {
   const tamanho = achar(cardapio.tamanhos, escolha.tamanho_id);
@@ -30,7 +39,7 @@ export function calcularMontagem(cardapio, escolha) {
   if (item) {
     const preco = tamanho ? precoDoPrato(item, tamanho.id) : null;
     return {
-      tamanho, massa: achar(cardapio.massas, item.massa_id), molho: achar(cardapio.molhos, item.molho_id),
+      tamanho, massa: achar(cardapio.massas, item.massa_id), molho: achar(cardapio.molhos, item.molho_id), molhos: [achar(cardapio.molhos, item.molho_id)].filter(Boolean),
       inclusos: item.ingrediente_ids.map((id) => achar(cardapio.ingredientes, id)).filter(Boolean), extras: [], valorExtras: 0,
       preco: preco ?? 0, completa: preco !== null,
     };
@@ -38,7 +47,11 @@ export function calcularMontagem(cardapio, escolha) {
   // Sem tamanho ainda (o montador pede o tamanho por último), vale o valor do cadastro; com tamanho, o daquele tamanho (D108).
   const noT = (opcao, campo) => (opcao && tamanho ? { ...opcao, [campo]: noTamanho(opcao, campo, tamanho.id) } : opcao);
   const massa = noT(achar(cardapio.massas, escolha.massa_id), 'acrescimo_centavos');
-  const molho = noT(achar(cardapio.molhos, escolha.molho_id), 'acrescimo_centavos');
+  const ids = idsDosMolhos(escolha);
+  const molhos = ids.map((id) => noT(achar(cardapio.molhos, id), 'acrescimo_centavos')).filter(Boolean);
+  molhos.sort((a, b) => a.ordem - b.ordem || a.id - b.id);
+  const valorMolhos = molhos.reduce((soma, o) => soma + o.acrescimo_centavos, 0);
+  const molho = molhos.length ? { ...molhos[0], nome: juntar(molhos.map((o) => o.nome)), acrescimo_centavos: valorMolhos } : null;
   const escolhidos = [...new Set(escolha.ingrediente_ids ?? [])].map((id) => noT(achar(cardapio.ingredientes, id), 'preco_extra_centavos')).filter(Boolean);
   escolhidos.sort((a, b) => a.ordem - b.ordem || a.id - b.id);
   const extras = escolhidos.filter((i) => i.preco_extra_centavos > 0);
@@ -47,11 +60,12 @@ export function calcularMontagem(cardapio, escolha) {
     tamanho,
     massa,
     molho,
+    molhos,
     inclusos: escolhidos.filter((i) => i.preco_extra_centavos === 0),
     extras,
     valorExtras,
-    preco: (tamanho?.preco_centavos ?? 0) + (massa?.acrescimo_centavos ?? 0) + (molho?.acrescimo_centavos ?? 0) + valorExtras,
-    completa: Boolean(tamanho && massa && molho),
+    preco: (tamanho?.preco_centavos ?? 0) + (massa?.acrescimo_centavos ?? 0) + valorMolhos + valorExtras,
+    completa: Boolean(tamanho && massa && molhos.length && molhos.length === ids.length),
   };
 }
 

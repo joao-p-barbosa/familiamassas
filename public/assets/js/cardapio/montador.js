@@ -4,7 +4,7 @@
 import { $, $$, esc, delegar } from '../shared/dom.js';
 import { icone, iconeMassa, iconePorcao } from '../shared/icones.js';
 import { reais, acrescimo, plural } from '../shared/formato.js';
-import { calcularMontagem, precoDoPrato, noTamanho, faixa } from '../shared/preco.js';
+import { calcularMontagem, precoDoPrato, noTamanho, faixa, idsDosMolhos } from '../shared/preco.js';
 import { abrirFolha, fecharFolha } from '../shared/folha.js';
 import { avisar } from '../shared/avisos.js';
 import { estado, adicionarAoCarrinho, atualizarLinha } from './estado.js';
@@ -12,7 +12,7 @@ import { estado, adicionarAoCarrinho, atualizarLinha } from './estado.js';
 const PASSO = {
   tamanho: { id: 'tamanho', rotulo: 'Tamanho', titulo: 'Qual o tamanho?' },
   massa: { id: 'massa', rotulo: 'Massa', titulo: 'Escolha a massa' },
-  molho: { id: 'molho', rotulo: 'Molho', titulo: 'Escolha o molho' },
+  molho: { id: 'molho', rotulo: 'Molho', titulo: 'Escolha o molho' },   // D110: pode mais de um
   ingredientes: { id: 'ingredientes', rotulo: 'Ingredientes', titulo: 'Escolha os ingredientes' },
   final: { id: 'final', rotulo: 'Finalização', titulo: 'Para finalizar' },
   revisao: { id: 'revisao', rotulo: 'Revisão', titulo: 'Confira seu prato' },
@@ -24,7 +24,7 @@ let REVISAO = PASSOS.length - 1;
 const indice = (id) => PASSOS.findIndex((p) => p.id === id);
 
 const dialogo = $('#folha-montador');
-const escolhaVazia = () => ({ tamanho_id: null, massa_id: null, molho_id: null, ingrediente_ids: [], observacoes: '', quantidade: 1 });
+const escolhaVazia = () => ({ tamanho_id: null, massa_id: null, molho_ids: [], ingrediente_ids: [], observacoes: '', quantidade: 1 });
 
 let m = null;          // montagem em andamento
 let rascunho = null;   // última montagem livre fechada sem adicionar: volta ao reabrir
@@ -51,6 +51,8 @@ export function abrirMontador({ itemCasa = null, linha = null } = {}) {
   if (linha) {
     m = { passo: REVISAO, alcancado: REVISAO, itemCasa: casa, uid: linha.uid,
           escolha: { ...escolhaVazia(), ...structuredClone(linha) } };
+    m.escolha.molho_ids = idsDosMolhos(m.escolha);
+    delete m.escolha.molho_id;
   } else if (itemCasa) {
     m = { passo: 0, alcancado: 0, itemCasa, uid: null, escolha: escolhaVazia() };
   } else {
@@ -75,7 +77,7 @@ function limparIndisponiveis() {
   const ok = (lista, id) => disponivel(lista.find((o) => o.id === id));
   if (!tamanhoVende(c.tamanhos.find((o) => o.id === m.escolha.tamanho_id))) m.escolha.tamanho_id = null;
   if (!ok(c.massas, m.escolha.massa_id)) m.escolha.massa_id = null;
-  if (!ok(c.molhos, m.escolha.molho_id)) m.escolha.molho_id = null;
+  m.escolha.molho_ids = m.escolha.molho_ids.filter((id) => ok(c.molhos, id));
   m.escolha.ingrediente_ids = m.escolha.ingrediente_ids.filter((id) => ok(c.ingredientes, id));
   if (m.passo === REVISAO && !calculo().completa) {
     m.passo = PASSOS.findIndex((p) => !passoResolvido(p.id));
@@ -85,7 +87,7 @@ function limparIndisponiveis() {
 function passoResolvido(id) {
   if (id === 'tamanho') return m.escolha.tamanho_id !== null;
   if (id === 'massa') return m.escolha.massa_id !== null;
-  if (id === 'molho') return m.escolha.molho_id !== null;
+  if (id === 'molho') return m.escolha.molho_ids.length > 0;
   return true;
 }
 
@@ -190,13 +192,21 @@ const CONTEUDO = {
       })).join('')}
     </fieldset>`,
 
+  // D110: o molho é de marcar (pode mais de um); cada molho soma o seu acréscimo.
   molho: () => `
+    <div class="contador"><div class="contador__texto"><strong>Pode escolher mais de um</strong><span>Cada molho com preço ao lado soma no prato.</span></div></div>
     <fieldset class="grupo-opcoes grupo-opcoes--duas">
-      <legend class="so-leitor">Molho</legend>
-      ${estado.cardapio.molhos.map((x) => opcaoUnica('molho_id', x, {
-        descricao: x.descricao, lado: lado(x, 'acrescimo_centavos'),
-        figura: `<span class="opcao__figura bolinha" style="background: ${esc(x.cor)}" aria-hidden="true"></span>`,
-      })).join('')}
+      <legend class="so-leitor">Molho (pode escolher mais de um)</legend>
+      ${estado.cardapio.molhos.map((x) => `
+        <label class="opcao opcao--caixa opcao--figura">
+          <input class="opcao__entrada" type="checkbox" name="molho" value="${x.id}" ${m.escolha.molho_ids.includes(x.id) ? 'checked' : ''} ${disponivel(x) ? '' : 'disabled'}>
+          ${marca}<span class="opcao__figura bolinha" style="background: ${esc(x.cor)}" aria-hidden="true"></span>
+          <span class="opcao__corpo">
+            <span class="opcao__titulo">${esc(x.nome)}</span>
+            ${x.descricao ? `<span class="opcao__descricao">${esc(x.descricao)}</span>` : ''}
+          </span>
+          <span class="opcao__lado">${disponivel(x) ? lado(x, 'acrescimo_centavos') : esgotado}</span>
+        </label>`).join('')}
     </fieldset>`,
 
   ingredientes: () => {
@@ -246,7 +256,7 @@ const CONTEUDO = {
     return `
       <dl class="revisao">
         ${linha('Massa', esc(r.massa.nome), indice('massa'), acrescimo(r.massa.acrescimo_centavos))}
-        ${linha('Molho', esc(r.molho.nome), indice('molho'), acrescimo(r.molho.acrescimo_centavos))}
+        ${linha(r.molhos.length > 1 ? 'Molhos' : 'Molho', esc(r.molho.nome), indice('molho'), acrescimo(r.molho.acrescimo_centavos))}
         ${r.inclusos.length || !r.extras.length ? linha('Ingredientes', r.inclusos.length ? nomes(r.inclusos) : 'Nenhum', indice('ingredientes')) : ''}
         ${r.extras.length ? linha('Extras', nomes(r.extras), indice('ingredientes'), `+ ${reais(r.valorExtras)}`) : ''}
         ${linha('Tamanho', `${esc(r.tamanho.nome)}${r.tamanho.descricao ? ` (${esc(r.tamanho.descricao)})` : ''}`, indice('tamanho'), reais(r.tamanho.preco_centavos))}
@@ -300,7 +310,7 @@ function valorDoPasso(id) {
   switch (id) {
     case 'tamanho': return nome(c.tamanhos, 'tamanho_id');
     case 'massa': return nome(c.massas, 'massa_id');
-    case 'molho': return nome(c.molhos, 'molho_id');
+    case 'molho': return c.molhos.filter((o) => m.escolha.molho_ids.includes(o.id)).map((o) => o.nome).join(', ');
     case 'ingredientes': return m.escolha.ingrediente_ids.length ? plural(m.escolha.ingrediente_ids.length, 'ingrediente', 'ingredientes') : 'Nenhum';
     case 'final': return plural(m.escolha.quantidade, 'prato', 'pratos');
     default: return '';
@@ -389,9 +399,10 @@ function concluir() {
 // ---------- Eventos ----------
 delegar(dialogo, 'change', 'input, textarea', (e, campo) => {
   if (!m) return;
-  if (campo.name === 'ingrediente') {
+  if (campo.name === 'ingrediente' || campo.name === 'molho') {
     const id = Number(campo.value);
-    m.escolha.ingrediente_ids = campo.checked ? [...m.escolha.ingrediente_ids, id] : m.escolha.ingrediente_ids.filter((x) => x !== id);
+    const chave = campo.name === 'molho' ? 'molho_ids' : 'ingrediente_ids';
+    m.escolha[chave] = campo.checked ? [...m.escolha[chave], id] : m.escolha[chave].filter((x) => x !== id);
   } else if (campo.name === 'observacoes') {
     m.escolha.observacoes = campo.value.trim();
   } else if (campo.type === 'radio') {

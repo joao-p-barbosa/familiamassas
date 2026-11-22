@@ -106,9 +106,13 @@ $id = static function (string $lista, string $nome) use ($cardapio): int {
 };
 $ing = static fn (string ...$nomes): array => array_map(static fn (string $n): int => $id('ingredientes', $n), $nomes);
 $preco = new PrecoService();
-$montar = static fn (string $tamanho, string $massa, string $molho, array $ingredientes): array => $preco->montar($cardapio, [
-    'tamanho_id' => $id('tamanhos', $tamanho), 'massa_id' => $id('massas', $massa), 'molho_id' => $id('molhos', $molho), 'ingrediente_ids' => $ingredientes,
-]);
+// O molho vem como nome (formato antigo, molho_id) ou lista de nomes (D110, molho_ids: mais de um molho).
+$escolhaDoMolho = static fn (string|array $molho): array => is_array($molho)
+    ? ['molho_ids' => array_map(static fn (string $n): int => $id('molhos', $n), $molho)]
+    : ['molho_id' => $id('molhos', $molho)];
+$montar = static fn (string $tamanho, string $massa, string|array $molho, array $ingredientes): array => $preco->montar($cardapio, [
+    'tamanho_id' => $id('tamanhos', $tamanho), 'massa_id' => $id('massas', $massa), 'ingrediente_ids' => $ingredientes,
+] + $escolhaDoMolho($molho));
 $nomes = static fn (array $lista): array => array_column($lista, 'nome');
 
 // Os mesmos casos são conferidos em JavaScript (tests/preco.test.mjs) a partir deste arquivo.
@@ -122,6 +126,10 @@ $casos = [
     ['Mesma montagem em outra ordem de clique: mesmo preço e mesma ordem', 'Inteiro', 'Penne', 'Bolonhesa', ['Milho', 'Bacon', 'Brócolis', 'Camarão'], 5490, ['Camarão', 'Bacon']],
     ['Inteiro, nhoque (+4,00), quatro queijos (+5,00), sem ingrediente pago', 'Inteiro', 'Nhoque', 'Quatro queijos', ['Brócolis', 'Muçarela'], 4890, []],
     ['Ingrediente repetido conta uma vez só', 'Meio', 'Penne', 'Sugo', ['Bacon', 'Bacon', 'Bacon', 'Bacon'], 2790, ['Bacon']],
+    // D110: mais de um molho, cada um soma o seu acréscimo (Sugo 0, Bolonhesa 3, Quatro queijos 5).
+    ['Dois molhos: Sugo e Bolonhesa somam só o da Bolonhesa', 'Meio', 'Penne', ['Sugo', 'Bolonhesa'], [], 2490 + 300, []],
+    ['Bolonhesa e Quatro queijos no Inteiro, com Bacon: 3 + 5 + 3', 'Inteiro', 'Penne', ['Quatro queijos', 'Bolonhesa'], ['Bacon'], 3990 + 300 + 500 + 300, ['Bacon']],
+    ['Molho repetido na lista conta uma vez só', 'Meio', 'Penne', ['Bolonhesa', 'Bolonhesa'], [], 2490 + 300, []],
 ];
 
 echo "\nPREÇO DO MONTE SEU PRATO\n";
@@ -129,8 +137,21 @@ $paraJs = [];
 foreach ($casos as [$descricao, $tamanho, $massa, $molho, $ingredientes, $esperado, $extras]) {
     $r = $montar($tamanho, $massa, $molho, $ing(...$ingredientes));
     conferir($descricao, [$r['preco_centavos'], $nomes($r['montagem']['extras'])], [$esperado, $extras]);
-    $paraJs[] = ['descricao' => $descricao, 'escolha' => ['tamanho_id' => $id('tamanhos', $tamanho), 'massa_id' => $id('massas', $massa), 'molho_id' => $id('molhos', $molho), 'ingrediente_ids' => $ing(...$ingredientes)],
-                 'preco' => $esperado, 'extras' => $extras];
+    $paraJs[] = ['descricao' => $descricao, 'escolha' => ['tamanho_id' => $id('tamanhos', $tamanho), 'massa_id' => $id('massas', $massa), 'ingrediente_ids' => $ing(...$ingredientes)] + $escolhaDoMolho($molho),
+                 'preco' => $esperado, 'extras' => $extras, 'molho' => $r['montagem']['molho']['nome']];
+}
+$doisMolhos = $montar('Inteiro', 'Penne', ['Quatro queijos', 'Bolonhesa'], []);
+conferir('Dois molhos na montagem: a lista na ordem do cardápio e uma linha só para a comanda', [
+    $nomes($doisMolhos['montagem']['molhos']), $doisMolhos['montagem']['molho']['acrescimo_centavos'],
+    str_contains($doisMolhos['montagem']['molho']['nome'], ' e '),
+], [array_values(array_intersect($nomes($cardapio['molhos']), ['Quatro queijos', 'Bolonhesa'])), 800, true]);
+$marcados = array_column(array_filter(array_values(array_filter(App\Impressao\Comanda::checklist($doisMolhos['montagem'], $cardapio), static fn (array $s): bool => $s['titulo'] === 'Molho'))[0]['opcoes'], static fn (array $o): bool => $o['marcada']), 'nome');
+conferir('A comanda da cozinha marca os dois molhos', array_values($marcados), array_values(array_intersect($nomes($cardapio['molhos']), ['Quatro queijos', 'Bolonhesa'])));
+try {
+    $preco->montar($cardapio, ['tamanho_id' => $id('tamanhos', 'Meio'), 'massa_id' => $id('massas', 'Penne'), 'molho_ids' => [], 'ingrediente_ids' => []]);
+    conferir('Sem nenhum molho o prato é recusado', 'aceitou', 'recusou');
+} catch (App\Core\ErroHttp $e) {
+    conferir('Sem nenhum molho o prato é recusado', 'recusou', 'recusou');
 }
 // D108: acréscimo por tamanho. No cardápio de teste (em memória): Bacon 3 no Meio e 5 no Inteiro; Brócolis grátis no Meio e 2 no
 // Inteiro; Bolonhesa 3 no Meio e 4 no Inteiro. Massa sem tabela (Penne) usa o valor do cadastro.
@@ -1024,9 +1045,18 @@ conferir('O modelo escreve o marcador: o texto sai com o link real, uma vez só 
 $filaIa = [$textoIa('Veja o cardápio: {{LINK_DO_CARDAPIO}}')];
 $semFerramenta = $assistenteIa->responder('5511977770099', 'quero pedir', null, ['historico' => [], 'origem' => 'teste', 'simulacao' => true]);
 conferir('Marcador inventado, sem a ferramenta por trás: some (nunca vai "{{...}}" para o cliente)', [$semFerramenta['texto'], str_contains($semFerramenta['texto'], '{{')], ['Veja o cardápio:', false]);
-$filaIa = [$textoIa("Vou te mandar o link. <function=enviar_link_do_cardapio>{}</function>\nQualquer dúvida é só falar.")];
+$filaIa = [$textoIa("Vou te mandar o link. <function=enviar_link_do_cardapio>{}</function>\nO link já vai.")];
 $vazou = $assistenteIa->responder('5511977770099', 'quero pedir', null, ['historico' => [], 'origem' => 'teste', 'simulacao' => true]);
-conferir('Chamada de ferramenta vazada como texto (<function=...>) é retirada da resposta ao cliente', [str_contains($vazou['texto'], 'function'), str_contains($vazou['texto'], 'Qualquer dúvida é só falar.')], [false, true]);
+conferir('Chamada de ferramenta vazada como texto (<function=...>) é retirada da resposta ao cliente', [str_contains($vazou['texto'], 'function'), str_contains($vazou['texto'], 'O link já vai.')], [false, true]);
+
+// D109: o jeito de escrever (adaptado da skill humanizer) vai no prompt, e a resposta passa por uma rede de segurança.
+conferir('O prompt traz o jeito de escrever de WhatsApp, com exemplos', [str_contains($assistenteIa->prompt(), 'COMO ESCREVER'), str_contains($assistenteIa->prompt(), 'Nunca use travessão')], [true, true]);
+conferir('Travessão vira vírgula e a despedida de robô sai do fim; texto que é só isso fica como está', [
+    App\IA\Assistente::humanizar('Tem sim — Pix, cartão e dinheiro. Posso ajudar em mais alguma coisa?'),
+    App\IA\Assistente::humanizar("Anotei! 👍\nQualquer dúvida, estou à disposição."),
+    App\IA\Assistente::humanizar('Fico à disposição!'),
+    App\IA\Assistente::humanizar('Fica R$ 39,90 e chega em 40 min.'),
+], ['Tem sim, Pix, cartão e dinheiro.', 'Anotei! 👍', 'Fico à disposição!', 'Fica R$ 39,90 e chega em 40 min.']);
 
 // Os botões e o menu numérico não passam pela IA.
 $pedidosIa = [];
@@ -1258,6 +1288,23 @@ conferir('Os itens do pedido: 2 carbonaras inteiras e a massa montada, com o pre
 conferir('O cliente recebe na hora o "Recebemos seu pedido" (o mesmo aviso de status do cardápio digital) e o pedido em andamento some', [
     str_contains($tela(), "Recebemos seu pedido #{$pedidoFx['id']}"), $pdoFx->query("SELECT COUNT(*) FROM whatsapp_sessoes WHERE telefone = '{$foneFx}'")->fetchColumn(), count(array_filter((new App\Repositories\PedidoRepository())->paraPainel(null), static fn (array $p): bool => (int) $p['id'] === (int) $pedidoFx['id'])),
 ], [true, 0, 1]);
+
+// D110: no passo a passo, o molho é de marcar (mais de um); nenhum molho não vale.
+$fone2m = '5511966660021';
+$diz('cardapio', null, $fone2m);
+$diz($opcao('Monte a sua massa'), null, $fone2m);
+$diz($opcao('Nhoque'), null, $fone2m);
+$telaMolho = $tela();
+$doisMolhosFx = $opcao('Pesto') . ', ' . $opcao('Sugo');
+conferir('Molho: avisa que pode mais de um; "0" é recusado e dois molhos seguem para os ingredientes', [
+    str_contains($telaMolho, 'pode escolher mais de um'), $diz('0', null, $fone2m), $diz($doisMolhosFx, null, $fone2m),
+], [true, 'invalido', 'monte_grupo']);
+for ($g = 0; $g < 10 && $diz('0', null, $fone2m) === 'monte_grupo'; $g++);
+$diz($opcao('Meio'), null, $fone2m);
+conferir('O prato sai com os dois molhos no nome e os dois acréscimos no preço (Meio 24,90 + nhoque 4 + pesto 4 + sugo 0)', [
+    $diz('1', null, $fone2m), (bool) preg_match('/Nhoque, molhos (Pesto e Sugo|Sugo e Pesto) — R\$ 32,90/u', $tela()),
+], ['mais', true]);
+$pdoFx->exec("DELETE FROM whatsapp_sessoes WHERE telefone = '{$fone2m}'");
 
 // Menu por categoria (D97): bebidas e sobremesas aparecem cada uma com as suas opções.
 $diz('cardapio', null, '5511966660020');
@@ -1675,6 +1722,13 @@ $ferrPi = $respostasDasFerramentas();
 conferir('Item inexistente e prato da casa sem tamanho são recusados; a água entra com o preço do servidor', [
     substr_count($ferrPi, 'Item recusado'), str_contains($ferrPi, 'Adicionado: 3x Água mineral'), str_contains($ferrPi, '1. 3x Água mineral'),
 ], [2, true, true]);
+
+// 4b. D110: "Monte sua massa" com dois molhos pela IA (molho_ids); o preço soma os dois.
+$fonePi4 = '5511977771004';
+$filaIa = [$chamadasPi(['adicionar_ao_pedido', ['itens' => [['tamanho_id' => $id('tamanhos', 'Meio'), 'massa_id' => $id('massas', 'Penne'), 'molho_ids' => [$id('molhos', 'Sugo'), $id('molhos', 'Bolonhesa')], 'quantidade' => 1]]]]), $textoIa('Anotei!')];
+$dizPi($fonePi4, 'um penne meio com sugo e bolonhesa');
+conferir('Pela IA, dois molhos no mesmo prato: entra com os dois no nome e o preço do servidor (24,90 + bolonhesa 3)', (bool) preg_match('/molhos (Sugo e Bolonhesa|Bolonhesa e Sugo): R\$ 27,90/u', $respostasDasFerramentas()), true);
+$pdoPi->exec("DELETE FROM whatsapp_sessoes WHERE telefone = '{$fonePi4}'");
 
 // 5. A localização: o sistema guarda o ponto, tira a rua dela e conta para a IA.
 App\Services\Geocodificador::$transporte = static fn (string $url): ?string => json_encode(['address' => ['road' => 'Rua das Acácias', 'suburb' => 'Jardim Paulista', 'house_number' => '']]);

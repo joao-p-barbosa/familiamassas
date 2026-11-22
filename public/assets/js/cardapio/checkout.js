@@ -19,10 +19,12 @@ const barra = $('#barra-carrinho');
 // (menos o que é só deste pedido: observação e o ponto marcado no mapa).
 let dados = {
   tipo: null, nome: '', telefone: '', rua: '', numero: '', bairro: '', complemento: '', referencia: '',
-  pagamento: null, troco: '', observacoes: '', lat: null, lng: null,
+  pagamento: null, troco: '', precisa_troco: null, observacoes: '', lat: null, lng: null,
   ...(guardado.ler(CHAVE_CLIENTE) ?? {}),
 };
 dados.observacoes = '';
+dados.troco = '';            // o troco é de cada pedido: a pessoa responde de novo (D111)
+dados.precisa_troco = null;
 dados.lat = null;
 dados.lng = null;
 let enviando = false;
@@ -129,7 +131,19 @@ function formularioHtml() {
           </fieldset>
           <span class="campo__erro" id="erro-pagamento" hidden></span>
           <div id="campo-troco" ${dados.pagamento === 'dinheiro' ? '' : 'hidden'}>
-            ${campo('troco', 'Troco para quanto?', { opcional: true, extra: 'inputmode="decimal" placeholder="Ex.: 100,00"', ajuda: 'Deixe vazio se não precisar de troco.' })}
+            <fieldset class="grupo-opcoes grupo-opcoes--duas">
+              <legend class="campo__rotulo">Precisa de troco?</legend>
+              ${[['nao', 'Não preciso'], ['sim', 'Sim, preciso']].map(([valor, rotulo]) => `
+                <label class="opcao">
+                  <input class="opcao__entrada" type="radio" name="precisa_troco" value="${valor}" ${dados.precisa_troco === valor ? 'checked' : ''}>
+                  <span class="opcao__marca">${icone('check', 14)}</span>
+                  <span class="opcao__corpo"><span class="opcao__titulo">${rotulo}</span></span>
+                </label>`).join('')}
+            </fieldset>
+            <span class="campo__erro" id="erro-precisa_troco" hidden></span>
+            <div id="campo-troco-valor" ${dados.precisa_troco === 'sim' ? '' : 'hidden'}>
+              ${campo('troco', 'Troco para quanto?', { extra: 'inputmode="decimal" placeholder="Ex.: 100,00"', ajuda: 'O valor da nota que você vai entregar.' })}
+            </div>
           </div>
         </section>
 
@@ -215,7 +229,7 @@ function lerFormulario() {
       dados[el.name] = el.value.trim();
     }
   }
-  const { observacoes, lat, lng, ...paraGuardar } = dados;
+  const { observacoes, lat, lng, troco, precisa_troco: precisaTroco, ...paraGuardar } = dados;
   guardado.gravar(CHAVE_CLIENTE, paraGuardar);
 }
 
@@ -234,9 +248,11 @@ function validar() {
     if (!dados.bairro) erros.bairro = 'Informe o bairro.';
   }
   if (!naMesa() && !dados.pagamento) erros.pagamento = 'Escolha a forma de pagamento.';
-  if (!naMesa() && dados.pagamento === 'dinheiro' && dados.troco) {
+  if (!naMesa() && dados.pagamento === 'dinheiro' && !dados.precisa_troco) erros.precisa_troco = 'Diga se precisa de troco.';
+  if (!naMesa() && dados.pagamento === 'dinheiro' && dados.precisa_troco === 'sim') {
     const troco = centavosDeTexto(dados.troco);
-    if (troco === null) erros.troco = 'Digite um valor, por exemplo 100,00.';
+    if (!dados.troco) erros.troco = 'Informe para quanto é o troco.';
+    else if (troco === null) erros.troco = 'Digite um valor, por exemplo 100,00.';
     else if (troco < totaisDoCarrinho(dados.tipo).total) erros.troco = 'O valor para troco precisa ser maior que o total do pedido.';
   }
   return erros;
@@ -263,7 +279,7 @@ function mostrarErros(erros) {
 function revisaoHtml() {
   const t = totaisDoCarrinho(dados.tipo);
   const loja = estado.loja;
-  const troco = dados.pagamento === 'dinheiro' && dados.troco ? centavosDeTexto(dados.troco) : null;
+  const troco = dados.pagamento === 'dinheiro' && dados.precisa_troco === 'sim' && dados.troco ? centavosDeTexto(dados.troco) : null;
   const onde = {
     entrega: `${esc(dados.rua)}, ${esc(dados.numero)}${dados.complemento ? ` · ${esc(dados.complemento)}` : ''}<br>${esc(dados.bairro)}${dados.referencia ? `<br>Ref.: ${esc(dados.referencia)}` : ''}${dados.lat !== null ? '<br><span class="resumo-dados__leve">Local marcado no mapa</span>' : ''}`,
     retirada: esc(loja.endereco || 'Na loja'),
@@ -297,7 +313,7 @@ function revisaoHtml() {
         <dl class="resumo-dados">
           <div><dt>${ROTULO_TIPO[dados.tipo]}</dt><dd>${onde}<br><span class="resumo-dados__leve">Fica pronto a partir de ${loja.preparo_min} min</span></dd></div>
           <div><dt>Quem pede</dt><dd>${esc(dados.nome)}${naMesa() ? '' : `<br>${esc(formatarTelefone(dados.telefone))}`}</dd></div>
-          <div><dt>Pagamento</dt><dd>${naMesa() ? 'Na conta, no fim' : `${PAGAMENTOS[dados.pagamento]}${troco ? `, troco para ${reais(troco)}` : ''}`}</dd></div>
+          <div><dt>Pagamento</dt><dd>${naMesa() ? 'Na conta, no fim' : `${PAGAMENTOS[dados.pagamento]}${troco ? `, troco para ${reais(troco)}` : dados.pagamento === 'dinheiro' ? ', sem troco' : ''}`}</dd></div>
           ${dados.tipo === 'entrega' && dados.observacoes ? `<div><dt>Observações</dt><dd>${esc(dados.observacoes)}</dd></div>` : ''}
         </dl>
       </section>
@@ -320,7 +336,7 @@ async function confirmar(botao) {
   enviando = true;
   botao.setAttribute('aria-busy', 'true');
   const t = totaisDoCarrinho(dados.tipo);
-  const troco = dados.pagamento === 'dinheiro' && dados.troco ? centavosDeTexto(dados.troco) : null;
+  const troco = dados.pagamento === 'dinheiro' && dados.precisa_troco === 'sim' && dados.troco ? centavosDeTexto(dados.troco) : null;
   try {
     const criado = await api('/api/pedidos', {
       metodo: 'POST',
@@ -422,6 +438,10 @@ delegar(visaoCheckout, 'click', '[data-acao="corrigir-endereco"]', () => {
 });
 delegar(visaoCheckout, 'change', 'input[name="pagamento"]', (e, entrada) => {
   $('#campo-troco').hidden = entrada.value !== 'dinheiro';
+});
+delegar(visaoCheckout, 'change', 'input[name="precisa_troco"]', (e, entrada) => {
+  $('#campo-troco-valor').hidden = entrada.value !== 'sim';
+  if (entrada.value === 'sim') $('[name="troco"]', visaoCheckout)?.focus();
 });
 // Máscara do telefone enquanto digita.
 delegar(visaoCheckout, 'input', 'input[name="telefone"]', (e, entrada) => {
