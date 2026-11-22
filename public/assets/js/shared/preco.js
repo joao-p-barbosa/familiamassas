@@ -24,6 +24,12 @@ export function dicaDoGrupo(grupo) {
   return String(grupo ?? '').trim().toLowerCase().startsWith('tempero') && !String(grupo).includes('(') ? '(à vontade, sem limite)' : '';
 }
 
+// Grupos em que dá para pedir mais de uma porção do mesmo ingrediente (D117), igual ao PrecoService::REPETE_POR_GRUPO.
+export const REPETE_POR_GRUPO = ['acompanhamento', 'proteína', 'proteina'];
+export const repeteNoGrupo = (grupo) => REPETE_POR_GRUPO.some((comeco) => String(grupo ?? '').trim().toLowerCase().startsWith(comeco));
+/** "2x Calabresa" quando há mais de uma porção; só o nome quando é uma. */
+export const nomeComPorcoes = (i) => ((i.quantidade ?? 1) > 1 ? `${i.quantidade}x ` : '') + i.nome;
+
 export const idsDosMolhos = (escolha) => [...new Set(escolha.molho_ids ?? (escolha.molho_id ? [escolha.molho_id] : []))];
 
 /** "Sugo", "Sugo e Bolonhesa", "Sugo, Bolonhesa e Pesto". */
@@ -66,10 +72,16 @@ export function calcularMontagem(cardapio, escolha) {
   molhos.sort((a, b) => a.ordem - b.ordem || a.id - b.id);
   const valorMolhos = molhos.reduce((soma, o) => soma + o.acrescimo_centavos, 0);
   const molho = molhos.length ? { ...molhos[0], nome: juntar(molhos.map((o) => o.nome)), acrescimo_centavos: valorMolhos } : null;
-  const escolhidos = [...new Set(escolha.ingrediente_ids ?? [])].map((id) => noT(achar(cardapio.ingredientes, id), 'preco_extra_centavos')).filter(Boolean);
+  // D117: o mesmo id repetido = mais de uma porção, só em Acompanhamentos e Proteínas (igual ao PrecoService).
+  const vezes = new Map();
+  for (const id of escolha.ingrediente_ids ?? []) vezes.set(id, (vezes.get(id) ?? 0) + 1);
+  const escolhidos = [...vezes].map(([id, q]) => {
+    const i = noT(achar(cardapio.ingredientes, id), 'preco_extra_centavos');
+    return i ? { ...i, quantidade: repeteNoGrupo(i.grupo) ? q : 1 } : null;
+  }).filter(Boolean);
   escolhidos.sort((a, b) => a.ordem - b.ordem || a.id - b.id);
   const extras = escolhidos.filter((i) => i.preco_extra_centavos > 0);
-  const valorExtras = extras.reduce((soma, i) => soma + i.preco_extra_centavos, 0);
+  const valorExtras = extras.reduce((soma, i) => soma + i.preco_extra_centavos * i.quantidade, 0);
   return {
     tamanho,
     massa,

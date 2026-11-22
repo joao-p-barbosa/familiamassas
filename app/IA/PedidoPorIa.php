@@ -10,6 +10,7 @@ use App\Repositories\ConfigRepository;
 use App\Services\Geocodificador;
 use App\Services\LojaService;
 use App\Services\PedidoService;
+use App\Services\PrecoService;
 use App\Services\TaxaDeEntrega;
 use App\Services\TokenWhatsApp;
 use App\WhatsApp\FluxoPedido;
@@ -36,7 +37,7 @@ final class PedidoPorIa
     /** Regras que entram no prompt quando a IA faz o pedido (no lugar de "você não monta pedido"). */
     public const REGRAS = "- Você MONTA O PEDIDO do cliente pela conversa, com as ferramentas. Quem calcula preço e total é o sistema: nunca some valores nem diga um total que não veio de uma ferramenta.\n"
         . "- Se o cliente já mandar o pedido na primeira mensagem, coloque tudo de uma vez (adicionar_ao_pedido aceita vários itens) e pergunte só o que faltar.\n"
-        . "- Use só os códigos do CARDÁPIO. Se o cliente pedir algo que não existe, ou estiver em dúvida entre opções, pergunte em vez de escolher por ele. Prato da casa precisa do tamanho; o \"Monte sua massa\" precisa de tamanho, uma massa e um ou mais molhos (o cliente pode misturar molhos; cada um soma o seu valor). Acompanhamentos: no máximo 8 por prato; tempero é à vontade, sem limite.\n"
+        . "- Use só os códigos do CARDÁPIO. Se o cliente pedir algo que não existe, ou estiver em dúvida entre opções, pergunte em vez de escolher por ele. Prato da casa precisa do tamanho; o \"Monte sua massa\" precisa de tamanho, uma massa e um ou mais molhos (o cliente pode misturar molhos; cada um soma o seu valor). Acompanhamentos: no máximo 8 porções por prato; tempero é à vontade, sem limite. Em Acompanhamentos e Proteínas o cliente pode pedir mais de uma porção do mesmo ingrediente: repita o código em ingrediente_ids (duas de calabresa = o código duas vezes); cada porção conta no limite e o preço extra é por porção.\n"
         . "- Para fechar, o pedido precisa de: itens, entrega ou retirada, nome e forma de pagamento (e endereço, se for entrega). Pergunte o que faltar, uma ou duas coisas por vez.\n"
         . "- Entrega: peça o endereço com rua, número e bairro, ou a localização pelo WhatsApp (clipe 📎 > Localização). A localização é um pedido, nunca uma exigência: se o cliente já escreveu o endereço, não insista nela, só pergunte o complemento (apto, bloco) ou um ponto de referência e siga. Dinheiro: pergunte se precisa de troco e para quanto.\n"
         . "- Com tudo completo, chame mostrar_resumo: o sistema manda o resumo com o total logo depois da sua mensagem (não repita os itens nem o total). Só chame confirmar_pedido quando o cliente responder que confirma DEPOIS de ver o resumo. Se ele mudar algo, ajuste e mostre o resumo de novo.\n"
@@ -392,7 +393,7 @@ final class PedidoPorIa
         if ($linha['item_id'] !== null) {
             return "{$linha['nome']} ({$m['tamanho']['nome']})" . $obs;
         }
-        $ingredientes = array_column(array_merge($m['inclusos'] ?? [], $m['extras'] ?? []), 'nome');
+        $ingredientes = array_map([PrecoService::class, 'nomeComPorcoes'], array_merge($m['inclusos'] ?? [], $m['extras'] ?? []));
         return "Monte sua massa ({$m['tamanho']['nome']}): {$m['massa']['nome']}, " . (count($m['molhos'] ?? []) > 1 ? 'molhos ' : 'molho ') . "{$m['molho']['nome']}" . ($ingredientes !== [] ? ', ' . implode(', ', $ingredientes) : '') . $obs;
     }
 

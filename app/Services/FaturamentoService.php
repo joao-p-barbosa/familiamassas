@@ -350,6 +350,41 @@ final class FaturamentoService
     // ---------- Fechamento do dia ----------
 
     /** @return array<string,mixed>|null */
+    /** Tabelas que o "Zerar vendas" esvazia (D116), filhas antes das mães. Cardápio, clientes, configurações e usuários ficam. */
+    private const TABELAS_DE_VENDA = ['itens_pedido', 'pedido_status_historico', 'ifood_acoes', 'ifood_pedidos', 'impressao_trabalhos', 'cancelamentos', 'pedidos', 'atendimentos', 'fechamentos_caixa'];
+
+    /**
+     * Zera as vendas (D116): apaga todos os pedidos, contas do Salão, cancelamentos, fechamentos de caixa e a fila de impressão,
+     * e volta a numeração para #1. Para começar a vender de verdade depois dos testes. Só o proprietário, digitando "ZERAR".
+     * @return array{pedidos:int, contas:int, fechamentos:int}
+     */
+    public function zerar(string $confirmacao, array $usuario): array
+    {
+        if (trim($confirmacao) !== 'ZERAR') {
+            throw ErroHttp::validacao(['confirmacao' => 'Digite ZERAR, em maiúsculas, para confirmar.']);
+        }
+        return Banco::transacao(function (\PDO $pdo): array {
+            $conta = static fn (string $tabela): int => (int) $pdo->query("SELECT COUNT(*) FROM {$tabela}")->fetchColumn();
+            $antes = ['pedidos' => $conta('pedidos'), 'contas' => $conta('atendimentos'), 'fechamentos' => $conta('fechamentos_caixa')];
+            $pdo->exec('UPDATE whatsapp_conversas SET ultimo_pedido_id = NULL');
+            $pdo->exec('DELETE FROM whatsapp_envios_pendentes WHERE pedido_id IS NOT NULL');
+            foreach (self::TABELAS_DE_VENDA as $tabela) {
+                $pdo->exec("DELETE FROM {$tabela}");
+            }
+            // Numeração de volta para #1.
+            if (Banco::ehPostgres($pdo)) {
+                foreach (self::TABELAS_DE_VENDA as $tabela) {
+                    if ($tabela !== 'ifood_pedidos') {   // a chave dela é o pedido_id, sem numeração própria
+                        $pdo->exec("ALTER TABLE {$tabela} ALTER COLUMN id RESTART WITH 1");
+                    }
+                }
+            } else {
+                $pdo->exec("DELETE FROM sqlite_sequence WHERE name IN ('" . implode("', '", self::TABELAS_DE_VENDA) . "')");
+            }
+            return $antes;
+        });
+    }
+
     public function fechamentoAtivo(string $data): ?array
     {
         $sql = Banco::conexao()->prepare('SELECT f.*, u.nome AS fechado_por_nome FROM fechamentos_caixa f LEFT JOIN usuarios u ON u.id = f.fechado_por

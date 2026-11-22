@@ -37,7 +37,7 @@ export function comandaHtml(pedido, { largura = ajustes.comanda_largura_mm, comP
 
   const itens = pedido.itens.map((item) => {
     const m = item.montagem;
-    const nomes = (lista) => lista.map((i) => esc(i.nome)).join(', ');
+    const nomes = (lista) => lista.map((i) => esc(((i.quantidade ?? 1) > 1 ? `${i.quantidade}x ` : '') + i.nome)).join(', ');
     return `
       <div class="comanda__item">
         <p class="comanda__item-nome"><span>${item.quantidade}x ${esc(item.nome)}</span></p>

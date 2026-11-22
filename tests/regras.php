@@ -125,7 +125,10 @@ $casos = [
     ['Inteiro, bolonhesa (+3,00), camarão e bacon: os dois somam', 'Inteiro', 'Penne', 'Bolonhesa', ['Camarão', 'Brócolis', 'Bacon', 'Milho'], 5490, ['Camarão', 'Bacon']],
     ['Mesma montagem em outra ordem de clique: mesmo preço e mesma ordem', 'Inteiro', 'Penne', 'Bolonhesa', ['Milho', 'Bacon', 'Brócolis', 'Camarão'], 5490, ['Camarão', 'Bacon']],
     ['Inteiro, nhoque (+4,00), quatro queijos (+5,00), sem ingrediente pago', 'Inteiro', 'Nhoque', 'Quatro queijos', ['Brócolis', 'Muçarela'], 4890, []],
-    ['Ingrediente repetido conta uma vez só', 'Meio', 'Penne', 'Sugo', ['Bacon', 'Bacon', 'Bacon', 'Bacon'], 2790, ['Bacon']],
+    // D117: em Acompanhamentos e Proteínas o mesmo ingrediente repetido = mais porções, cada uma paga; nos outros grupos conta uma vez.
+    ['Acompanhamento repetido: quatro porções de Bacon, cada uma soma 3,00', 'Meio', 'Penne', 'Sugo', ['Bacon', 'Bacon', 'Bacon', 'Bacon'], 2490 + 4 * 300, ['Bacon']],
+    ['Proteína repetida: duas porções de Carne seca', 'Meio', 'Penne', 'Sugo', ['Carne seca', 'Carne seca', 'Milho'], 2490 + 2 * 700, ['Carne seca']],
+    ['Queijo repetido conta uma vez só (Queijos não aceita porção dupla)', 'Meio', 'Penne', 'Sugo', ['Gorgonzola', 'Gorgonzola'], 2490 + 300, ['Gorgonzola']],
     // D110: mais de um molho, cada um soma o seu acréscimo (Sugo 0, Bolonhesa 3, Quatro queijos 5).
     ['Dois molhos: Sugo e Bolonhesa somam só o da Bolonhesa', 'Meio', 'Penne', ['Sugo', 'Bolonhesa'], [], 2490 + 300, []],
     ['Bolonhesa e Quatro queijos no Inteiro, com Bacon: 3 + 5 + 3', 'Inteiro', 'Penne', ['Quatro queijos', 'Bolonhesa'], ['Bacon'], 3990 + 300 + 500 + 300, ['Bacon']],
@@ -162,6 +165,15 @@ conferir('Limite por grupo: acompanhamentos até 8, tempero sem limite, e o text
     App\Services\PrecoService::limiteDoGrupo('Acompanhamentos'), App\Services\PrecoService::limiteDoGrupo('Tempero'),
     App\Services\PrecoService::dicaDoGrupo('Acompanhamentos'), App\Services\PrecoService::dicaDoGrupo('Tempero'), App\Services\PrecoService::dicaDoGrupo('Tempero (quanto quiser)'), App\Services\PrecoService::dicaDoGrupo('Queijos'),
 ], [true, 8, '422 montagem_invalida', 8, null, '(escolha até 8)', '(à vontade, sem limite)', '', '']);
+$calabresa = $id('ingredientes', 'Calabresa');
+$duasCalabresas = $preco->montar($cardapio, ['tamanho_id' => $id('tamanhos', 'Meio'), 'massa_id' => $id('massas', 'Penne'), 'molho_ids' => [$id('molhos', 'Sugo')], 'ingrediente_ids' => [$calabresa, $calabresa]]);
+$noveComDuas = array_merge(array_slice(array_values(array_diff($acomps, [$calabresa])), 0, 7), [$calabresa, $calabresa]);
+conferir('Duas porções de calabresa (D117): a montagem guarda a quantidade, a comanda sai "2x Calabresa" e conta 2 das 8', [
+    array_column($duasCalabresas['montagem']['inclusos'], 'quantidade', 'nome')['Calabresa'] ?? null,
+    in_array('2x Calabresa', array_merge(...array_map(static fn (array $sec): array => array_column($sec['opcoes'], 'nome'), App\Impressao\Comanda::checklist($duasCalabresas['montagem'], $cardapio))), true),
+    App\Services\PrecoService::nomeComPorcoes(['nome' => 'Calabresa', 'quantidade' => 2]),
+    codigoDoErro(fn () => $preco->montar($cardapio, ['tamanho_id' => $id('tamanhos', 'Meio'), 'massa_id' => $id('massas', 'Penne'), 'molho_ids' => [$id('molhos', 'Sugo')], 'ingrediente_ids' => $noveComDuas])),
+], [2, true, '2x Calabresa', '422 montagem_invalida']);
 // D108: acréscimo por tamanho. No cardápio de teste (em memória): Bacon 3 no Meio e 5 no Inteiro; Brócolis grátis no Meio e 2 no
 // Inteiro; Bolonhesa 3 no Meio e 4 no Inteiro. Massa sem tabela (Penne) usa o valor do cadastro.
 $cardapioTam = $cardapio;
@@ -2022,6 +2034,20 @@ Env::definir('SENHA_ADMIN_INICIAL', '');
 Env::definir('SENHA_ATENDENTE_INICIAL', '');
 ini_set('error_log', $logAntes);
 @unlink(sys_get_temp_dir() . '/familiamassas-seed-teste.log');
+
+echo "\nZERAR VENDAS (D116)\n";
+$fat = new App\Services\FaturamentoService();
+$pdoZ = Banco::conexao();
+$quantos = static fn (string $t): int => (int) $pdoZ->query("SELECT COUNT(*) FROM {$t}")->fetchColumn();
+$antesZ = $quantos('pedidos');
+conferir('Sem digitar ZERAR, nada é apagado', [codigoDoErro(fn () => $fat->zerar('zerar', ['id' => 1])), $quantos('pedidos') === $antesZ, $antesZ > 0], ['422 validacao', true, true]);
+$apagados = $fat->zerar('ZERAR', ['id' => 1]);
+conferir('ZERAR apaga pedidos, itens, contas do Salão, cancelamentos e fechamentos; cardápio e usuários ficam', [
+    $apagados['pedidos'], $quantos('pedidos'), $quantos('itens_pedido'), $quantos('atendimentos'), $quantos('cancelamentos'), $quantos('fechamentos_caixa'), $quantos('itens') > 0, $quantos('usuarios') > 0,
+], [$antesZ, 0, 0, 0, 0, 0, true, true]);
+(new ConfigRepository())->salvar(['funcionamento' => 'aberta']);
+$novoZ = (new PedidoService())->criar(['tipo' => 'retirada', 'cliente' => ['nome' => 'Primeira venda', 'telefone' => '(11) 91234-5678'], 'pagamento' => ['forma' => 'pix'], 'itens' => [['tipo' => 'simples', 'item_id' => (int) $pdoZ->query("SELECT id FROM itens WHERE tipo = 'simples' ORDER BY id LIMIT 1")->fetchColumn(), 'quantidade' => 1]]]);
+conferir('Depois de zerar, o próximo pedido volta a ser o #1', $novoZ['id'], 1);
 
 echo "\nATUALIZAÇÃO DO BANCO (migrações)\n";
 if ($emPg) {

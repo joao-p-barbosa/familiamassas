@@ -69,8 +69,9 @@ export function resumoMontagem(m) {
 /** Linhas da montagem completa de um item (HTML já escapado), para revisão, detalhe e acompanhamento. */
 export function linhasMontagem(m, { comPrecos = true } = {}) {
   if (!m) return '';
-  const nomes = (lista) => lista.map((i) => esc(i.nome)).join(', ');
-  const extras = m.extras.map((i) => esc(i.nome) + (comPrecos ? ` <span class="numero">(+ ${reais(i.preco_extra_centavos)})</span>` : '')).join(', ');
+  const nomeQ = (i) => ((i.quantidade ?? 1) > 1 ? `${i.quantidade}x ` : '') + i.nome;   // D117: '2x Calabresa'
+  const nomes = (lista) => lista.map((i) => esc(nomeQ(i))).join(', ');
+  const extras = m.extras.map((i) => esc(nomeQ(i)) + (comPrecos ? ` <span class="numero">(+ ${reais(i.preco_extra_centavos * (i.quantidade ?? 1))})</span>` : '')).join(', ');
   return [
     `<li><span>Tamanho</span> ${esc(m.tamanho.nome)}${m.tamanho.descricao ? ` (${esc(m.tamanho.descricao)})` : ''}</li>`,
     `<li><span>Massa</span> ${esc(m.massa.nome)}</li>`,

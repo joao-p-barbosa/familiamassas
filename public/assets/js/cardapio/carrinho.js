@@ -16,7 +16,7 @@ let aoFecharPedido = () => {};
 export const definirAoFecharPedido = (fn) => (aoFecharPedido = fn);
 
 function linhaHtml(l) {
-  const extras = l.montagem ? [...l.montagem.inclusos, ...l.montagem.extras].map((i) => i.nome).join(', ') : '';
+  const extras = l.montagem ? [...l.montagem.inclusos, ...l.montagem.extras].map((i) => ((i.quantidade ?? 1) > 1 ? `${i.quantidade}x ` : '') + i.nome).join(', ') : '';
   return `
     <li class="linha-carrinho" data-uid="${l.uid}" ${l.problema ? 'data-problema' : ''}>
       <div class="linha-carrinho__texto">

@@ -167,12 +167,15 @@ final class Comanda
             || mb_strtolower(trim((string) $escolhido['nome'])) === mb_strtolower(trim((string) $opcao['nome']));
         $secao = static function (string $titulo, array $lista, array $escolhidos) use ($igual): array {
             $opcoes = [];
+            // D117: mais de uma porção sai "2x Calabresa".
+            $porcoes = static fn (array $e, string $nome): string => (int) ($e['quantidade'] ?? 1) > 1 ? ((int) $e['quantidade']) . 'x ' . $nome : $nome;
             foreach ($lista as $o) {
-                $opcoes[] = ['nome' => (string) $o['nome'], 'marcada' => array_filter($escolhidos, static fn (array $e): bool => $igual($e, $o)) !== []];
+                $achado = array_values(array_filter($escolhidos, static fn (array $e): bool => $igual($e, $o)));
+                $opcoes[] = ['nome' => $achado !== [] ? $porcoes($achado[0], (string) $o['nome']) : (string) $o['nome'], 'marcada' => $achado !== []];
             }
             foreach ($escolhidos as $e) {
                 if (array_filter($lista, static fn (array $o): bool => $igual($e, $o)) === []) {
-                    $opcoes[] = ['nome' => (string) $e['nome'], 'marcada' => true];
+                    $opcoes[] = ['nome' => $porcoes($e, (string) $e['nome']), 'marcada' => true];
                 }
             }
             // D112: a comanda leva só o que foi escolhido (a lista inteira deixava o papel gigante).

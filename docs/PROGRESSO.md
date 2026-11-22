@@ -291,6 +291,8 @@ Como testar o resto:
 - Comanda em lista (D115): prato com vários acompanhamentos sai "Acompanhamentos:" e um por linha embaixo.
 - Limite de acompanhamentos (D115): no cardápio, "Acompanhamentos (escolha até 8)"; o 9º não marca. No WhatsApp, marcar 9 pede para marcar de novo.
 - Logo no menu recolhido (D115): com a logo enviada em Configurações › Loja, recolha o menu lateral; aparece a logo no lugar do "F".
+- Zerar vendas (D116): Faturamento › Vendas › Zerar vendas, digite ZERAR. Pedidos, contas e fechamentos somem e o próximo pedido é o #1.
+- Porções (D117): no Monte seu prato, marque Calabresa e toque em + para 2 porções; a comanda sai "2x Calabresa" e conta 2 das 8. No WhatsApp, responda "3, 3".
 - Mais de um molho (D110): no "Monte seu prato", marque Sugo e Bolonhesa; a revisão mostra "Molhos: Sugo e Bolonhesa" com os dois acréscimos somados, e a comanda da cozinha marca os dois. No WhatsApp (passo a passo), a enquete do molho é de marcar.
 - Bot mais humano (D109): mande "quero uma massa" e "obrigado"; as respostas devem vir curtas, sem "Ótima escolha!", sem "Posso ajudar em mais algo?" e sem travessão.
 - Acréscimos por tamanho (D108): Cardápio › Preços dos pratos › "Acréscimos por tamanho": ponha Bacon 5,00 no Inteiro e salve; no cardápio do cliente, o Bacon mostra "+ R$ 3,00 a R$ 5,00" e o passo do tamanho soma o valor certo de cada um.

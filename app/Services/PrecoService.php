@@ -46,12 +46,19 @@ final class PrecoService
         if (!is_array($ids) || count($ids) > 30) {
             throw new ErroHttp(422, 'montagem_invalida', 'A lista de ingredientes do prato não é válida.');
         }
+        // D117: o mesmo id repetido = mais de uma porção. Só vale em Acompanhamentos e Proteínas; nos outros grupos conta uma vez.
         $ingredientes = [];
-        foreach (array_unique(array_map('intval', $ids)) as $id) {
-            $ingredientes[] = $this->disponivel($cardapio['ingredientes'], $id, 'ingrediente');
+        foreach (array_count_values(array_map('intval', $ids)) as $id => $vezes) {
+            $i = $this->disponivel($cardapio['ingredientes'], $id, 'ingrediente');
+            $i['quantidade'] = self::repeteNoGrupo((string) $i['grupo']) ? $vezes : 1;
+            $ingredientes[] = $i;
         }
-        // Limite por grupo (D115): acompanhamentos até 8; tempero à vontade.
-        foreach (array_count_values(array_map(static fn (array $i): string => (string) $i['grupo'], $ingredientes)) as $grupo => $quantos) {
+        // Limite por grupo (D115): acompanhamentos até 8 (cada porção conta, D117); tempero à vontade.
+        $porGrupo = [];
+        foreach ($ingredientes as $i) {
+            $porGrupo[(string) $i['grupo']] = ($porGrupo[(string) $i['grupo']] ?? 0) + $i['quantidade'];
+        }
+        foreach ($porGrupo as $grupo => $quantos) {
             $limite = self::limiteDoGrupo((string) $grupo);
             if ($limite !== null && $quantos > $limite) {
                 throw new ErroHttp(422, 'montagem_invalida', "Escolha até {$limite} em " . mb_strtolower((string) $grupo) . '.');
@@ -69,7 +76,7 @@ final class PrecoService
         $inclusos = array_values(array_filter($ingredientes, static fn (array $i): bool => $i['preco_extra_centavos'] === 0));
 
         $preco = $tamanho['preco_centavos'] + $massa['acrescimo_centavos'] + $valorMolhos
-            + array_sum(array_column($extras, 'preco_extra_centavos'));
+            + array_sum(array_map(static fn (array $i): int => $i['preco_extra_centavos'] * $i['quantidade'], $extras));
 
         return [
             'preco_centavos' => $preco,
@@ -130,6 +137,27 @@ final class PrecoService
         return null;
     }
 
+    /** Grupos em que o cliente pode pedir mais de uma porção do mesmo ingrediente (D117), pelo começo do nome. */
+    public const REPETE_POR_GRUPO = ['acompanhamento', 'proteína', 'proteina'];
+
+    public static function repeteNoGrupo(string $grupo): bool
+    {
+        $nome = mb_strtolower(trim($grupo));
+        foreach (self::REPETE_POR_GRUPO as $comeco) {
+            if (str_starts_with($nome, $comeco)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** "2x Calabresa" quando há mais de uma porção; só o nome quando é uma (D117). */
+    public static function nomeComPorcoes(array $i): string
+    {
+        $q = (int) ($i['quantidade'] ?? 1);
+        return ($q > 1 ? "{$q}x " : '') . $i['nome'];
+    }
+
     /** O que vai entre parênteses ao lado do grupo (D115): "(escolha até 8)", "(à vontade, sem limite)" no tempero, ou nada. */
     public static function dicaDoGrupo(string $grupo): string
     {
@@ -187,7 +215,7 @@ final class PrecoService
 
     private static function resumo(array $i): array
     {
-        return ['id' => $i['id'], 'nome' => $i['nome'], 'preco_extra_centavos' => $i['preco_extra_centavos']];
+        return ['id' => $i['id'], 'nome' => $i['nome'], 'preco_extra_centavos' => $i['preco_extra_centavos'], 'quantidade' => $i['quantidade'] ?? 1];
     }
 
     /** Acha a opção pelo id e garante que ela pode ser pedida agora. */

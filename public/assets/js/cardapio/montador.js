@@ -4,7 +4,7 @@
 import { $, $$, esc, delegar } from '../shared/dom.js';
 import { icone, iconeMassa, iconePorcao } from '../shared/icones.js';
 import { reais, acrescimo, plural } from '../shared/formato.js';
-import { calcularMontagem, precoDoPrato, noTamanho, faixa, idsDosMolhos, limiteDoGrupo, dicaDoGrupo } from '../shared/preco.js';
+import { calcularMontagem, precoDoPrato, noTamanho, faixa, idsDosMolhos, limiteDoGrupo, dicaDoGrupo, repeteNoGrupo, nomeComPorcoes } from '../shared/preco.js';
 import { abrirFolha, fecharFolha } from '../shared/folha.js';
 import { avisar } from '../shared/avisos.js';
 import { estado, adicionarAoCarrinho, atualizarLinha } from './estado.js';
@@ -220,13 +220,28 @@ const CONTEUDO = {
       ${[...grupos].map(([grupo, lista]) => `
         <fieldset class="grupo-opcoes grupo-opcoes--duas">
           <legend class="grupo-opcoes__titulo">${esc(grupo)}${dicaDoGrupo(grupo) ? ` <span class="grupo-opcoes__dica">${dicaDoGrupo(grupo)}</span>` : ''}</legend>
-          ${lista.map((i) => `
+          ${lista.map((i) => {
+            const caixa = `
             <label class="opcao opcao--caixa">
               <input class="opcao__entrada" type="checkbox" name="ingrediente" value="${i.id}" ${m.escolha.ingrediente_ids.includes(i.id) ? 'checked' : ''} ${disponivel(i) ? '' : 'disabled'}>
               ${marca}
               <span class="opcao__corpo"><span class="opcao__titulo">${esc(i.nome)}</span></span>
               <span class="opcao__lado">${!disponivel(i) ? esgotado : lado(i, 'preco_extra_centavos')}</span>
-            </label>`).join('')}
+            </label>`;
+            if (!repeteNoGrupo(grupo)) return caixa;
+            // D117: Acompanhamentos e Proteínas aceitam mais de uma porção do mesmo ingrediente.
+            return `
+            <div class="opcao-porcoes">${caixa}
+              <div class="porcoes" data-porcoes="${i.id}" hidden>
+                <span class="porcoes__rotulo" id="porcoes-${i.id}">Porções</span>
+                <div class="quantidade quantidade--p" role="group" aria-labelledby="porcoes-${i.id}">
+                  <button type="button" class="quantidade__botao" data-porcao="-1" data-id="${i.id}" aria-label="Uma porção a menos de ${esc(i.nome)}">${icone('menos', 16)}</button>
+                  <output class="quantidade__valor" data-porcoes-qtd="${i.id}">1</output>
+                  <button type="button" class="quantidade__botao" data-porcao="1" data-id="${i.id}" aria-label="Mais uma porção de ${esc(i.nome)}">${icone('mais', 16)}</button>
+                </div>
+              </div>
+            </div>`;
+          }).join('')}
         </fieldset>`).join('')}`;
   },
 
@@ -252,7 +267,7 @@ const CONTEUDO = {
         <dd>${valor}${lado ? `<span class="revisao__valor numero">${lado}</span>` : ''}</dd>
         <button type="button" class="revisao__alterar" data-ir="${passo}">Alterar<span class="so-leitor"> ${rotulo.toLowerCase()}</span></button>
       </div>`;
-    const nomes = (lista) => lista.map((i) => esc(i.nome)).join(', ');
+    const nomes = (lista) => lista.map((i) => esc(nomeComPorcoes(i))).join(', ');
     return `
       <dl class="revisao">
         ${linha('Massa', esc(r.massa.nome), indice('massa'), acrescimo(r.massa.acrescimo_centavos))}
@@ -359,10 +374,20 @@ function atualizar() {
   }
 
   if (passo !== 'ingredientes') return;
+  // D117: as porções de cada ingrediente marcado; o "+" para quando o grupo chega ao limite.
+  $$('[data-porcoes]', dialogo).forEach((caixa) => {
+    const id = Number(caixa.dataset.porcoes);
+    const vezes = m.escolha.ingrediente_ids.filter((x) => x === id).length;
+    caixa.hidden = vezes === 0;
+    $(`[data-porcoes-qtd="${id}"]`, caixa).textContent = vezes;
+    const grupo = grupoDoIngrediente(id);
+    const limite = limiteDoGrupo(grupo);
+    $('[data-porcao="1"]', caixa).disabled = (limite !== null && porcoesNoGrupo(grupo) >= limite) || vezes >= 10;
+  });
   $('#montador-contador').innerHTML = `
     <div class="contador__texto">
       <strong>Escolha quantos quiser</strong>
-      ${r.extras.length ? `<span class="contador__extras numero">${plural(r.extras.length, 'extra', 'extras')} + ${reais(r.valorExtras)}</span>` : '<span>Os que têm preço ao lado são cobrados à parte.</span>'}
+      ${r.extras.length ? `<span class="contador__extras numero">${plural(r.extras.reduce((soma, i) => soma + (i.quantidade ?? 1), 0), 'extra', 'extras')} + ${reais(r.valorExtras)}</span>` : '<span>Os que têm preço ao lado são cobrados à parte.</span>'}
     </div>`;
 }
 
@@ -396,17 +421,41 @@ function concluir() {
   avisar(editando ? 'Prato atualizado' : 'Prato adicionado ao carrinho');
 }
 
+const grupoDoIngrediente = (id) => estado.cardapio.ingredientes.find((i) => i.id === id)?.grupo;
+const porcoesNoGrupo = (grupo) => m.escolha.ingrediente_ids.filter((x) => grupoDoIngrediente(x) === grupo).length;
+
 // ---------- Eventos ----------
+// D117: mais ou menos uma porção do mesmo ingrediente (Acompanhamentos e Proteínas).
+delegar(dialogo, 'click', '[data-porcao]', (e, botao) => {
+  if (!m) return;
+  const id = Number(botao.dataset.id);
+  if (botao.dataset.porcao === '1') {
+    const grupo = grupoDoIngrediente(id);
+    const limite = limiteDoGrupo(grupo);
+    if (limite !== null && porcoesNoGrupo(grupo) >= limite) {
+      avisar(`Escolha até ${limite} em ${String(grupo).toLowerCase()}.`);
+      return;
+    }
+    m.escolha.ingrediente_ids = [...m.escolha.ingrediente_ids, id];
+  } else {
+    const posicao = m.escolha.ingrediente_ids.lastIndexOf(id);
+    if (posicao >= 0) m.escolha.ingrediente_ids = m.escolha.ingrediente_ids.filter((x, n) => n !== posicao);
+    if (!m.escolha.ingrediente_ids.includes(id)) {
+      const marcada = $(`input[name="ingrediente"][value="${id}"]`, dialogo);
+      if (marcada) marcada.checked = false;
+    }
+  }
+  atualizar();
+});
 delegar(dialogo, 'change', 'input, textarea', (e, campo) => {
   if (!m) return;
   if (campo.name === 'ingrediente' || campo.name === 'molho') {
     const id = Number(campo.value);
     const chave = campo.name === 'molho' ? 'molho_ids' : 'ingrediente_ids';
-    if (campo.name === 'ingrediente' && campo.checked) {   // D115: acompanhamentos até 8
-      const grupo = estado.cardapio.ingredientes.find((i) => i.id === id)?.grupo;
+    if (campo.name === 'ingrediente' && campo.checked) {   // D115: acompanhamentos até 8 (cada porção conta, D117)
+      const grupo = grupoDoIngrediente(id);
       const limite = limiteDoGrupo(grupo);
-      const noGrupo = m.escolha.ingrediente_ids.filter((x) => estado.cardapio.ingredientes.find((i) => i.id === x)?.grupo === grupo).length;
-      if (limite !== null && noGrupo >= limite) {
+      if (limite !== null && porcoesNoGrupo(grupo) >= limite) {
         campo.checked = false;
         avisar(`Escolha até ${limite} em ${String(grupo).toLowerCase()}.`);
         return;

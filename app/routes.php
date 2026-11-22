@@ -72,6 +72,7 @@ return static function (Roteador $r): void {
     // Faturamento (D101): Vendas, cancelamento de venda e Fechamento do dia
     $r->get('/api/admin/vendas', static fn ($req) => $faturamento()->vendas($req));
     $r->post('/api/admin/vendas/cancelar', static fn ($req) => $faturamento()->cancelar($req));
+    $r->post('/api/admin/vendas/zerar', static fn ($req) => $faturamento()->zerar($req));
     $r->get('/api/admin/fechamento', static fn ($req) => $faturamento()->calendario($req));
     $r->get('/api/admin/fechamento/{data}', static fn ($req) => $faturamento()->dia($req));
     $r->post('/api/admin/fechamento/{data}', static fn ($req) => $faturamento()->fechar($req));

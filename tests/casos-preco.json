@@ -731,7 +731,7 @@
             "molho": "Quatro queijos"
         },
         {
-            "descricao": "Ingrediente repetido conta uma vez só",
+            "descricao": "Acompanhamento repetido: quatro porções de Bacon, cada uma soma 3,00",
             "escolha": {
                 "tamanho_id": 1,
                 "massa_id": 1,
@@ -743,9 +743,44 @@
                 ],
                 "molho_id": 1
             },
-            "preco": 2790,
+            "preco": 3690,
             "extras": [
                 "Bacon"
+            ],
+            "molho": "Sugo"
+        },
+        {
+            "descricao": "Proteína repetida: duas porções de Carne seca",
+            "escolha": {
+                "tamanho_id": 1,
+                "massa_id": 1,
+                "ingrediente_ids": [
+                    3,
+                    3,
+                    10
+                ],
+                "molho_id": 1
+            },
+            "preco": 3890,
+            "extras": [
+                "Carne seca"
+            ],
+            "molho": "Sugo"
+        },
+        {
+            "descricao": "Queijo repetido conta uma vez só (Queijos não aceita porção dupla)",
+            "escolha": {
+                "tamanho_id": 1,
+                "massa_id": 1,
+                "ingrediente_ids": [
+                    21,
+                    21
+                ],
+                "molho_id": 1
+            },
+            "preco": 2790,
+            "extras": [
+                "Gorgonzola"
             ],
             "molho": "Sugo"
         },

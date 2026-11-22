@@ -193,7 +193,7 @@ final class FluxoPedido
                 return true;
 
             case 'monte_grupo':
-                $escolhas = self::listaDeNumeros($texto);
+                $escolhas = self::listaDeNumeros($texto, PrecoService::repeteNoGrupo($this->grupos()[$s['grupo']]));
                 if ($escolhas === null) {
                     return false;
                 }
@@ -204,7 +204,7 @@ final class FluxoPedido
                 }
                 $grupo = $this->grupos()[$s['grupo']];
                 $limite = PrecoService::limiteDoGrupo($grupo);
-                if ($limite !== null && count(array_unique($escolhas)) > $limite) {   // D115: acompanhamentos até 8
+                if ($limite !== null && count($escolhas) > $limite) {   // D115: acompanhamentos até 8 (cada porção conta, D117)
                     $s['aviso'] = "Pode escolher até {$limite} em " . mb_strtolower($grupo) . '. Marque de novo, por favor.';
                     return true;
                 }
@@ -593,7 +593,8 @@ final class FluxoPedido
             case 'monte_grupo':
                 $grupo = $this->grupos()[$s['grupo']];
                 $dica = PrecoService::dicaDoGrupo($grupo);   // D115: "(escolha até 8)", "(à vontade, sem limite)"
-                $linhas[] = "*{$grupo}*" . ($dica !== '' ? " {$dica}" : '') . ' — pode escolher vários (ex.: 1, 3) ou 0 para nenhum.';
+                $linhas[] = "*{$grupo}*" . ($dica !== '' ? " {$dica}" : '') . ' — pode escolher vários (ex.: 1, 3) ou 0 para nenhum.'
+                    . (PrecoService::repeteNoGrupo($grupo) ? ' Para duas porções do mesmo, escreva o número duas vezes (ex.: 3, 3).' : '');
                 if ($s['grupo'] === 0) {
                     $ambos('Escolha quantos quiser. Os que têm preço ao lado são cobrados à parte.');
                 }
@@ -918,7 +919,7 @@ final class FluxoPedido
         }
         $montado = $this->preco->montar($catalogo, $atual);
         $m = $montado['montagem'];
-        $ingredientes = array_column(array_merge($m['inclusos'], $m['extras']), 'nome');
+        $ingredientes = array_map([PrecoService::class, 'nomeComPorcoes'], array_merge($m['inclusos'], $m['extras']));
         $nome = isset($atual['item_id'])
             ? $this->itemDoCardapio($atual['item_id'])['nome'] . " ({$m['tamanho']['nome']})"
             : "Monte a sua massa ({$m['tamanho']['nome']}): {$m['massa']['nome']}, " . (count($m['molhos'] ?? []) > 1 ? 'molhos ' : 'molho ') . "{$m['molho']['nome']}" . ($ingredientes !== [] ? ', ' . implode(', ', $ingredientes) : '');
@@ -980,7 +981,8 @@ final class FluxoPedido
     // ---------- Pequenos ----------
 
     /** "1, 3 4" → [1, 3, 4]; "0" → []; qualquer outra coisa → null. @return list<int>|null */
-    private static function listaDeNumeros(string $texto): ?array
+    /** "1, 3" → [1, 3]. Com $repete (D117), "3, 3" vale duas vezes o 3 (duas porções). */
+    private static function listaDeNumeros(string $texto, bool $repete = false): ?array
     {
         if (trim($texto) === '0') {
             return [];
@@ -989,7 +991,8 @@ final class FluxoPedido
             return null;
         }
         preg_match_all('/\d{1,3}/', $texto, $m);
-        return array_values(array_unique(array_map('intval', $m[0])));
+        $numeros = array_map('intval', $m[0]);
+        return $repete ? $numeros : array_values(array_unique($numeros));
     }
 
     /** "100", "R$ 100,00", "100.50" → centavos; "0" → 0; outra coisa → null. */
