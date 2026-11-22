@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\WhatsApp;
 
 use App\IA\Assistente;
+use App\IA\PedidoPorIa;
 use App\Repositories\ConfigRepository;
 use App\Repositories\PedidoRepository;
 use App\Services\LojaService;
@@ -19,6 +20,9 @@ use App\Services\TokenWhatsApp;
  * Pedido pelo chat (D74): "Cardápio" abre o passo a passo (FluxoPedido); "acompanhar" e "atendente" também valem como palavras.
  * No canal QR code o bot fica em SILÊNCIO fora dessas palavras: quem cumprimenta é a saudação do WhatsApp Business do dono.
  * Nos outros canais, o texto livre recebe a IA (se ligada, D70) ou o menu acima.
+ *
+ * Pedido pela IA (D106, padrão quando o assistente está ligado): TODA mensagem vai para a IA, que conversa e monta o pedido
+ * (PedidoPorIa). Se a IA estiver indisponível ou falhar, vale tudo o que está acima (palavra "Cardápio" e passo a passo).
  */
 final class Bot
 {
@@ -30,11 +34,14 @@ final class Bot
         private readonly TokenWhatsApp $token = new TokenWhatsApp(),
         private readonly Assistente $assistente = new Assistente(),
         ?FluxoPedido $fluxo = null,
+        ?PedidoPorIa $pedidoIa = null,
     ) {
         $this->fluxo = $fluxo ?? new FluxoPedido($this->assistente);
+        $this->pedidoIa = $pedidoIa ?? new PedidoPorIa($this->assistente, fluxo: $this->fluxo);
     }
 
     private readonly FluxoPedido $fluxo;
+    private readonly PedidoPorIa $pedidoIa;
 
     /**
      * Uma mensagem do cliente.
@@ -68,6 +75,20 @@ final class Bot
             return $resultado === 'atendente' ? $this->atendente($m['telefone']) : $resultado;
         }
         $chave = FluxoPedido::chave($m['texto']);
+        if ($chave !== 'atendente' && $this->pedidoIa->ligado() && $this->assistente->indisponivel($m['telefone'], PedidoPorIa::LIMITE_POR_HORA) === null) {
+            try {
+                $resultado = $this->pedidoIa->receber($m);
+            } catch (\Throwable $e) {
+                error_log('[ia-pedido] ' . get_class($e) . ': ' . $e->getMessage());
+                $resultado = null;
+            }
+            if ($resultado !== null) {
+                return $resultado;
+            }
+            // A IA não respondeu: o pedido segue pelo passo a passo, para o cliente não ficar sem resposta.
+            WhatsApp::enviar($m['telefone'], WhatsApp::texto('Opa, tive um probleminha para entender agora. Vamos pelo cardápio, passo a passo:'), 'ia_falhou');
+            return $this->fluxo->iniciar($m['telefone'], $m['nome']);
+        }
         if (in_array($chave, $this->fluxo->palavras(), true)) {
             return $this->fluxo->iniciar($m['telefone'], $m['nome']);
         }
@@ -79,6 +100,20 @@ final class Bot
         }
         // Canal QR: silêncio. A saudação (com o link e "digite Cardápio") é do WhatsApp Business do dono, e o bot não gasta nada.
         return Conector::ativo() ? 'silencio' : $this->livre($m);
+    }
+
+    /**
+     * Alguém da loja escreveu nesta conversa pelo celular (canal QR, D106). Com o pedido pela IA, o bot sai da frente e a conversa
+     * fica com a pessoa pelas horas configuradas. Sem ele, nada muda: a saudação do WhatsApp Business também sai do celular.
+     * @return bool true = o bot pausou
+     */
+    public function equipeRespondeu(string $telefone): bool
+    {
+        if (!$this->pedidoIa->ligado() || $this->assistente->indisponivel($telefone, PHP_INT_MAX) === 'desligada') {
+            return false;
+        }
+        $this->conversas->entrarNoAtendimentoHumano($telefone, max(1, $this->config->inteiro('whatsapp_humano_horas', 2)));
+        return true;
     }
 
     /** Texto livre: a IA responde quando está ligada e disponível. Qualquer falha cai no menu de 3 opções (o cliente nunca fica sem resposta). */

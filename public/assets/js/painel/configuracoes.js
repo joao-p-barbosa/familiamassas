@@ -8,6 +8,7 @@ import { avisar } from '../shared/avisos.js';
 import { recipienteDaTela, mostrarErro } from './casca.js';
 import { escolherNoMapa } from '../cardapio/mapa.js';
 import { reduzirFoto } from './foto.js';
+import { faixaNoMapa } from './mapa-raio.js';
 
 const conteudo = recipienteDaTela();   // o contêiner desta tela (criado pelo roteador)
 
@@ -31,6 +32,7 @@ const linhaFaixa = (f = { ate_km: '', taxa_centavos: null }) => `
   <div class="faixa-raio" data-faixa-raio>
     <label class="campo"><span class="campo__rotulo">Até (km)</span><input class="entrada" name="faixa_km" inputmode="decimal" value="${esc(String(f.ate_km).replace('.', ','))}" placeholder="Ex.: 3"></label>
     <label class="campo"><span class="campo__rotulo">Taxa (R$)</span><input class="entrada" name="faixa_taxa" inputmode="decimal" value="${dinheiro(f.taxa_centavos)}" placeholder="Ex.: 5,00"></label>
+    <button type="button" class="botao botao--fantasma botao--icone" data-raio="ver" aria-label="Ver e ajustar esta faixa no mapa">${icone('mapa', 18)}</button>
     <button type="button" class="botao botao--fantasma botao--icone" data-raio="tirar" aria-label="Tirar esta faixa">${icone('lixeira', 18)}</button>
   </div>`;
 
@@ -249,12 +251,40 @@ delegar(conteudo, 'change', 'input[name="tema"]', (e, entrada) => {
 delegar(conteudo, 'input', 'input[name="whatsapp_loja"]', (e, entrada) => {
   entrada.value = formatarTelefone(entrada.value);
 });
+/** Deixa as faixas na ordem do km (a de 3 km antes da de 5 km), como o servidor guarda. */
+function ordenarFaixas() {
+  const lista = $('#raio-faixas');
+  const km = (l) => Number(l.querySelector('[name="faixa_km"]').value.replace(',', '.')) || Infinity;
+  [...lista.children].sort((a, b) => km(a) - km(b)).forEach((l) => lista.append(l));
+}
+
 // Faixas de distância e local da loja (D98).
 delegar(conteudo, 'click', '[data-raio]', async (e, botao) => {
   const acao = botao.dataset.raio;
-  if (acao === 'mais') {
-    $('#raio-faixas').insertAdjacentHTML('beforeend', linhaFaixa());
-    $('#raio-faixas [data-faixa-raio]:last-child input')?.focus();
+  if (acao === 'mais' || acao === 'ver') {
+    // D105: a faixa nasce (ou é ajustada) no mapa, com o círculo da área a partir do local da loja.
+    const form = $('#form-config');
+    if (form.raio_lat.value === '') {
+      avisar('Marque primeiro o local da loja: as faixas são medidas a partir dele.');
+      const ponto = await escolherNoMapa({ inicial: null, enderecoDaLoja: form.endereco_loja.value.trim(), loja: true });
+      if (!ponto) return;
+      marcarPonto(ponto.lat, ponto.lng);
+    }
+    const linha = acao === 'ver' ? botao.closest('[data-faixa-raio]') : null;
+    const valor = (l, nome) => l.querySelector(`[name="${nome}"]`).value;
+    const outras = $$('[data-faixa-raio]', form).filter((l) => l !== linha).map((l) => Number(valor(l, 'faixa_km').replace(',', '.'))).filter((n) => n > 0);
+    const r = await faixaNoMapa({
+      loja: { lat: Number(form.raio_lat.value), lng: Number(form.raio_lng.value) },
+      faixa: linha ? { km: valor(linha, 'faixa_km'), taxa: valor(linha, 'faixa_taxa') } : { km: '', taxa: '' },
+      outras,
+      titulo: linha ? 'Faixa de entrega' : 'Nova faixa de entrega',
+    });
+    if (!r) return;
+    const html = linhaFaixa({ ate_km: r.km, taxa_centavos: centavosDeTexto(r.taxa) });
+    if (linha) linha.outerHTML = html;
+    else $('#raio-faixas').insertAdjacentHTML('beforeend', html);
+    ordenarFaixas();
+    avisar('Faixa pronta. Clique em Salvar para valer.');
   } else if (acao === 'tirar') {
     botao.closest('[data-faixa-raio]').remove();
   } else if (acao === 'mapa') {

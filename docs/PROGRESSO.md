@@ -261,3 +261,26 @@ Como testar:
 
 - **Atendente** (D92, D93, D94): menu só com Pedidos, quadro só com o Salão e sem som no painel.
 - **Som por status** (D94): na página do pedido e na Home, o botão "Avisar com som quando o status mudar" liga uma melodia diferente para cada etapa. Para testar: faça um pedido pelo cardápio, toque no botão, deixe a página aberta e mude a etapa no painel.
+
+## Pedido pela IA, fotos menores, faixa no mapa e caixa simplificado (2026-11-22)
+
+- **Pedido pela IA** (D106): Painel › Assistente › "A IA atende e anota o pedido" (ligada por padrão; vale com o assistente ligado). O cliente escreve do jeito dele; a IA monta, o sistema manda o resumo com o total e o pedido só sai depois do "sim".
+- **Fotos** (D103): o navegador gera a foto (960 px) e a miniatura (240 px); a lista usa a miniatura; fotos sem uso há mais de 1 dia saem do banco no upload seguinte.
+- **Faixa da taxa no mapa** (D105) e **Fechamento do dia só com o caixa inicial** (D104).
+
+Como testar o pedido pela IA (produção, com crédito no OpenRouter):
+1. No celular da loja: WhatsApp Business › Ferramentas comerciais › Mensagem de saudação: **desligar**.
+2. Painel › Assistente: "Assistente ligado" e "A IA atende e anota o pedido" ligados › Salvar.
+3. De outro celular, mande tudo de uma vez: "boa noite, quero 2 carbonara média e uma coca, vou retirar, pago no pix, meu nome é Ana". Deve chegar a frase da IA e, em seguida, o resumo com o total. Responda "sim": o pedido aparece no quadro e chega a confirmação com o número.
+4. Entrega: mande a localização pelo clipe 📎; a IA deve perguntar só o número da casa. Teste também o endereço escrito.
+5. Mude de ideia depois do resumo ("tira a coca"): deve vir um resumo novo antes de confirmar.
+6. Do celular da loja, responda a uma conversa: o bot deve ficar quieto nela.
+7. "atendente" passa para uma pessoa.
+
+Como testar o resto:
+- Fotos: Cardápio › item › anexar uma foto do celular › Salvar; a lista do cardápio do cliente deve carregar rápido.
+- Faixa: Configurações › Taxa de entrega › Adicionar faixa › digitar 3 e ver o círculo; Salvar.
+- Caixa: Fechamento do dia › Fechar o caixa de hoje: só o caixa inicial.
+- Salão (D107): Pedidos › Novo pedido salão › nome › Mesa: não pede mais o número; o cartão mostra o nome do cliente.
+- Mesa pelo cardápio (D96, conferido): no cardápio do cliente, Mesa › nome › pedido; aparece na coluna Salão e a atendente fecha a conta.
+- Acréscimos por tamanho (D108): Cardápio › Preços dos pratos › "Acréscimos por tamanho": ponha Bacon 5,00 no Inteiro e salve; no cardápio do cliente, o Bacon mostra "+ R$ 3,00 a R$ 5,00" e o passo do tamanho soma o valor certo de cada um.

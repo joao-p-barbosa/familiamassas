@@ -7,7 +7,8 @@ import { api } from '../shared/api.js';
 import { abrirFolha, fecharFolha } from '../shared/folha.js';
 import { avisar } from '../shared/avisos.js';
 import { recipienteDaTela, ehAdmin, mostrarErro, confirmar } from './casca.js';
-import { reduzirFoto } from './foto.js';
+import { fotoDoCardapio } from './foto.js';
+import { miniatura } from '../shared/miniatura.js';
 
 const conteudo = recipienteDaTela();   // o contêiner desta tela (criado pelo roteador)
 
@@ -53,17 +54,17 @@ function metaDe(r) {
     case 'tamanhos':
       return [r.sigla, r.descricao].filter(Boolean).join(' · ');
     case 'massas':
-      return [r.descricao, acrescimo(r.acrescimo_centavos), `preparo ${r.preparo_min} min`].filter(Boolean).join(' · ');
+      return [r.descricao, acrescimo(r.acrescimo_centavos), r.precos?.length ? 'muda com o tamanho' : '', `preparo ${r.preparo_min} min`].filter(Boolean).join(' · ');
     case 'molhos':
-      return [r.descricao, acrescimo(r.acrescimo_centavos)].filter(Boolean).join(' · ');
+      return [r.descricao, acrescimo(r.acrescimo_centavos), r.precos?.length ? 'muda com o tamanho' : ''].filter(Boolean).join(' · ');
     case 'ingredientes':
-      return r.preco_extra_centavos ? `+ ${reais(r.preco_extra_centavos)} no Monte sua massa` : 'sem custo';
+      return (r.preco_extra_centavos ? `+ ${reais(r.preco_extra_centavos)} no Monte sua massa` : 'sem custo') + (r.precos?.length ? ' · muda com o tamanho' : '');
   }
   return '';
 }
 
 function figuraDe(r) {
-  if (aba === 'itens') return r.imagem ? `<img class="miniatura" src="${esc(r.imagem)}" alt="" width="48" height="48" loading="lazy">` : `<span class="miniatura">${icone('imagem', 20)}</span>`;
+  if (aba === 'itens') return r.imagem ? `<img class="miniatura" src="${esc(miniatura(r.imagem))}" alt="" width="48" height="48" loading="lazy">` : `<span class="miniatura">${icone('imagem', 20)}</span>`;
   if (aba === 'molhos') return `<span class="miniatura miniatura--cor" style="background: ${esc(r.cor)}"></span>`;
   return '';
 }
@@ -113,9 +114,33 @@ function precosHtml() {
         </tbody>
       </table></div>
       ${pratos.length ? '' : '<p class="cadastro__nota">Nenhum prato da casa ainda: crie na aba Itens, com o tipo “Prato da casa”.</p>'}
+      ${acrescimosHtml(tamanhos)}
       <p class="campo__erro" id="erro-precos" hidden></p>
       <button type="submit" class="botao botao--g">Salvar preços</button>
     </form>`;
+}
+
+// Acréscimos por tamanho (D108): uma linha por massa, molho e ingrediente; em branco = o valor do cadastro (aparece apagado no campo).
+const GRUPOS_ACRESCIMO = [['massas', 'Massas', 'acrescimo_centavos'], ['molhos', 'Molhos', 'acrescimo_centavos'], ['ingredientes', 'Ingredientes', 'preco_extra_centavos']];
+function acrescimosHtml(tamanhos) {
+  const celula = (tipo, o, campo, t) => {
+    const proprio = o.precos?.find((x) => x.tamanho_id === t.id)?.preco_centavos;
+    return `<td><input class="entrada" type="text" inputmode="decimal" name="acrescimos.${tipo}.${o.id}.${t.id}" placeholder="${textoDeCentavos(o[campo] ?? 0)}"
+      aria-label="${esc(`${o.nome}, ${t.nome}`)} (em branco: ${textoDeCentavos(o[campo] ?? 0)})" value="${proprio === undefined ? '' : textoDeCentavos(proprio)}"></td>`;
+  };
+  const linhas = GRUPOS_ACRESCIMO.map(([tipo, titulo, campo]) => {
+    const lista = dados[tipo].filter((o) => o.estado !== 'oculto');
+    if (!lista.length) return '';
+    return `<tr class="tabela-precos__grupo"><th scope="rowgroup" colspan="${tamanhos.length + 1}">${titulo}</th></tr>
+      ${lista.map((o) => `<tr><th scope="row">${esc(o.nome)}</th>${tamanhos.map((t) => celula(tipo, o, campo, t)).join('')}</tr>`).join('')}`;
+  }).join('');
+  return `
+    <h2 class="bloco__titulo" id="titulo-acrescimos">Acréscimos por tamanho</h2>
+    <p class="cadastro__nota">Quanto cada massa, molho e ingrediente soma ao “Monte sua massa” em cada tamanho. Em branco vale o valor do cadastro (o número apagado no campo). Use 0,00 para não cobrar naquele tamanho.</p>
+    <div class="tabela-rolagem"><table class="tabela" aria-labelledby="titulo-acrescimos">
+      <thead><tr><th scope="col">Opção</th>${tamanhos.map((t) => `<th scope="col">${esc(t.nome)} (R$)</th>`).join('')}</tr></thead>
+      <tbody>${linhas}</tbody>
+    </table></div>`;
 }
 
 function desenhar() {
@@ -443,7 +468,9 @@ delegar(lateral, 'change', '#arquivo-foto', async (e, entrada) => {
   erroFoto.hidden = true;
   try {
     const formulario = new FormData();
-    formulario.append('imagem', await reduzirFoto(arquivo), 'foto');
+    const { foto, miniatura: pequena } = await fotoDoCardapio(arquivo);
+    formulario.append('imagem', foto, 'foto');
+    formulario.append('miniatura', pequena, 'miniatura');
     const r = await api('/api/admin/upload', { metodo: 'POST', formulario });
     editando.imagem = r.caminho;
     desenharFoto();
@@ -460,15 +487,16 @@ delegar(lateral, 'click', '[data-tirar-foto]', () => {
 conteudo.addEventListener('submit', async (e) => {
   if (e.target.id !== 'form-precos') return;
   e.preventDefault();
-  const corpo = { monte: {}, pratos: {} };
+  const corpo = { monte: {}, pratos: {}, acrescimos: {} };
   let invalido = null;
   for (const entrada of e.target.querySelectorAll('input[name]')) {
-    const [grupo, a, b] = entrada.name.split('.');
+    const [grupo, a, b, c] = entrada.name.split('.');
     const vazio = entrada.value.trim() === '';
     const centavos = vazio ? null : centavosDeTexto(entrada.value);
     entrada.setAttribute('aria-invalid', String(!vazio && centavos === null || grupo === 'monte' && vazio));
     if ((!vazio && centavos === null) || (grupo === 'monte' && vazio)) invalido ??= entrada;
     if (grupo === 'monte') corpo.monte[a] = centavos;
+    else if (grupo === 'acrescimos') ((corpo.acrescimos[a] ??= {})[b] ??= {})[c] = centavos;
     else (corpo.pratos[a] ??= {})[b] = centavos;
   }
   const erro = $('#erro-precos');

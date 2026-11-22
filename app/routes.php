@@ -104,6 +104,7 @@ return static function (Roteador $r): void {
     $r->get('/cron/whatsapp', $whatsapp->cron(...));
     $r->post('/api/conector/sinal', $whatsapp->conectorSinal(...));          // canal QR: só o Node (segredo no cabeçalho)
     $r->post('/api/conector/mensagens', $whatsapp->conectorMensagens(...));
+    $r->post('/api/conector/equipe', $whatsapp->conectorEquipe(...));          // alguém da loja respondeu pelo celular (D106)
     $r->post('/api/admin/whatsapp/fila/liberar', $whatsapp->liberarFila(...));
     $r->post('/api/admin/whatsapp/fila/descartar', $whatsapp->descartarFila(...));
     $r->get('/api/admin/whatsapp', $whatsapp->situacao(...));

@@ -93,8 +93,10 @@ final class AdminCardapioController
     }
 
     /**
-     * PUT /api/admin/cardapio-precos   corpo: {"monte": {tamanho_id: centavos}, "pratos": {item_id: {tamanho_id: centavos|null}}}
+     * PUT /api/admin/cardapio-precos   corpo: {"monte": {tamanho_id: centavos}, "pratos": {item_id: {tamanho_id: centavos|null}},
+     *                                          "acrescimos": {"massas"|"molhos"|"ingredientes": {id: {tamanho_id: centavos|null}}}}
      * A tabela de preços (D87): "Monte sua massa" e cada prato da casa em cada tamanho. null num prato = tamanho não vendido.
+     * Acréscimos por tamanho (D108): null = usa o valor do cadastro da massa, do molho ou do ingrediente.
      */
     public function precos(Requisicao $req): void
     {
@@ -131,34 +133,50 @@ final class AdminCardapioController
                 }
             }
         }
+        $acrescimos = [];
+        foreach (CardapioRepository::COM_ACRESCIMO as $tipo) {
+            $existentes = array_column($cardapio[$tipo], 'id');
+            foreach ((array) ($d['acrescimos'][$tipo] ?? []) as $opcaoId => $porTamanho) {
+                if (!in_array((int) $opcaoId, $existentes, true) || !is_array($porTamanho)) {
+                    continue;
+                }
+                foreach ($porTamanho as $tamanhoId => $v) {
+                    if (in_array((int) $tamanhoId, $tamanhos, true)) {
+                        $acrescimos[$tipo][(int) $opcaoId][(int) $tamanhoId] = $valor($v, "acrescimos.{$tipo}.{$opcaoId}.{$tamanhoId}", true);
+                    }
+                }
+            }
+        }
         if ($erros !== []) {
             throw ErroHttp::validacao($erros);
         }
-        Banco::transacao(fn () => $this->repo->definirPrecos($monte, $porPrato));
+        Banco::transacao(fn () => $this->repo->definirPrecos($monte, $porPrato, $acrescimos));
         Resposta::json($this->repo->completo());
     }
 
-    /** POST /api/admin/upload (multipart, campo "imagem"). A foto já chega reduzida pelo navegador. */
+    /**
+     * POST /api/admin/upload (multipart: "imagem" e, nas fotos do cardápio, "miniatura"). As duas já chegam reduzidas pelo navegador
+     * (D103: foto até 960 px, miniatura até 240 px). A miniatura fica com o mesmo nome e "-mini" (abc.webp → abc-mini.webp).
+     */
     public function upload(Requisicao $req): void
     {
         Sessao::exigir($req, ['admin'], true);
-        $arquivo = $_FILES['imagem'] ?? null;
-        if (!is_array($arquivo) || ($arquivo['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK || !is_uploaded_file($arquivo['tmp_name'])) {
-            throw ErroHttp::validacao(['imagem' => 'Não recebemos a imagem. Tente de novo.']);
+        [$tipo, $extensao] = self::imagemRecebida('imagem', 1_500_000)
+            ?? throw ErroHttp::validacao(['imagem' => 'Não recebemos a imagem. Tente de novo.']);
+        $mini = self::imagemRecebida('miniatura', 200_000);
+        if ($mini !== null && $mini[0] !== $tipo) {
+            $mini = null;   // a lista mostra a foto grande no lugar; nada quebra
         }
-        if ($arquivo['size'] > 1_500_000) {
-            throw ErroHttp::validacao(['imagem' => 'A imagem ficou acima de 1,5 MB. Escolha outra foto.']);
-        }
-        // O tipo é conferido pelo conteúdo do arquivo, nunca pelo nome que o navegador mandou.
-        $tipo = (new \finfo(FILEINFO_MIME_TYPE))->file($arquivo['tmp_name']);
-        $extensao = ['image/webp' => 'webp', 'image/jpeg' => 'jpg', 'image/png' => 'png'][$tipo] ?? null;
-        if ($extensao === null || @getimagesize($arquivo['tmp_name']) === false) {
-            throw ErroHttp::validacao(['imagem' => 'Use uma foto em JPG, PNG ou WebP.']);
-        }
-        $nome = bin2hex(random_bytes(12)) . '.' . $extensao;
+        $base = bin2hex(random_bytes(12));
+        $nome = "{$base}.{$extensao}";
+        $arquivos = [$nome => $_FILES['imagem']['tmp_name']] + ($mini !== null ? ["{$base}-mini.{$extensao}" => $_FILES['miniatura']['tmp_name']] : []);
         if (Banco::driver() === 'pgsql') {
             // Hospedagem com disco temporário: a foto fica no banco e é entregue por GET /uploads/{nome}.
-            (new ImagemRepository())->guardar($nome, $tipo, (string) file_get_contents($arquivo['tmp_name']));
+            $imagens = new ImagemRepository();
+            foreach ($arquivos as $destino => $origem) {
+                $imagens->guardar($destino, $tipo, (string) file_get_contents($origem));
+            }
+            $imagens->apagarSemUso();   // fotos trocadas, de itens apagados e logos antigas saem do banco
             Resposta::json(['caminho' => '/uploads/' . $nome], 201);
             return;
         }
@@ -166,10 +184,33 @@ final class AdminCardapioController
         if (!is_dir($pasta)) {
             mkdir($pasta, 0775, true);
         }
-        if (!move_uploaded_file($arquivo['tmp_name'], $pasta . '/' . $nome)) {
-            throw new ErroHttp(500, 'upload_falhou', 'Não conseguimos salvar a imagem. Tente de novo.');
+        foreach ($arquivos as $destino => $origem) {
+            if (!move_uploaded_file($origem, $pasta . '/' . $destino)) {
+                throw new ErroHttp(500, 'upload_falhou', 'Não conseguimos salvar a imagem. Tente de novo.');
+            }
         }
         Resposta::json(['caminho' => '/uploads/' . $nome], 201);
+    }
+
+    /**
+     * Confere um arquivo do upload. O tipo vem do conteúdo, nunca do nome que o navegador mandou.
+     * @return array{0:string, 1:string}|null [tipo, extensão]; null = campo ausente
+     */
+    private static function imagemRecebida(string $campo, int $maximo): ?array
+    {
+        $arquivo = $_FILES[$campo] ?? null;
+        if (!is_array($arquivo) || ($arquivo['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK || !is_uploaded_file($arquivo['tmp_name'])) {
+            return null;
+        }
+        if ($arquivo['size'] > $maximo) {
+            throw ErroHttp::validacao(['imagem' => 'A imagem ficou acima de ' . number_format($maximo / 1_000_000, 1, ',', '') . ' MB. Escolha outra foto.']);
+        }
+        $tipo = (string) (new \finfo(FILEINFO_MIME_TYPE))->file($arquivo['tmp_name']);
+        $extensao = ['image/webp' => 'webp', 'image/jpeg' => 'jpg', 'image/png' => 'png'][$tipo] ?? null;
+        if ($extensao === null || @getimagesize($arquivo['tmp_name']) === false) {
+            throw ErroHttp::validacao(['imagem' => 'Use uma foto em JPG, PNG ou WebP.']);
+        }
+        return [$tipo, $extensao];
     }
 
     private function gravarIngredientesDoItem(string $recurso, int $id, array $valores, array $dados): void

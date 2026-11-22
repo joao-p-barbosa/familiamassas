@@ -43,10 +43,8 @@ final class AtendimentoService
         if (!isset(self::MODALIDADES[$modalidade])) {
             $erros['modalidade'] = 'Escolha Mesa ou Pra viagem.';
         }
+        // D107: o atendimento da mesa é identificado pelo nome do cliente; o número da mesa é opcional (a tela não pede mais).
         $mesa = self::texto($dados['mesa'] ?? '', 20);
-        if ($modalidade === 'mesa' && $mesa === '') {
-            $erros['mesa'] = 'Informe a mesa.';
-        }
 
         ['itens' => $itens, 'subtotal' => $subtotal] = $this->servicoDePedidos->validarItens($dados);
         if ($erros !== []) {
@@ -54,7 +52,7 @@ final class AtendimentoService
         }
         $this->servicoDePedidos->conferirTotal($dados, $subtotal);
 
-        $mesaDoAtendimento = $modalidade === 'mesa' ? $mesa : null;
+        $mesaDoAtendimento = $modalidade === 'mesa' && $mesa !== '' ? $mesa : null;
         $criado = $this->atendimentos->abrir(
             ['cliente_nome' => $nome, 'modalidade' => $modalidade, 'mesa' => $mesaDoAtendimento],
             $this->colunasDoPedido($nome, $modalidade, $mesaDoAtendimento, $subtotal),

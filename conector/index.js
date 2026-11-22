@@ -13,6 +13,7 @@ const { default: makeWASocket, DisconnectReason, fetchLatestBaileysVersion, useM
 const { criarServidor } = require('./servidor');
 const { telefoneDe, textoDe, localDe, segundosDe } = require('./util');
 const { criarCofre, interpretar } = require('./enquete');
+const { criarRegistroDeEnviadas, podeSerDaEquipe, criarVigia } = require('./equipe');
 
 const SEGREDO = process.env.CONECTOR_SEGREDO ?? '';
 const SITE = (process.env.CONECTOR_SITE_URL || `http://127.0.0.1:${process.env.PORT || 10000}`).replace(/\/$/, '');
@@ -58,6 +59,9 @@ function mudar(novo) {
 // ---------- Envio (site → WhatsApp) ----------
 // As enquetes enviadas ficam guardadas por ~2 h: o voto do cliente chega cifrado com a chave de cada uma (D85).
 const enquetes = criarCofre();
+// O que o bot enviou: o resto que sai deste número foi digitado por alguém da loja no celular (D106).
+const enviadas = criarRegistroDeEnviadas();
+const vigia = criarVigia({ registro: enviadas, avisar: (telefone) => postar('/api/conector/equipe', { telefone }) });
 const identidades = () => [sock?.user?.id, sock?.user?.lid].filter(Boolean);
 
 async function enviarEnquete(telefone, enquete) {
@@ -67,6 +71,7 @@ async function enviarEnquete(telefone, enquete) {
   });
   const id = enviada?.key?.id;
   if (!id) throw new Error('o WhatsApp não devolveu o id da enquete');
+  enviadas.marcar(id);
   enquetes.guardar({ id, segredo, tag: enquete.tag, opcoes: enquete.opcoes, multipla: enquete.multipla, telefone, criadores: identidades() });
   console.log(`[conector] enquete enviada (${enquete.opcoes.length} opções, ${enquete.multipla ? 'múltipla' : 'única'})`);
 }
@@ -74,7 +79,12 @@ async function enviarEnquete(telefone, enquete) {
 const saida = criarServidor({
   segredo: SEGREDO,
   conectado: () => estado === 'conectado' && sock !== null,
-  enviar: (telefone, texto, enquete) => (enquete ? enviarEnquete(telefone, enquete) : sock.sendMessage(`${telefone}@s.whatsapp.net`, { text: texto })),
+  enviar: async (telefone, texto, enquete) => {
+    if (enquete) return enviarEnquete(telefone, enquete);
+    const enviada = await sock.sendMessage(`${telefone}@s.whatsapp.net`, { text: texto });
+    enviadas.marcar(enviada?.key?.id);
+    return enviada;
+  },
 });
 saida.servidor.listen(PORTA, '127.0.0.1', () => console.log(`[conector] ouvindo em 127.0.0.1:${PORTA}`));
 
@@ -144,7 +154,19 @@ async function conectar() {
     const lote = [];
     const votos = [];   // enquetes cujo voto está neste lote: se o site não receber, elas voltam a valer
     for (const m of messages) {
-      if (m.key.fromMe) continue;
+      if (m.key.fromMe) {
+        // Digitada no celular da loja? O site decide se pausa o bot (só com o pedido pela IA ligado).
+        const conteudoMeu = normalizeMessageContent(m.message);
+        if (podeSerDaEquipe(m, conteudoMeu, Math.floor(Date.now() / 1000), segundosDe(m.messageTimestamp))) {
+          let foneMeu = telefoneDe(m.key);
+          if (!foneMeu && (m.key.remoteJid ?? '').endsWith('@lid')) {
+            const pn = await sock.signalRepository?.lidMapping?.getPNForLID(m.key.remoteJid).catch(() => null);
+            if (pn) foneMeu = telefoneDe({ remoteJid: pn.includes('@') ? pn : `${pn}@s.whatsapp.net` });
+          }
+          if (foneMeu) vigia(m.key.id, foneMeu).catch(() => {});
+        }
+        continue;
+      }
       const tipoJid = (m.key.remoteJid ?? '').split('@')[1] ?? '?';
       if (tipoJid !== 's.whatsapp.net' && tipoJid !== 'lid') continue;   // grupo, status, canal
       // Conversa com mensagens temporárias ou de visualização única traz o conteúdo embrulhado.

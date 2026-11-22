@@ -87,6 +87,20 @@ final class WhatsAppController
         Resposta::json(['ok' => true] + (new Conector())->receber(is_array($lista) ? $lista : [], new Bot()));
     }
 
+    /**
+     * POST /api/conector/equipe  corpo: {telefone}. O conector avisa que alguém da loja escreveu ao cliente pelo celular (D106):
+     * com o pedido pela IA ligado, o bot fica quieto nessa conversa pelas horas do atendimento humano.
+     */
+    public function conectorEquipe(Requisicao $req): void
+    {
+        self::exigirConector($req);
+        $telefone = preg_replace('/\D/', '', (string) ($req->json()['telefone'] ?? ''));
+        if (strlen($telefone) < 10 || strlen($telefone) > 15) {
+            throw ErroHttp::validacao(['telefone' => 'Telefone inválido.']);
+        }
+        Resposta::json(['ok' => true, 'pausou' => (new Bot())->equipeRespondeu($telefone)]);
+    }
+
     /** POST /api/admin/whatsapp/fila/liberar: "Enviar pendentes" depois de uma queda. */
     public function liberarFila(Requisicao $req): void
     {

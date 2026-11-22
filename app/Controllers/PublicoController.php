@@ -102,10 +102,18 @@ final class PublicoController
      */
     public static function fotoGuardada(string $nome): ?array
     {
-        if (preg_match('/^[a-f0-9]{24}\.(webp|jpg|png)$/', $nome) !== 1 || Banco::driver() !== 'pgsql') {
+        if (preg_match('/^([a-f0-9]{24})(-mini)?\.(webp|jpg|png)$/', $nome, $m) !== 1) {
             return null;
         }
-        return (new ImagemRepository())->porNome($nome);
+        $grande = "{$m[1]}.{$m[3]}";   // foto enviada antes da miniatura existir (D103): a lista mostra a grande
+        if (Banco::driver() !== 'pgsql') {
+            // SQLite: o servidor web entrega os arquivos; aqui só chega a miniatura que não existe.
+            $arquivo = RAIZ . '/public/uploads/' . $grande;
+            $tipos = ['webp' => 'image/webp', 'jpg' => 'image/jpeg', 'png' => 'image/png'];
+            return $m[2] !== '' && is_file($arquivo) ? ['tipo' => $tipos[$m[3]], 'dados' => (string) file_get_contents($arquivo)] : null;
+        }
+        $imagens = new ImagemRepository();
+        return $imagens->porNome($nome) ?? ($m[2] !== '' ? $imagens->porNome($grande) : null);
     }
 
     public function apiPedido(Requisicao $req): void

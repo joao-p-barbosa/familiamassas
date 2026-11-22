@@ -164,6 +164,7 @@ Rotas do conector (só o Node usa). Cabeçalho `X-Conector-Segredo` igual a `CON
 |---|---|
 | `POST /api/conector/sinal` | `{estado: "conectado"\|"aguardando_qr"\|"desconectado", qr?: "data:image/png;base64,..."}`: sinal de vida a cada 30 s. O QR só é guardado em `aguardando_qr`. |
 | `POST /api/conector/mensagens` | `{mensagens: [{id, telefone, texto, nome?, em?}]}` (até 50; `em` em segundos desde 1970) → `{ok, respondidas, repetidas, antigas, ignoradas}`. Mensagem com mais de 10 min de atraso conta em `antigas` e não é respondida. |
+| `POST /api/conector/equipe` | `{telefone}` → `{ok, pausou}`. Alguém da loja escreveu ao cliente pelo celular (D106): com o pedido pela IA ligado, a conversa vai para atendimento humano pelas horas configuradas. |
 
 Painel (proprietário):
 

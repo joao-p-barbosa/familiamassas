@@ -106,6 +106,14 @@ CREATE TABLE item_precos (           -- preço fixo de um prato da casa em cada 
   PRIMARY KEY (item_id, tamanho_id)
 );
 
+CREATE TABLE acrescimo_precos (      -- acréscimo de uma massa, molho ou ingrediente num tamanho (D108); sem linha = o valor do cadastro
+  tipo           TEXT NOT NULL CHECK (tipo IN ('massas', 'molhos', 'ingredientes')),
+  opcao_id       INTEGER NOT NULL,                                 -- id em massas, molhos ou ingredientes, conforme o tipo
+  tamanho_id     INTEGER NOT NULL REFERENCES tamanhos (id) ON DELETE CASCADE,
+  preco_centavos INTEGER NOT NULL CHECK (preco_centavos >= 0),
+  PRIMARY KEY (tipo, opcao_id, tamanho_id)
+);
+
 -- ---------- Pedidos ----------
 
 CREATE TABLE clientes (

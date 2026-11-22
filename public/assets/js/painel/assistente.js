@@ -128,7 +128,7 @@ function estadoHtml() {
     sem_credito: ['selo--perigo', 'Sem crédito', 'O crédito acabou. Fale com o suporte para recarregar.'],
     teto: ['selo--perigo', 'Pausado', 'O limite de uso do mês foi atingido. Fale com o suporte.'],
   };
-  const [classe, rotulo, texto] = textos[dados.indisponivel] ?? ['selo--sucesso', 'Ligado', 'Respondendo as dúvidas dos clientes no WhatsApp.'];
+  const [classe, rotulo, texto] = textos[dados.indisponivel] ?? ['selo--sucesso', 'Ligado', dados.config.ia_pedido ? 'Atendendo e anotando os pedidos dos clientes no WhatsApp.' : 'Respondendo as dúvidas dos clientes no WhatsApp.'];
   return `<span class="selo ${classe}">${rotulo}</span> <span class="campo__ajuda">${texto}</span>`;
 }
 
@@ -143,6 +143,8 @@ function desenhar() {
       </section>
       <section class="bloco">
         <h2 class="bloco__titulo">Pedido pelo WhatsApp</h2>
+        <label class="interruptor"><input type="checkbox" name="ia_pedido" ${c.ia_pedido ? 'checked' : ''}><span class="interruptor__trilho"></span><span><strong>A IA atende e anota o pedido</strong> (o cliente escreve do jeito dele)</span></label>
+        <p class="campo__ajuda">Com o assistente ligado, ele responde toda mensagem, monta o pedido, manda o resumo com o total e só cria o pedido depois do “sim” do cliente. <strong>Desligue a saudação automática do WhatsApp Business</strong>, para o cliente não receber duas respostas. Se alguém da loja responder pelo celular, o assistente fica quieto nessa conversa pelas horas do atendimento humano. Se a IA falhar ou o crédito acabar, o pedido segue pelo passo a passo abaixo.</p>
         ${campo('whatsapp_palavras_cardapio', 'Palavra que o cliente digita para pedir pelo chat', c.whatsapp_palavras_cardapio, { max: 100, ajuda: 'Use a mesma palavra na saudação do WhatsApp Business ("Se preferir pedir por aqui, digite Cardápio"). Para aceitar mais de uma, separe por vírgula: Cardápio, Pedir.' })}
         <label class="interruptor"><input type="checkbox" name="whatsapp_enquetes" ${c.whatsapp_enquetes ? 'checked' : ''}><span class="interruptor__trilho"></span><span>Mostrar as opções como enquete (o cliente toca na opção)</span></label>
         <p class="campo__ajuda">O WhatsApp sempre mostra “Ver votos” embaixo de uma enquete, e não dá para tirar. Se isso confundir os clientes, desligue: as opções vão como lista numerada e o cliente responde com o número.</p>
@@ -177,6 +179,7 @@ function coletar() {
     ...dados.config,
     ia_ativo: f.elements.ia_ativo.checked,
     whatsapp_enquetes: f.elements.whatsapp_enquetes.checked,
+    ia_pedido: f.elements.ia_pedido.checked,
     whatsapp_palavras_cardapio: v('whatsapp_palavras_cardapio'), ia_nome: v('ia_nome'), ia_saudacao: v('ia_saudacao'), ia_tom_texto: v('ia_tom_texto'), ia_texto_livre: v('ia_texto_livre'),
     ia_tom: f.querySelector('input[name="ia_tom"]:checked')?.value ?? dados.config.ia_tom,
     ia_tamanho: f.querySelector('input[name="ia_tamanho"]:checked')?.value ?? dados.config.ia_tamanho,

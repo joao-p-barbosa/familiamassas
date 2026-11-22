@@ -2,9 +2,9 @@
 // Os casos e o cardápio vêm de tests/casos-preco.json, gerado por tests/regras.php. Rodar depois dele:
 //   node tests/preco.test.mjs
 import { readFileSync } from 'node:fs';
-import { calcularMontagem, precoMinimo } from '../public/assets/js/shared/preco.js';
+import { calcularMontagem, precoMinimo, faixa } from '../public/assets/js/shared/preco.js';
 
-const { cardapio, casos } = JSON.parse(readFileSync(new URL('./casos-preco.json', import.meta.url), 'utf8'));
+const { cardapio, casos, por_tamanho: porTamanho } = JSON.parse(readFileSync(new URL('./casos-preco.json', import.meta.url), 'utf8'));
 let falhas = 0;
 const conferir = (descricao, obtido, esperado) => {
   const ok = JSON.stringify(obtido) === JSON.stringify(esperado);
@@ -17,6 +17,16 @@ for (const caso of casos) {
   const r = calcularMontagem(cardapio, caso.escolha);
   conferir(caso.descricao, [r.preco, r.extras.map((i) => i.nome)], [caso.preco, caso.extras]);
 }
+
+console.log('\nACRÉSCIMO POR TAMANHO (D108)');
+for (const caso of porTamanho.casos) {
+  const r = calcularMontagem(porTamanho.cardapio, caso.escolha);
+  conferir(caso.descricao, [r.preco, r.extras.map((i) => i.nome)], [caso.preco, caso.extras]);
+}
+const bacon = porTamanho.cardapio.ingredientes.find((i) => i.nome === 'Bacon');
+conferir('Faixa do Bacon antes de escolher o tamanho', faixa(bacon, 'preco_extra_centavos', porTamanho.cardapio.tamanhos), [300, 500]);
+const semTamanho = calcularMontagem(porTamanho.cardapio, { ...porTamanho.casos[0].escolha, tamanho_id: null });
+conferir('Sem tamanho escolhido ainda: vale o valor do cadastro (Bacon 3)', semTamanho.extras.map((i) => i.preco_extra_centavos), [300]);
 
 console.log('\n"A PARTIR DE"');
 conferir('Monte seu prato: menor tamanho disponível', precoMinimo(cardapio), 2490);

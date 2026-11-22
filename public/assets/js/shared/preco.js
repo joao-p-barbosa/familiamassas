@@ -4,8 +4,18 @@
 //   Prato da casa:   preço fixo do prato no tamanho escolhido (item.precos).
 //   Monte sua massa: tamanho + acréscimo da massa + acréscimo do molho + preço de cada ingrediente.
 //                    Ingrediente de preço 0 é "incluso"; os de preço maior que 0 são os "extras".
+//   D108: cada acréscimo pode ter valor por tamanho (opcao.precos); tamanho sem valor usa o do cadastro.
 
 const achar = (lista, id) => lista.find((o) => o.id === id) ?? null;
+
+/** Valor de uma massa, molho ou ingrediente num tamanho (D108): o da tabela por tamanho ou, sem ele, o do cadastro. */
+export const noTamanho = (opcao, campo, tamanhoId) => opcao?.precos?.find((p) => p.tamanho_id === tamanhoId)?.preco_centavos ?? opcao?.[campo] ?? 0;
+
+/** Menor e maior valor da opção entre os tamanhos à venda: para mostrar antes de o cliente escolher o tamanho. */
+export function faixa(opcao, campo, tamanhos) {
+  const valores = tamanhos.filter((t) => t.estado !== 'oculto').map((t) => noTamanho(opcao, campo, t.id));
+  return valores.length ? [Math.min(...valores), Math.max(...valores)] : [opcao[campo] ?? 0, opcao[campo] ?? 0];
+}
 
 /** Preço fixo de um prato da casa num tamanho, ou null se ele não é vendido nesse tamanho. */
 export const precoDoPrato = (item, tamanhoId) => item.precos?.find((p) => p.tamanho_id === tamanhoId)?.preco_centavos ?? null;
@@ -25,9 +35,11 @@ export function calcularMontagem(cardapio, escolha) {
       preco: preco ?? 0, completa: preco !== null,
     };
   }
-  const massa = achar(cardapio.massas, escolha.massa_id);
-  const molho = achar(cardapio.molhos, escolha.molho_id);
-  const escolhidos = [...new Set(escolha.ingrediente_ids ?? [])].map((id) => achar(cardapio.ingredientes, id)).filter(Boolean);
+  // Sem tamanho ainda (o montador pede o tamanho por último), vale o valor do cadastro; com tamanho, o daquele tamanho (D108).
+  const noT = (opcao, campo) => (opcao && tamanho ? { ...opcao, [campo]: noTamanho(opcao, campo, tamanho.id) } : opcao);
+  const massa = noT(achar(cardapio.massas, escolha.massa_id), 'acrescimo_centavos');
+  const molho = noT(achar(cardapio.molhos, escolha.molho_id), 'acrescimo_centavos');
+  const escolhidos = [...new Set(escolha.ingrediente_ids ?? [])].map((id) => noT(achar(cardapio.ingredientes, id), 'preco_extra_centavos')).filter(Boolean);
   escolhidos.sort((a, b) => a.ordem - b.ordem || a.id - b.id);
   const extras = escolhidos.filter((i) => i.preco_extra_centavos > 0);
   const valorExtras = extras.reduce((soma, i) => soma + i.preco_extra_centavos, 0);

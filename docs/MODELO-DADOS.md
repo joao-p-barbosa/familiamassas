@@ -21,6 +21,7 @@ Esquema completo em `data/schema.sqlite.sql`; dados iniciais em `data/seed.php`.
 | `itens` | `categoria_id`, `tipo` (`simples` \| `prato_casa`), `nome`, `descricao`, `preco_centavos`, `imagem`, `massa_id`, `molho_id`, `estado`, `ordem`, `preparo_min` (tempo próprio do prato da casa; NULL = o da massa, D100) | `simples` tem preço fixo; `prato_casa` usa a regra do montador (D14). |
 | `item_ingredientes` | `item_id`, `ingrediente_id` | Receita de um prato da casa (massa e molho ficam em `itens`). |
 | `item_precos` | `item_id`, `tamanho_id`, `preco_centavos` | Preço fixo de um prato da casa em cada tamanho (D87). Sem linha = tamanho não vendido para o prato. |
+| `acrescimo_precos` | `tipo` (`massas` \| `molhos` \| `ingredientes`), `opcao_id`, `tamanho_id`, `preco_centavos` (D108) | Acréscimo de uma opção num tamanho; sem linha vale `acrescimo_centavos` / `preco_extra_centavos` do cadastro. |
 
 `estado` dos itens do cardápio: `disponivel` · `esgotado` (aparece desabilitado) · `oculto` (some).
 
@@ -93,7 +94,7 @@ O mesmo esquema existe em dois arquivos: `data/schema.sqlite.sql` (desenvolvimen
 |---|---|---|
 | `esquema_versao` | a versão do esquema (uma linha, `id = 1`) | `PRAGMA user_version` |
 | `sessoes` | sessões do painel (`id`, `dados`, `atualizado_em`), validade de 12 h | arquivos em `data/sessoes/` |
-| `imagens` | fotos do cardápio (`nome`, `tipo`, `dados` bytea) | arquivos em `public/uploads/` |
+| `imagens` | fotos do cardápio (`nome`, `tipo`, `dados` bytea); cada foto tem a miniatura `<nome>-mini.<ext>` (D103) e as sem uso há mais de 1 dia saem no upload seguinte | arquivos em `public/uploads/` |
 
 Qual banco vale: `DB_DRIVER` (`sqlite` ou `pgsql`); sem ele, a existência de `DATABASE_URL` liga o Postgres. `tests/regras.php` confere que os dois esquemas têm as mesmas tabelas e colunas. Toda migração nova tem de funcionar nos dois bancos.
 

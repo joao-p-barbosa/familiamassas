@@ -27,6 +27,23 @@ final class ImagemRepository
         fclose($fluxo);
     }
 
+    /**
+     * Apaga as fotos que nada mais usa: a de um item que trocou de foto ou foi apagado, a logo antiga e a miniatura de cada uma.
+     * Só as com mais de 1 dia: a foto recém-enviada ainda não foi salva no item (o dono envia e depois clica em Salvar).
+     * @return int quantas saíram
+     */
+    public function apagarSemUso(): int
+    {
+        // "abc-mini.webp" pertence a "abc.webp": as duas ficam enquanto a grande estiver em uso.
+        $consulta = Banco::conexao()->prepare(
+            "DELETE FROM imagens WHERE criado_em < ?
+               AND NOT EXISTS (SELECT 1 FROM itens t WHERE t.imagem = '/uploads/' || replace(imagens.nome, '-mini.', '.'))
+               AND NOT EXISTS (SELECT 1 FROM configuracoes c WHERE c.chave = 'logo_loja' AND c.valor = '/uploads/' || replace(imagens.nome, '-mini.', '.'))",
+        );
+        $consulta->execute([gmdate('Y-m-d H:i:s', time() - 86400)]);
+        return $consulta->rowCount();
+    }
+
     /** @return array{tipo:string, dados:string}|null */
     public function porNome(string $nome): ?array
     {

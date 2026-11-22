@@ -50,7 +50,8 @@
                 "acrescimo_centavos": 0,
                 "estado": "disponivel",
                 "ordem": 0,
-                "preparo_min": 15
+                "preparo_min": 15,
+                "precos": []
             },
             {
                 "id": 2,
@@ -59,7 +60,8 @@
                 "acrescimo_centavos": 0,
                 "estado": "disponivel",
                 "ordem": 1,
-                "preparo_min": 15
+                "preparo_min": 15,
+                "precos": []
             },
             {
                 "id": 3,
@@ -68,7 +70,8 @@
                 "acrescimo_centavos": 0,
                 "estado": "disponivel",
                 "ordem": 2,
-                "preparo_min": 15
+                "preparo_min": 15,
+                "precos": []
             },
             {
                 "id": 4,
@@ -77,7 +80,8 @@
                 "acrescimo_centavos": 0,
                 "estado": "disponivel",
                 "ordem": 3,
-                "preparo_min": 15
+                "preparo_min": 15,
+                "precos": []
             },
             {
                 "id": 5,
@@ -86,7 +90,8 @@
                 "acrescimo_centavos": 400,
                 "estado": "disponivel",
                 "ordem": 4,
-                "preparo_min": 15
+                "preparo_min": 15,
+                "precos": []
             },
             {
                 "id": 6,
@@ -95,7 +100,8 @@
                 "acrescimo_centavos": 500,
                 "estado": "disponivel",
                 "ordem": 5,
-                "preparo_min": 15
+                "preparo_min": 15,
+                "precos": []
             }
         ],
         "molhos": [
@@ -106,7 +112,8 @@
                 "acrescimo_centavos": 0,
                 "cor": "#C2382B",
                 "estado": "disponivel",
-                "ordem": 0
+                "ordem": 0,
+                "precos": []
             },
             {
                 "id": 2,
@@ -115,7 +122,8 @@
                 "acrescimo_centavos": 300,
                 "cor": "#8E3B23",
                 "estado": "disponivel",
-                "ordem": 1
+                "ordem": 1,
+                "precos": []
             },
             {
                 "id": 3,
@@ -124,7 +132,8 @@
                 "acrescimo_centavos": 0,
                 "cor": "#EFE3C4",
                 "estado": "disponivel",
-                "ordem": 2
+                "ordem": 2,
+                "precos": []
             },
             {
                 "id": 4,
@@ -133,7 +142,8 @@
                 "acrescimo_centavos": 400,
                 "cor": "#5E8C3A",
                 "estado": "disponivel",
-                "ordem": 3
+                "ordem": 3,
+                "precos": []
             },
             {
                 "id": 5,
@@ -142,7 +152,8 @@
                 "acrescimo_centavos": 0,
                 "cor": "#E58A66",
                 "estado": "disponivel",
-                "ordem": 4
+                "ordem": 4,
+                "precos": []
             },
             {
                 "id": 6,
@@ -151,7 +162,8 @@
                 "acrescimo_centavos": 500,
                 "cor": "#EBC96B",
                 "estado": "disponivel",
-                "ordem": 5
+                "ordem": 5,
+                "precos": []
             }
         ],
         "ingredientes": [
@@ -161,7 +173,8 @@
                 "grupo": "Proteínas",
                 "preco_extra_centavos": 500,
                 "estado": "disponivel",
-                "ordem": 0
+                "ordem": 0,
+                "precos": []
             },
             {
                 "id": 2,
@@ -169,7 +182,8 @@
                 "grupo": "Proteínas",
                 "preco_extra_centavos": 500,
                 "estado": "disponivel",
-                "ordem": 1
+                "ordem": 1,
+                "precos": []
             },
             {
                 "id": 3,
@@ -177,7 +191,8 @@
                 "grupo": "Proteínas",
                 "preco_extra_centavos": 700,
                 "estado": "disponivel",
-                "ordem": 2
+                "ordem": 2,
+                "precos": []
             },
             {
                 "id": 4,
@@ -185,7 +200,8 @@
                 "grupo": "Proteínas",
                 "preco_extra_centavos": 900,
                 "estado": "disponivel",
-                "ordem": 3
+                "ordem": 3,
+                "precos": []
             },
             {
                 "id": 5,
@@ -193,7 +209,8 @@
                 "grupo": "Acompanhamentos",
                 "preco_extra_centavos": 300,
                 "estado": "disponivel",
-                "ordem": 4
+                "ordem": 4,
+                "precos": []
             },
             {
                 "id": 6,
@@ -201,7 +218,8 @@
                 "grupo": "Acompanhamentos",
                 "preco_extra_centavos": 0,
                 "estado": "disponivel",
-                "ordem": 5
+                "ordem": 5,
+                "precos": []
             },
             {
                 "id": 7,
@@ -209,7 +227,8 @@
                 "grupo": "Acompanhamentos",
                 "preco_extra_centavos": 0,
                 "estado": "disponivel",
-                "ordem": 6
+                "ordem": 6,
+                "precos": []
             },
             {
                 "id": 8,
@@ -217,7 +236,8 @@
                 "grupo": "Acompanhamentos",
                 "preco_extra_centavos": 0,
                 "estado": "disponivel",
-                "ordem": 7
+                "ordem": 7,
+                "precos": []
             },
             {
                 "id": 9,
@@ -225,7 +245,8 @@
                 "grupo": "Acompanhamentos",
                 "preco_extra_centavos": 0,
                 "estado": "disponivel",
-                "ordem": 8
+                "ordem": 8,
+                "precos": []
             },
             {
                 "id": 10,
@@ -233,7 +254,8 @@
                 "grupo": "Acompanhamentos",
                 "preco_extra_centavos": 0,
                 "estado": "disponivel",
-                "ordem": 9
+                "ordem": 9,
+                "precos": []
             },
             {
                 "id": 11,
@@ -241,7 +263,8 @@
                 "grupo": "Acompanhamentos",
                 "preco_extra_centavos": 0,
                 "estado": "disponivel",
-                "ordem": 10
+                "ordem": 10,
+                "precos": []
             },
             {
                 "id": 12,
@@ -249,7 +272,8 @@
                 "grupo": "Acompanhamentos",
                 "preco_extra_centavos": 0,
                 "estado": "disponivel",
-                "ordem": 11
+                "ordem": 11,
+                "precos": []
             },
             {
                 "id": 13,
@@ -257,7 +281,8 @@
                 "grupo": "Acompanhamentos",
                 "preco_extra_centavos": 0,
                 "estado": "disponivel",
-                "ordem": 12
+                "ordem": 12,
+                "precos": []
             },
             {
                 "id": 14,
@@ -265,7 +290,8 @@
                 "grupo": "Acompanhamentos",
                 "preco_extra_centavos": 0,
                 "estado": "esgotado",
-                "ordem": 13
+                "ordem": 13,
+                "precos": []
             },
             {
                 "id": 15,
@@ -273,7 +299,8 @@
                 "grupo": "Acompanhamentos",
                 "preco_extra_centavos": 0,
                 "estado": "disponivel",
-                "ordem": 14
+                "ordem": 14,
+                "precos": []
             },
             {
                 "id": 16,
@@ -281,7 +308,8 @@
                 "grupo": "Acompanhamentos",
                 "preco_extra_centavos": 0,
                 "estado": "disponivel",
-                "ordem": 15
+                "ordem": 15,
+                "precos": []
             },
             {
                 "id": 17,
@@ -289,7 +317,8 @@
                 "grupo": "Acompanhamentos",
                 "preco_extra_centavos": 0,
                 "estado": "disponivel",
-                "ordem": 16
+                "ordem": 16,
+                "precos": []
             },
             {
                 "id": 18,
@@ -297,7 +326,8 @@
                 "grupo": "Queijos",
                 "preco_extra_centavos": 0,
                 "estado": "disponivel",
-                "ordem": 17
+                "ordem": 17,
+                "precos": []
             },
             {
                 "id": 19,
@@ -305,7 +335,8 @@
                 "grupo": "Queijos",
                 "preco_extra_centavos": 0,
                 "estado": "disponivel",
-                "ordem": 18
+                "ordem": 18,
+                "precos": []
             },
             {
                 "id": 20,
@@ -313,7 +344,8 @@
                 "grupo": "Queijos",
                 "preco_extra_centavos": 0,
                 "estado": "disponivel",
-                "ordem": 19
+                "ordem": 19,
+                "precos": []
             },
             {
                 "id": 21,
@@ -321,7 +353,8 @@
                 "grupo": "Queijos",
                 "preco_extra_centavos": 300,
                 "estado": "disponivel",
-                "ordem": 20
+                "ordem": 20,
+                "precos": []
             }
         ],
         "itens": [
@@ -709,5 +742,705 @@
                 "Bacon"
             ]
         }
-    ]
+    ],
+    "por_tamanho": {
+        "cardapio": {
+            "categorias": [
+                {
+                    "id": 1,
+                    "nome": "Pratos da casa",
+                    "ordem": 0,
+                    "estado": "disponivel"
+                },
+                {
+                    "id": 2,
+                    "nome": "Bebidas",
+                    "ordem": 1,
+                    "estado": "disponivel"
+                },
+                {
+                    "id": 3,
+                    "nome": "Sobremesas",
+                    "ordem": 2,
+                    "estado": "disponivel"
+                }
+            ],
+            "tamanhos": [
+                {
+                    "id": 1,
+                    "nome": "Meio",
+                    "sigla": "MEI",
+                    "descricao": "Meia porção · serve 1 pessoa · 300 g",
+                    "preco_centavos": 2490,
+                    "inclusos": 3,
+                    "estado": "disponivel",
+                    "ordem": 0
+                },
+                {
+                    "id": 2,
+                    "nome": "Inteiro",
+                    "sigla": "INT",
+                    "descricao": "Porção inteira · serve 2 pessoas · 550 g",
+                    "preco_centavos": 3990,
+                    "inclusos": 6,
+                    "estado": "disponivel",
+                    "ordem": 1
+                }
+            ],
+            "massas": [
+                {
+                    "id": 1,
+                    "nome": "Penne",
+                    "descricao": "Tubinho que segura bem o molho",
+                    "acrescimo_centavos": 0,
+                    "estado": "disponivel",
+                    "ordem": 0,
+                    "preparo_min": 15,
+                    "precos": []
+                },
+                {
+                    "id": 2,
+                    "nome": "Espaguete",
+                    "descricao": "Fio longo, o clássico",
+                    "acrescimo_centavos": 0,
+                    "estado": "disponivel",
+                    "ordem": 1,
+                    "preparo_min": 15,
+                    "precos": []
+                },
+                {
+                    "id": 3,
+                    "nome": "Fusilli",
+                    "descricao": "Parafuso, bom com molhos encorpados",
+                    "acrescimo_centavos": 0,
+                    "estado": "disponivel",
+                    "ordem": 2,
+                    "preparo_min": 15,
+                    "precos": []
+                },
+                {
+                    "id": 4,
+                    "nome": "Talharim",
+                    "descricao": "Fita larga de massa fresca",
+                    "acrescimo_centavos": 0,
+                    "estado": "disponivel",
+                    "ordem": 3,
+                    "preparo_min": 15,
+                    "precos": []
+                },
+                {
+                    "id": 5,
+                    "nome": "Nhoque",
+                    "descricao": "De batata, feito na casa",
+                    "acrescimo_centavos": 400,
+                    "estado": "disponivel",
+                    "ordem": 4,
+                    "preparo_min": 15,
+                    "precos": []
+                },
+                {
+                    "id": 6,
+                    "nome": "Sem glúten",
+                    "descricao": "Penne de arroz e milho",
+                    "acrescimo_centavos": 500,
+                    "estado": "disponivel",
+                    "ordem": 5,
+                    "preparo_min": 15,
+                    "precos": []
+                }
+            ],
+            "molhos": [
+                {
+                    "id": 1,
+                    "nome": "Sugo",
+                    "descricao": "Tomate, alho e manjericão",
+                    "acrescimo_centavos": 0,
+                    "cor": "#C2382B",
+                    "estado": "disponivel",
+                    "ordem": 0,
+                    "precos": []
+                },
+                {
+                    "id": 2,
+                    "nome": "Bolonhesa",
+                    "descricao": "Sugo com carne moída",
+                    "acrescimo_centavos": 300,
+                    "cor": "#8E3B23",
+                    "estado": "disponivel",
+                    "ordem": 1,
+                    "precos": [
+                        {
+                            "tamanho_id": 2,
+                            "preco_centavos": 400
+                        }
+                    ]
+                },
+                {
+                    "id": 3,
+                    "nome": "Branco",
+                    "descricao": "Leite, manteiga e noz-moscada",
+                    "acrescimo_centavos": 0,
+                    "cor": "#EFE3C4",
+                    "estado": "disponivel",
+                    "ordem": 2,
+                    "precos": []
+                },
+                {
+                    "id": 4,
+                    "nome": "Pesto",
+                    "descricao": "Manjericão, parmesão e castanha",
+                    "acrescimo_centavos": 400,
+                    "cor": "#5E8C3A",
+                    "estado": "disponivel",
+                    "ordem": 3,
+                    "precos": []
+                },
+                {
+                    "id": 5,
+                    "nome": "Rosé",
+                    "descricao": "Sugo com creme de leite",
+                    "acrescimo_centavos": 0,
+                    "cor": "#E58A66",
+                    "estado": "disponivel",
+                    "ordem": 4,
+                    "precos": []
+                },
+                {
+                    "id": 6,
+                    "nome": "Quatro queijos",
+                    "descricao": "Muçarela, parmesão, provolone e gorgonzola",
+                    "acrescimo_centavos": 500,
+                    "cor": "#EBC96B",
+                    "estado": "disponivel",
+                    "ordem": 5,
+                    "precos": []
+                }
+            ],
+            "ingredientes": [
+                {
+                    "id": 1,
+                    "nome": "Carne moída",
+                    "grupo": "Proteínas",
+                    "preco_extra_centavos": 500,
+                    "estado": "disponivel",
+                    "ordem": 0,
+                    "precos": []
+                },
+                {
+                    "id": 2,
+                    "nome": "Picadinho de frango",
+                    "grupo": "Proteínas",
+                    "preco_extra_centavos": 500,
+                    "estado": "disponivel",
+                    "ordem": 1,
+                    "precos": []
+                },
+                {
+                    "id": 3,
+                    "nome": "Carne seca",
+                    "grupo": "Proteínas",
+                    "preco_extra_centavos": 700,
+                    "estado": "disponivel",
+                    "ordem": 2,
+                    "precos": []
+                },
+                {
+                    "id": 4,
+                    "nome": "Camarão",
+                    "grupo": "Proteínas",
+                    "preco_extra_centavos": 900,
+                    "estado": "disponivel",
+                    "ordem": 3,
+                    "precos": []
+                },
+                {
+                    "id": 5,
+                    "nome": "Bacon",
+                    "grupo": "Acompanhamentos",
+                    "preco_extra_centavos": 300,
+                    "estado": "disponivel",
+                    "ordem": 4,
+                    "precos": [
+                        {
+                            "tamanho_id": 1,
+                            "preco_centavos": 300
+                        },
+                        {
+                            "tamanho_id": 2,
+                            "preco_centavos": 500
+                        }
+                    ]
+                },
+                {
+                    "id": 6,
+                    "nome": "Calabresa",
+                    "grupo": "Acompanhamentos",
+                    "preco_extra_centavos": 0,
+                    "estado": "disponivel",
+                    "ordem": 5,
+                    "precos": []
+                },
+                {
+                    "id": 7,
+                    "nome": "Presunto",
+                    "grupo": "Acompanhamentos",
+                    "preco_extra_centavos": 0,
+                    "estado": "disponivel",
+                    "ordem": 6,
+                    "precos": []
+                },
+                {
+                    "id": 8,
+                    "nome": "Brócolis",
+                    "grupo": "Acompanhamentos",
+                    "preco_extra_centavos": 0,
+                    "estado": "disponivel",
+                    "ordem": 7,
+                    "precos": [
+                        {
+                            "tamanho_id": 2,
+                            "preco_centavos": 200
+                        }
+                    ]
+                },
+                {
+                    "id": 9,
+                    "nome": "Champignon",
+                    "grupo": "Acompanhamentos",
+                    "preco_extra_centavos": 0,
+                    "estado": "disponivel",
+                    "ordem": 8,
+                    "precos": []
+                },
+                {
+                    "id": 10,
+                    "nome": "Milho",
+                    "grupo": "Acompanhamentos",
+                    "preco_extra_centavos": 0,
+                    "estado": "disponivel",
+                    "ordem": 9,
+                    "precos": []
+                },
+                {
+                    "id": 11,
+                    "nome": "Ervilha",
+                    "grupo": "Acompanhamentos",
+                    "preco_extra_centavos": 0,
+                    "estado": "disponivel",
+                    "ordem": 10,
+                    "precos": []
+                },
+                {
+                    "id": 12,
+                    "nome": "Tomate-cereja",
+                    "grupo": "Acompanhamentos",
+                    "preco_extra_centavos": 0,
+                    "estado": "disponivel",
+                    "ordem": 11,
+                    "precos": []
+                },
+                {
+                    "id": 13,
+                    "nome": "Azeitona preta",
+                    "grupo": "Acompanhamentos",
+                    "preco_extra_centavos": 0,
+                    "estado": "disponivel",
+                    "ordem": 12,
+                    "precos": []
+                },
+                {
+                    "id": 14,
+                    "nome": "Palmito",
+                    "grupo": "Acompanhamentos",
+                    "preco_extra_centavos": 0,
+                    "estado": "esgotado",
+                    "ordem": 13,
+                    "precos": []
+                },
+                {
+                    "id": 15,
+                    "nome": "Cebola roxa",
+                    "grupo": "Acompanhamentos",
+                    "preco_extra_centavos": 0,
+                    "estado": "disponivel",
+                    "ordem": 14,
+                    "precos": []
+                },
+                {
+                    "id": 16,
+                    "nome": "Alho frito",
+                    "grupo": "Acompanhamentos",
+                    "preco_extra_centavos": 0,
+                    "estado": "disponivel",
+                    "ordem": 15,
+                    "precos": []
+                },
+                {
+                    "id": 17,
+                    "nome": "Manjericão",
+                    "grupo": "Acompanhamentos",
+                    "preco_extra_centavos": 0,
+                    "estado": "disponivel",
+                    "ordem": 16,
+                    "precos": []
+                },
+                {
+                    "id": 18,
+                    "nome": "Muçarela",
+                    "grupo": "Queijos",
+                    "preco_extra_centavos": 0,
+                    "estado": "disponivel",
+                    "ordem": 17,
+                    "precos": []
+                },
+                {
+                    "id": 19,
+                    "nome": "Requeijão cremoso",
+                    "grupo": "Queijos",
+                    "preco_extra_centavos": 0,
+                    "estado": "disponivel",
+                    "ordem": 18,
+                    "precos": []
+                },
+                {
+                    "id": 20,
+                    "nome": "Parmesão",
+                    "grupo": "Queijos",
+                    "preco_extra_centavos": 0,
+                    "estado": "disponivel",
+                    "ordem": 19,
+                    "precos": []
+                },
+                {
+                    "id": 21,
+                    "nome": "Gorgonzola",
+                    "grupo": "Queijos",
+                    "preco_extra_centavos": 300,
+                    "estado": "disponivel",
+                    "ordem": 20,
+                    "precos": []
+                }
+            ],
+            "itens": [
+                {
+                    "id": 1,
+                    "categoria_id": 1,
+                    "tipo": "prato_casa",
+                    "nome": "Carbonara da casa",
+                    "descricao": "Espaguete, molho branco, bacon e parmesão",
+                    "preco_centavos": 0,
+                    "imagem": null,
+                    "massa_id": 2,
+                    "molho_id": 3,
+                    "estado": "disponivel",
+                    "ordem": 0,
+                    "preparo_min": null,
+                    "ingrediente_ids": [
+                        5,
+                        20
+                    ],
+                    "precos": [
+                        {
+                            "tamanho_id": 1,
+                            "preco_centavos": 2490
+                        },
+                        {
+                            "tamanho_id": 2,
+                            "preco_centavos": 3990
+                        }
+                    ]
+                },
+                {
+                    "id": 6,
+                    "categoria_id": 2,
+                    "tipo": "simples",
+                    "nome": "Água mineral",
+                    "descricao": "Sem gás, 500 ml",
+                    "preco_centavos": 400,
+                    "imagem": null,
+                    "massa_id": null,
+                    "molho_id": null,
+                    "estado": "disponivel",
+                    "ordem": 0,
+                    "preparo_min": null,
+                    "ingrediente_ids": [],
+                    "precos": []
+                },
+                {
+                    "id": 2,
+                    "categoria_id": 1,
+                    "tipo": "prato_casa",
+                    "nome": "Penne à bolonhesa",
+                    "descricao": "Penne, bolonhesa e muçarela",
+                    "preco_centavos": 0,
+                    "imagem": null,
+                    "massa_id": 1,
+                    "molho_id": 2,
+                    "estado": "disponivel",
+                    "ordem": 1,
+                    "preparo_min": null,
+                    "ingrediente_ids": [
+                        18
+                    ],
+                    "precos": [
+                        {
+                            "tamanho_id": 1,
+                            "preco_centavos": 2790
+                        },
+                        {
+                            "tamanho_id": 2,
+                            "preco_centavos": 4290
+                        }
+                    ]
+                },
+                {
+                    "id": 7,
+                    "categoria_id": 2,
+                    "tipo": "simples",
+                    "nome": "Água com gás",
+                    "descricao": "500 ml",
+                    "preco_centavos": 450,
+                    "imagem": null,
+                    "massa_id": null,
+                    "molho_id": null,
+                    "estado": "disponivel",
+                    "ordem": 1,
+                    "preparo_min": null,
+                    "ingrediente_ids": [],
+                    "precos": []
+                },
+                {
+                    "id": 3,
+                    "categoria_id": 1,
+                    "tipo": "prato_casa",
+                    "nome": "Talharim ao pesto",
+                    "descricao": "Talharim, pesto, tomate-cereja e parmesão",
+                    "preco_centavos": 0,
+                    "imagem": null,
+                    "massa_id": 4,
+                    "molho_id": 4,
+                    "estado": "disponivel",
+                    "ordem": 2,
+                    "preparo_min": null,
+                    "ingrediente_ids": [
+                        12,
+                        20
+                    ],
+                    "precos": [
+                        {
+                            "tamanho_id": 1,
+                            "preco_centavos": 2890
+                        },
+                        {
+                            "tamanho_id": 2,
+                            "preco_centavos": 4390
+                        }
+                    ]
+                },
+                {
+                    "id": 8,
+                    "categoria_id": 2,
+                    "tipo": "simples",
+                    "nome": "Refrigerante lata",
+                    "descricao": "Cola, guaraná ou laranja, 350 ml",
+                    "preco_centavos": 650,
+                    "imagem": null,
+                    "massa_id": null,
+                    "molho_id": null,
+                    "estado": "disponivel",
+                    "ordem": 2,
+                    "preparo_min": null,
+                    "ingrediente_ids": [],
+                    "precos": []
+                },
+                {
+                    "id": 4,
+                    "categoria_id": 1,
+                    "tipo": "prato_casa",
+                    "nome": "Nhoque quatro queijos",
+                    "descricao": "Nhoque de batata, quatro queijos e alho frito",
+                    "preco_centavos": 0,
+                    "imagem": null,
+                    "massa_id": 5,
+                    "molho_id": 6,
+                    "estado": "disponivel",
+                    "ordem": 3,
+                    "preparo_min": null,
+                    "ingrediente_ids": [
+                        16
+                    ],
+                    "precos": [
+                        {
+                            "tamanho_id": 1,
+                            "preco_centavos": 3390
+                        },
+                        {
+                            "tamanho_id": 2,
+                            "preco_centavos": 4890
+                        }
+                    ]
+                },
+                {
+                    "id": 9,
+                    "categoria_id": 2,
+                    "tipo": "simples",
+                    "nome": "Suco de uva integral",
+                    "descricao": "Garrafa de 300 ml",
+                    "preco_centavos": 900,
+                    "imagem": null,
+                    "massa_id": null,
+                    "molho_id": null,
+                    "estado": "disponivel",
+                    "ordem": 3,
+                    "preparo_min": null,
+                    "ingrediente_ids": [],
+                    "precos": []
+                },
+                {
+                    "id": 5,
+                    "categoria_id": 1,
+                    "tipo": "prato_casa",
+                    "nome": "Fusilli rosé com frango",
+                    "descricao": "Fusilli, rosé, picadinho de frango, milho e requeijão",
+                    "preco_centavos": 0,
+                    "imagem": null,
+                    "massa_id": 3,
+                    "molho_id": 5,
+                    "estado": "disponivel",
+                    "ordem": 4,
+                    "preparo_min": null,
+                    "ingrediente_ids": [
+                        2,
+                        10,
+                        19
+                    ],
+                    "precos": [
+                        {
+                            "tamanho_id": 1,
+                            "preco_centavos": 2490
+                        },
+                        {
+                            "tamanho_id": 2,
+                            "preco_centavos": 3990
+                        }
+                    ]
+                },
+                {
+                    "id": 10,
+                    "categoria_id": 2,
+                    "tipo": "simples",
+                    "nome": "Chá gelado de limão",
+                    "descricao": "Feito na casa, 400 ml",
+                    "preco_centavos": 800,
+                    "imagem": null,
+                    "massa_id": null,
+                    "molho_id": null,
+                    "estado": "esgotado",
+                    "ordem": 4,
+                    "preparo_min": null,
+                    "ingrediente_ids": [],
+                    "precos": []
+                },
+                {
+                    "id": 11,
+                    "categoria_id": 3,
+                    "tipo": "simples",
+                    "nome": "Tiramisù",
+                    "descricao": "Mascarpone, café e cacau",
+                    "preco_centavos": 1690,
+                    "imagem": null,
+                    "massa_id": null,
+                    "molho_id": null,
+                    "estado": "disponivel",
+                    "ordem": 5,
+                    "preparo_min": null,
+                    "ingrediente_ids": [],
+                    "precos": []
+                },
+                {
+                    "id": 12,
+                    "categoria_id": 3,
+                    "tipo": "simples",
+                    "nome": "Panna cotta",
+                    "descricao": "Com calda de frutas vermelhas",
+                    "preco_centavos": 1490,
+                    "imagem": null,
+                    "massa_id": null,
+                    "molho_id": null,
+                    "estado": "disponivel",
+                    "ordem": 6,
+                    "preparo_min": null,
+                    "ingrediente_ids": [],
+                    "precos": []
+                },
+                {
+                    "id": 13,
+                    "categoria_id": 3,
+                    "tipo": "simples",
+                    "nome": "Cannoli",
+                    "descricao": "Dois, recheados com creme de ricota",
+                    "preco_centavos": 1290,
+                    "imagem": null,
+                    "massa_id": null,
+                    "molho_id": null,
+                    "estado": "disponivel",
+                    "ordem": 7,
+                    "preparo_min": null,
+                    "ingrediente_ids": [],
+                    "precos": []
+                }
+            ]
+        },
+        "casos": [
+            {
+                "descricao": "Por tamanho: no Meio vale a tabela do Meio (Bacon 3) e o Brócolis segue grátis",
+                "escolha": {
+                    "tamanho_id": 1,
+                    "massa_id": 1,
+                    "molho_id": 2,
+                    "ingrediente_ids": [
+                        5,
+                        8
+                    ]
+                },
+                "preco": 3090,
+                "extras": [
+                    "Bacon"
+                ]
+            },
+            {
+                "descricao": "Por tamanho: no Inteiro, Bacon 5, Brócolis vira extra (2) e Bolonhesa 4",
+                "escolha": {
+                    "tamanho_id": 2,
+                    "massa_id": 1,
+                    "molho_id": 2,
+                    "ingrediente_ids": [
+                        5,
+                        8,
+                        10
+                    ]
+                },
+                "preco": 5090,
+                "extras": [
+                    "Bacon",
+                    "Brócolis"
+                ]
+            },
+            {
+                "descricao": "Por tamanho: opção sem tabela usa o valor do cadastro (Camarão 9)",
+                "escolha": {
+                    "tamanho_id": 2,
+                    "massa_id": 1,
+                    "molho_id": 1,
+                    "ingrediente_ids": [
+                        4
+                    ]
+                },
+                "preco": 4890,
+                "extras": [
+                    "Camarão"
+                ]
+            }
+        ]
+    }
 }

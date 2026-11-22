@@ -1210,10 +1210,15 @@ a.balao__acao {
 /* Taxa pela distância (D98): uma linha por faixa. */
 .faixa-raio {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto auto;
   align-items: end;
   gap: var(--e-2);
   margin-top: var(--e-2);
+}
+/* A faixa dentro do mapa (D105): só os dois campos, lado a lado. */
+.faixa-raio--mapa {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  margin-top: 0;
 }
 .escolha-simples {
   display: flex;
@@ -1248,6 +1253,18 @@ a.balao__acao {
 }
 .tabela-precos td:last-child {
   min-width: 0;
+}
+.tabela-precos__grupo th {
+  padding-top: var(--e-4);
+  color: var(--cor-texto-2);
+  font-size: var(--texto-2);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.tabela-precos .entrada::placeholder {
+  color: var(--cor-texto-desabilitado);   /* o valor do cadastro, que vale quando o campo fica em branco (D108) */
+  font-style: italic;
 }
 .tabela-precos .entrada {
   width: 7.5rem;

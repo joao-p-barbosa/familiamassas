@@ -1,6 +1,6 @@
 // "Novo pedido salão" (botão do quadro de Pedidos): as duas primeiras etapas do atendimento.
-//   1. Cliente: o nome (obrigatório). É ele que identifica o atendimento no quadro.
-//   2. Modalidade: Mesa (com a identificação da mesa) ou Pra viagem. Definida ANTES de escolher os produtos.
+//   1. Cliente: o nome (obrigatório). É ele que identifica o atendimento no quadro, também na mesa (D107: sem número de mesa).
+//   2. Modalidade: Mesa ou Pra viagem. Definida ANTES de escolher os produtos.
 // Depois, a atendente vai para a tela "Produtos do atendimento" (etapa 3) e envia o pedido (etapa 4), que entra na coluna "Salão" do quadro.
 // Nada é gravado no servidor aqui: o atendimento só nasce quando o primeiro pedido é enviado.
 import { $, esc, delegar, guardado } from '../shared/dom.js';
@@ -43,7 +43,7 @@ function desenhar() {
       <label class="campo">
         <span class="campo__rotulo">Nome do cliente</span>
         <input class="entrada" name="nome" value="${esc(dados.nome)}" maxlength="80" autocomplete="off" aria-describedby="ajuda-nome erro-nome">
-        <span class="campo__ajuda" id="ajuda-nome">É o nome que aparece no cartão do pedido.</span>
+        <span class="campo__ajuda" id="ajuda-nome">É o nome que aparece no cartão do pedido e identifica a mesa.</span>
         <span class="campo__erro" id="erro-nome" hidden></span>
       </label>` : `
       <fieldset class="grupo-opcoes grupo-opcoes--duas">
@@ -56,12 +56,7 @@ function desenhar() {
             <span class="opcao__corpo"><span class="opcao__titulo">${rotulo}</span><span class="opcao__descricao">${apoio}</span></span>
           </label>`).join('')}
       </fieldset>
-      <span class="campo__erro" id="erro-modalidade" hidden></span>
-      <label class="campo" id="campo-mesa" ${dados.modalidade === 'mesa' ? '' : 'hidden'}>
-        <span class="campo__rotulo">Mesa</span>
-        <input class="entrada" name="mesa" value="${esc(dados.mesa)}" maxlength="20" autocomplete="off" placeholder="Ex.: 5 ou varanda 2" aria-describedby="erro-mesa">
-        <span class="campo__erro" id="erro-mesa" hidden></span>
-      </label>`}
+      <span class="campo__erro" id="erro-modalidade" hidden></span>`}
     </form>
     <footer class="folha__rodape folha__rodape--acoes">
       ${primeiro
@@ -84,7 +79,6 @@ function lerCampos() {
   if (passo === 1) dados.nome = form.nome.value.trim();
   else {
     dados.modalidade = form.modalidade.value || dados.modalidade;
-    dados.mesa = form.mesa?.value.trim() ?? dados.mesa;
   }
 }
 
@@ -98,11 +92,10 @@ dialogo.addEventListener('submit', async (e) => {
     return;
   }
   if (!dados.modalidade) return erro('modalidade', 'Escolha Mesa ou Pra viagem.');
-  if (dados.modalidade === 'mesa' && !dados.mesa) return erro('mesa', 'Informe a mesa.');
   // Guarda o que foi escolhido para a próxima tela (só neste navegador, só nesta aba) e começa com o carrinho vazio.
   guardado.apagar('fm_carrinho_salao_novo_v1');
   try {
-    sessionStorage.setItem(CHAVE_RASCUNHO, JSON.stringify({ nome: dados.nome, modalidade: dados.modalidade, mesa: dados.modalidade === 'mesa' ? dados.mesa : '' }));
+    sessionStorage.setItem(CHAVE_RASCUNHO, JSON.stringify({ nome: dados.nome, modalidade: dados.modalidade, mesa: '' }));
   } catch {
     /* sem armazenamento da aba: a tela de produtos volta para cá */
   }
@@ -112,9 +105,7 @@ dialogo.addEventListener('submit', async (e) => {
 
 delegar(dialogo, 'change', 'input[name="modalidade"]', (e, entrada) => {
   dados.modalidade = entrada.value;
-  $('#campo-mesa', dialogo).hidden = entrada.value !== 'mesa';
   $('#erro-modalidade', dialogo).hidden = true;
-  if (entrada.value === 'mesa') $('[name="mesa"]', dialogo).focus();
 });
 delegar(dialogo, 'click', '[data-novo="voltar"]', () => {
   lerCampos();

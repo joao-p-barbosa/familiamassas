@@ -1,6 +1,5 @@
-// Fechamento do dia (D101), adaptado do Cantinho de Sabores: calendário do mês com o estado de cada dia e, ao abrir um dia,
-// o que ele vendeu por forma de pagamento e a conferência da gaveta (caixa inicial + vendas em dinheiro − retiradas = esperado;
-// contado; diferença). Reabrir um dia não apaga o fechamento: ele fica no histórico.
+// Fechamento do dia (D101, simplificado na D104): calendário do mês com o estado de cada dia e, ao abrir um dia, o que ele
+// vendeu por forma de pagamento (valor e quantidade) e o caixa inicial. Reabrir um dia não apaga o fechamento: fica no histórico.
 import { $, esc, delegar } from '../shared/dom.js';
 import { icone } from '../shared/icones.js';
 import { reais, dataHora, plural, centavosDeTexto, textoDeCentavos } from '../shared/formato.js';
@@ -45,7 +44,7 @@ function desenhar() {
     <div class="cabecalho-tela">
       <div>
         <h1 class="cabecalho-tela__titulo">Fechamento do dia</h1>
-        <p class="cabecalho-tela__apoio">Confira o dinheiro da gaveta: caixa inicial, vendas em dinheiro, retiradas e o que foi contado.</p>
+        <p class="cabecalho-tela__apoio">O que cada dia vendeu por forma de pagamento e o caixa inicial.</p>
       </div>
       <button type="button" class="botao botao--g" data-dia="${c.hoje}">${icone('dinheiro', 18)}Fechar o caixa de hoje</button>
     </div>
@@ -122,7 +121,7 @@ function desenharDia() {
       ${d.historico.length ? `
         <details class="caixa__historico">
           <summary>${plural(d.historico.length, 'fechamento reaberto neste dia', 'fechamentos reabertos neste dia')}</summary>
-          <ul>${d.historico.map((h) => `<li>Fechado em ${dataHora(h.fechado_em)} (contado ${reais(h.contado_centavos)}), reaberto em ${dataHora(h.cancelado_em)}${h.motivo_cancelamento ? `: ${esc(h.motivo_cancelamento)}` : ''}.</li>`).join('')}</ul>
+          <ul>${d.historico.map((h) => `<li>Fechado em ${dataHora(h.fechado_em)} (caixa inicial ${reais(h.caixa_inicial_centavos)}), reaberto em ${dataHora(h.cancelado_em)}${h.motivo_cancelamento ? `: ${esc(h.motivo_cancelamento)}` : ''}.</li>`).join('')}</ul>
         </details>` : ''}`;
   }
   lateral.innerHTML = `
@@ -135,23 +134,13 @@ function desenharDia() {
       <button type="button" class="botao botao--fantasma botao--icone" data-fechar aria-label="Fechar">${icone('fechar')}</button>
     </header>
     <div class="folha__corpo caixa">${corpo}</div>`;
-  if (!d.fechamento && d.estado !== 'futuro') atualizarConta();
 }
-
-const diferencaHtml = (dif) => (dif === 0
-  ? '<span class="selo selo--sucesso">✓ Sem diferença</span>'
-  : dif > 0 ? `<span class="selo selo--acento">+ Sobra de ${reais(dif)}</span>` : `<span class="selo selo--alerta">! Falta de ${reais(-dif)}</span>`);
 
 function fechadoHtml(f) {
   return `
-    <dl class="gaveta" aria-label="Conferência da gaveta">
-      <div class="gaveta__linha"><dt>Caixa inicial</dt><dd>${reais(f.caixa_inicial_centavos)}</dd></div>
-      <div class="gaveta__linha"><dt><span class="gaveta__sinal" aria-hidden="true">+</span>Vendas em dinheiro</dt><dd>${reais(f.vendas_dinheiro_centavos)}</dd></div>
-      <div class="gaveta__linha"><dt><span class="gaveta__sinal" aria-hidden="true">−</span>Retiradas</dt><dd>${reais(f.retiradas_centavos)}</dd></div>
-      <div class="gaveta__linha gaveta__linha--total"><dt>Esperado na gaveta</dt><dd>${reais(f.esperado_centavos)}</dd></div>
-      <div class="gaveta__linha gaveta__linha--contado"><dt>Contado na gaveta</dt><dd>${reais(f.contado_centavos)}</dd></div>
+    <dl class="gaveta" aria-label="Caixa">
+      <div class="gaveta__linha gaveta__linha--total"><dt>Caixa inicial</dt><dd>${reais(f.caixa_inicial_centavos)}</dd></div>
     </dl>
-    <p class="caixa__diferenca">${diferencaHtml(f.diferenca_centavos)}</p>
     <p class="campo__ajuda">Fechado por <strong>${esc(f.fechado_por_nome ?? 'alguém')}</strong> em ${dataHora(f.fechado_em)}.${f.observacao ? `<br>Observação: ${esc(f.observacao)}` : ''}</p>
     <form class="caixa__reabrir" id="form-reabrir">
       <label class="campo"><span class="campo__rotulo">Reabrir o dia <span class="campo__opcional">(o fechamento fica no histórico)</span></span>
@@ -161,24 +150,14 @@ function fechadoHtml(f) {
 }
 
 function formularioHtml(d) {
-  const sugestao = d.anterior ? textoDeCentavos(d.anterior.contado_centavos) : '';
+  const sugestao = d.anterior ? textoDeCentavos(d.anterior.caixa_inicial_centavos) : '';
   return `
     <form class="caixa__form" id="form-caixa" novalidate>
       <div class="gaveta gaveta--form">
-        <label class="gaveta__campo"><span>Caixa inicial<span class="campo__ajuda">${d.anterior ? `Contado no fechamento de ${dataCurta(d.anterior.data)}: ${reais(d.anterior.contado_centavos)}.` : 'Quanto havia na gaveta ao abrir.'}</span></span>
+        <label class="gaveta__campo"><span>Caixa inicial<span class="campo__ajuda">${d.anterior ? `No fechamento de ${dataCurta(d.anterior.data)}: ${reais(d.anterior.caixa_inicial_centavos)}.` : 'Quanto havia na gaveta ao abrir.'}</span></span>
           <input class="entrada" name="caixa_inicial" inputmode="decimal" value="${sugestao}" placeholder="0,00" aria-describedby="erro-caixa_inicial_centavos"></label>
-        <div class="gaveta__linha"><span><span class="gaveta__sinal" aria-hidden="true">+</span>Vendas em dinheiro</span><strong>${reais(d.resumo.dinheiro_centavos)}</strong></div>
-        <label class="gaveta__campo"><span><span class="gaveta__sinal" aria-hidden="true">−</span>Retiradas<span class="campo__ajuda">Dinheiro tirado da gaveta no dia: depósito, pagamento, troco levado.</span></span>
-          <input class="entrada" name="retiradas" inputmode="decimal" value="0,00" aria-describedby="erro-retiradas_centavos"></label>
-        <div class="gaveta__linha gaveta__linha--total"><span>Esperado na gaveta</span><strong id="caixa-esperado" aria-live="polite">—</strong></div>
-        <label class="gaveta__campo gaveta__linha--contado"><span>Contado na gaveta<span class="campo__ajuda">Conte o dinheiro agora e digite o total.</span></span>
-          <input class="entrada" name="contado" inputmode="decimal" placeholder="0,00" aria-describedby="erro-contado_centavos"></label>
       </div>
-      <p class="caixa__diferenca" id="caixa-diferenca" aria-live="polite"></p>
-      ${['caixa_inicial_centavos', 'retiradas_centavos', 'contado_centavos'].map((c) => `<span class="campo__erro" id="erro-${c}" hidden></span>`).join('')}
-      <p class="bloco__nota">${icone('info', 16)}<span>Pix e cartão: ${reais(d.resumo.por_pagamento.filter((p) => p.chave !== 'dinheiro').reduce((s, p) => s + p.total_centavos, 0))} (caiu na conta, fora da gaveta).</span></p>
-      <label class="campo"><span class="campo__rotulo">Observação <span class="campo__opcional">(opcional)</span></span>
-        <textarea class="entrada" name="observacao" rows="2" maxlength="500" placeholder="Explique uma sobra ou falta"></textarea></label>
+      <span class="campo__erro" id="erro-caixa_inicial_centavos" hidden></span>
       <div class="caixa__acoes">
         <button type="button" class="botao botao--secundario" data-fechar>Cancelar</button>
         <button type="submit" class="botao">Fechar o caixa</button>
@@ -186,19 +165,6 @@ function formularioHtml(d) {
     </form>`;
 }
 
-/** Recalcula "Esperado" e a diferença enquanto a pessoa digita (o servidor confere de novo ao salvar). */
-function atualizarConta() {
-  const form = $('#form-caixa', lateral);
-  if (!form) return;
-  const inicial = centavosDeTexto(form.caixa_inicial.value) ?? 0;
-  const retiradas = centavosDeTexto(form.retiradas.value) ?? 0;
-  const esperado = inicial + dia.resumo.dinheiro_centavos - retiradas;
-  $('#caixa-esperado', lateral).textContent = reais(esperado);
-  const contado = centavosDeTexto(form.contado.value);
-  $('#caixa-diferenca', lateral).innerHTML = form.contado.value.trim() && contado !== null ? diferencaHtml(contado - esperado) : '';
-}
-
-delegar(lateral, 'input', '#form-caixa input', atualizarConta);
 delegar(lateral, 'focusout', '#form-caixa input[inputmode="decimal"]', (e, entrada) => {
   const valor = centavosDeTexto(entrada.value);
   if (valor !== null) entrada.value = textoDeCentavos(valor);
@@ -216,9 +182,6 @@ lateral.addEventListener('submit', async (e) => {
     } else {
       dia = await api(`/api/admin/fechamento/${dia.data}`, { metodo: 'POST', corpo: {
         caixa_inicial_centavos: centavosDeTexto(form.caixa_inicial.value || '0'),
-        retiradas_centavos: centavosDeTexto(form.retiradas.value || '0'),
-        contado_centavos: form.contado.value.trim() ? centavosDeTexto(form.contado.value) : null,
-        observacao: form.observacao.value,
       } });
       avisar('Caixa fechado');
     }

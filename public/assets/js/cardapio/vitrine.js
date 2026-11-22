@@ -5,6 +5,7 @@ import { $, $$, esc, delegar, menosMovimento } from '../shared/dom.js';
 import { icone, iconeMassa } from '../shared/icones.js';
 import { reais, semAcento } from '../shared/formato.js';
 import { precoMinimo } from '../shared/preco.js';
+import { miniatura } from '../shared/miniatura.js';
 import { estado, assinar, recarregarCardapio, itemPorId } from './estado.js';
 import { abrirMontador } from './montador.js';
 import { abrirItem } from './item.js';
@@ -73,7 +74,7 @@ function produtoHtml(item) {
           <span class="produto__preco">${fora ? '<span class="selo">Esgotado</span>' : preco}</span>
         </span>
         ${item.imagem
-          ? `<img class="produto__foto" src="${esc(item.imagem)}" alt="" width="88" height="88" loading="lazy" decoding="async">`
+          ? `<img class="produto__foto" src="${esc(miniatura(item.imagem))}" alt="" width="88" height="88" loading="lazy" decoding="async">`
           : fora ? '' : `<span class="produto__acao">${icone('mais', 18)}</span>`}
       </button>
     </li>`;

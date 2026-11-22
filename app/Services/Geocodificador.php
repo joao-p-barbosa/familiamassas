@@ -28,6 +28,28 @@ final class Geocodificador
         return ['rua' => $rua, 'numero' => (string) ($a['house_number'] ?? ''), 'bairro' => $bairro];
     }
 
+    /**
+     * O ponto de um endereço escrito (D106): o cliente que conversa com a IA costuma escrever "Rua X, 120, Centro" em vez de mandar o pin.
+     * A cidade da loja entra junto para não cair numa rua de mesmo nome em outro estado. É aproximado: a taxa sai pela faixa desse
+     * ponto e o resumo avisa que foi calculada pelo endereço escrito.
+     * @return array{lat: float, lng: float}|null
+     */
+    public static function coordenadas(string $endereco, string $cidade = ''): ?array
+    {
+        $busca = trim($endereco . ($cidade !== '' ? ", {$cidade}" : ''));
+        if (mb_strlen($busca) < 6) {
+            return null;
+        }
+        $url = 'https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=br&accept-language=pt-BR&q=' . rawurlencode(mb_substr($busca, 0, 200));
+        $corpo = self::$transporte !== null ? (self::$transporte)($url) : self::buscar($url);
+        $lista = $corpo !== null ? json_decode($corpo, true) : null;
+        $primeiro = is_array($lista) ? ($lista[0] ?? null) : null;
+        if (!is_array($primeiro) || !is_numeric($primeiro['lat'] ?? null) || !is_numeric($primeiro['lon'] ?? null)) {
+            return null;
+        }
+        return ['lat' => (float) $primeiro['lat'], 'lng' => (float) $primeiro['lon']];
+    }
+
     private static function buscar(string $url): ?string
     {
         $contexto = stream_context_create(['http' => [

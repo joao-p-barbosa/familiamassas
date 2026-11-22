@@ -132,7 +132,37 @@ foreach ($casos as [$descricao, $tamanho, $massa, $molho, $ingredientes, $espera
     $paraJs[] = ['descricao' => $descricao, 'escolha' => ['tamanho_id' => $id('tamanhos', $tamanho), 'massa_id' => $id('massas', $massa), 'molho_id' => $id('molhos', $molho), 'ingrediente_ids' => $ing(...$ingredientes)],
                  'preco' => $esperado, 'extras' => $extras];
 }
-file_put_contents(__DIR__ . '/casos-preco.json', json_encode(['cardapio' => $cardapio, 'casos' => $paraJs], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT));
+// D108: acréscimo por tamanho. No cardápio de teste (em memória): Bacon 3 no Meio e 5 no Inteiro; Brócolis grátis no Meio e 2 no
+// Inteiro; Bolonhesa 3 no Meio e 4 no Inteiro. Massa sem tabela (Penne) usa o valor do cadastro.
+$cardapioTam = $cardapio;
+$comPrecos = static function (array &$lista, string $nome, array $porTamanho) use ($id): void {
+    foreach ($lista as &$o) {
+        if ($o['nome'] === $nome) {
+            $o['precos'] = $porTamanho;
+        }
+    }
+};
+$meioId = $id('tamanhos', 'Meio');
+$inteiroId = $id('tamanhos', 'Inteiro');
+$comPrecos($cardapioTam['ingredientes'], 'Bacon', [['tamanho_id' => $meioId, 'preco_centavos' => 300], ['tamanho_id' => $inteiroId, 'preco_centavos' => 500]]);
+$comPrecos($cardapioTam['ingredientes'], 'Brócolis', [['tamanho_id' => $inteiroId, 'preco_centavos' => 200]]);
+$comPrecos($cardapioTam['molhos'], 'Bolonhesa', [['tamanho_id' => $inteiroId, 'preco_centavos' => 400]]);
+$casosTam = [
+    ['Por tamanho: no Meio vale a tabela do Meio (Bacon 3) e o Brócolis segue grátis', 'Meio', 'Penne', 'Bolonhesa', ['Bacon', 'Brócolis'], 2490 + 300 + 300, ['Bacon']],
+    ['Por tamanho: no Inteiro, Bacon 5, Brócolis vira extra (2) e Bolonhesa 4', 'Inteiro', 'Penne', 'Bolonhesa', ['Bacon', 'Brócolis', 'Milho'], 3990 + 400 + 500 + 200, ['Brócolis', 'Bacon']],
+    ['Por tamanho: opção sem tabela usa o valor do cadastro (Camarão 9)', 'Inteiro', 'Penne', 'Sugo', ['Camarão'], 3990 + 900, ['Camarão']],
+];
+$paraJsTam = [];
+foreach ($casosTam as [$descricao, $tamanho, $massa, $molho, $ingredientes, $esperado, $extras]) {
+    $escolha = ['tamanho_id' => $id('tamanhos', $tamanho), 'massa_id' => $id('massas', $massa), 'molho_id' => $id('molhos', $molho), 'ingrediente_ids' => $ing(...$ingredientes)];
+    $r = $preco->montar($cardapioTam, $escolha);
+    $ordemDoCardapio = array_values(array_intersect($nomes($cardapioTam['ingredientes']), $extras));
+    conferir($descricao, [$r['preco_centavos'], $nomes($r['montagem']['extras'])], [$esperado, $ordemDoCardapio]);
+    $paraJsTam[] = ['descricao' => $descricao, 'escolha' => $escolha, 'preco' => $esperado, 'extras' => $ordemDoCardapio];
+}
+$bacon = array_values(array_filter($cardapioTam['ingredientes'], static fn (array $i): bool => $i['nome'] === 'Bacon'))[0];
+conferir('Faixa do acréscimo para mostrar antes do tamanho (Bacon: 3 a 5)', PrecoService::faixa($bacon, 'preco_extra_centavos', $cardapioTam['tamanhos']), [300, 500]);
+file_put_contents(__DIR__ . '/casos-preco.json', json_encode(['cardapio' => $cardapio, 'casos' => $paraJs, 'por_tamanho' => ['cardapio' => $cardapioTam, 'casos' => $paraJsTam]], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT));
 
 conferir('Ingrediente esgotado (Palmito) é recusado', codigoDoErro(fn () => $montar('Meio', 'Penne', 'Sugo', $ing('Palmito'))), '409 esgotado');
 conferir('Montagem sem tamanho é recusada', codigoDoErro(fn () => $preco->montar($cardapio, ['massa_id' => 1, 'molho_id' => 1])), '422 montagem_invalida');
@@ -152,6 +182,15 @@ conferir('A tabela grava o Monte sua massa e o prato; tamanho em branco deixa de
     codigoDoErro(fn () => $preco->montar($cardapioPrecos, ['item_id' => $carbonara, 'tamanho_id' => $id('tamanhos', 'Inteiro')])),
 ], [3700, 3500, '409 esgotado']);
 Banco::transacao(fn () => $repoPrecos->definirPrecos([$id('tamanhos', 'Meio') => 2490], [$carbonara => [$id('tamanhos', 'Meio') => 2490, $id('tamanhos', 'Inteiro') => 3990]]));
+
+// D108: acréscimo por tamanho gravado no banco. Bacon 6 no Inteiro (no Meio, o cadastro: 3).
+$baconId = $id('ingredientes', 'Bacon');
+Banco::transacao(fn () => $repoPrecos->definirPrecos([], [], ['ingredientes' => [$baconId => [$id('tamanhos', 'Inteiro') => 600, $id('tamanhos', 'Meio') => null]]]));
+$cardapioAcr = $repoPrecos->publico();
+$comBacon = static fn (string $tamanho): int => $preco->montar($cardapioAcr, ['tamanho_id' => $id('tamanhos', $tamanho), 'massa_id' => $id('massas', 'Penne'), 'molho_id' => $id('molhos', 'Sugo'), 'ingrediente_ids' => [$baconId]])['preco_centavos'];
+conferir('Acréscimo por tamanho no banco (D108): Bacon 6 no Inteiro; no Meio, em branco, vale o cadastro (3)', [$comBacon('Inteiro'), $comBacon('Meio')], [3990 + 600, 2490 + 300]);
+Banco::transacao(fn () => $repoPrecos->definirPrecos([], [], ['ingredientes' => [$baconId => [$id('tamanhos', 'Inteiro') => null]]]));
+conferir('Apagar o valor do tamanho volta ao do cadastro', array_values(array_filter($repoPrecos->publico()['ingredientes'], static fn (array $i): bool => $i['id'] === $baconId))[0]['precos'], []);
 
 echo "\nCARDÁPIO\n";
 conferir('Dois tamanhos: Meio e Inteiro', array_column($cardapio['tamanhos'], 'nome'), ['Meio', 'Inteiro']);
@@ -284,6 +323,12 @@ conferir('Dia fechado não aceita cancelamento: precisa reabrir', codigoDoErro(f
 conferir('No calendário, hoje aparece fechado, com o valor do fechamento', array_values(array_filter($fat->calendario(substr($hojeFat, 0, 7))['dias'], static fn (array $d): bool => $d['data'] === $hojeFat))[0]['estado'], 'fechado');
 $reaberto = $fat->reabrir($fechado['fechamento']['id'], 'Conferir de novo', $donoFat);
 conferir('Reabrir: o dia volta a ficar aberto e o fechamento vai para o histórico', [$reaberto['estado'], $reaberto['fechamento'], count($reaberto['historico']), $reaberto['historico'][0]['motivo_cancelamento']], ['hoje', null, 1, 'Conferir de novo']);
+$soInicial = $fat->fechar($hojeFat, ['caixa_inicial_centavos' => 15000], $donoFat);
+conferir('Fechar só com o caixa inicial (D104): sem retiradas, contado = esperado, sem diferença; o dia seguinte sugere esse caixa inicial', [
+    $soInicial['fechamento']['caixa_inicial_centavos'], $soInicial['fechamento']['retiradas_centavos'], $soInicial['fechamento']['diferenca_centavos'],
+    $fat->dia(date('Y-m-d', strtotime($hojeFat . ' +1 day')))['anterior']['caixa_inicial_centavos'],
+], [15000, 0, 0, 15000]);
+$fat->reabrir($soInicial['fechamento']['id'], 'Teste', $donoFat);
 conferir('Data futura não fecha', codigoDoErro(fn () => $fat->fechar('2999-01-01', ['caixa_inicial_centavos' => 0, 'retiradas_centavos' => 0, 'contado_centavos' => 0], $donoFat)), '422 validacao');
 
 conferir('Preço mandado pelo navegador é ignorado; total divergente é recusado', codigoDoErro(fn () => $pedidos->criar($base + ['total_esperado_centavos' => 100])), '409 total_mudou');
@@ -338,7 +383,10 @@ conferir('Nome do cliente é obrigatório', codigoDoErro(fn () => $salao->abrir(
 conferir('Nome de uma letra só é recusado', codigoDoErro(fn () => $salao->abrir($abrir(['cliente' => ['nome' => 'A']]), $atendente)), '422 validacao');
 conferir('A modalidade é obrigatória (vem antes dos produtos)', codigoDoErro(fn () => $salao->abrir($abrir(['modalidade' => '']), $atendente)), '422 validacao');
 conferir('Modalidade só aceita Mesa ou Pra viagem', codigoDoErro(fn () => $salao->abrir($abrir(['modalidade' => 'entrega']), $atendente)), '422 validacao');
-conferir('Mesa exige o número da mesa', codigoDoErro(fn () => $salao->abrir($abrir(['mesa' => '']), $atendente)), '422 validacao');
+$semNumero = $salao->detalhe($salao->abrir($abrir(['cliente' => ['nome' => 'Dona Lúcia'], 'mesa' => '']), $atendente)['id']);
+conferir('Mesa sem número (D107): o atendimento abre com o nome do cliente e a mesa fica vazia', [$semNumero['cliente_nome'], $semNumero['modalidade'], $semNumero['mesa']], ['Dona Lúcia', 'mesa', null]);
+Banco::conexao()->prepare('DELETE FROM pedidos WHERE atendimento_id = ?')->execute([$semNumero['id']]);   // fora das contagens do resto da seção
+Banco::conexao()->prepare('DELETE FROM atendimentos WHERE id = ?')->execute([$semNumero['id']]);
 conferir('Sem produtos não abre atendimento', codigoDoErro(fn () => $salao->abrir($abrir(['itens' => []]), $atendente)), '422 carrinho_vazio');
 conferir('O preço é do servidor: total divergente é recusado', codigoDoErro(fn () => $salao->abrir($abrir(['total_esperado_centavos' => 1]), $atendente)), '409 total_mudou');
 conferir('Item esgotado é recusado', codigoDoErro(fn () => $salao->abrir($abrir(['itens' => $esgotado]), $atendente)), '409 esgotado');
@@ -478,12 +526,18 @@ conferir('Mesa pelo cardápio: só com o nome; pedido "local" na conta do Salão
 conferir('O pedido da mesa cai na coluna Salão do quadro (é de um atendimento) e a conta aparece no Salão', [
     in_array((int) $naMesa['atendimento_id'], array_column((new AtendimentoService())->quadro()['atendimentos'] ?? [], 'id'), true),
 ], [true]);
+// A atendente cuida da conta que o cliente abriu pelo cardápio: põe mais um pedido e fecha, como numa conta aberta por ela.
+$salao->adicionarPedido((int) $naMesa['atendimento_id'], ['itens' => $itensMesa, 'total_esperado_centavos' => 3380], $atendente);
+$fechadaMesa = $salao->fechar((int) $naMesa['atendimento_id'], ['pagamento' => 'pix', 'total_esperado_centavos' => 6760], $atendente);
+conferir('A atendente adiciona pedido e fecha a conta da mesa aberta pelo cardápio (total das duas rodadas, pago no Pix)', [
+    $fechadaMesa['status'], $fechadaMesa['total_centavos'], $fechadaMesa['pagamento'],
+], ['encerrado', 6760, 'pix']);
 conferir('Mesa sem nome é recusada', camposDoErro(fn () => $pedidos->criar(['tipo' => 'mesa', 'cliente' => ['nome' => ''], 'itens' => $itensMesa])), ['nome' => 'Diga seu nome para chamarmos você.']);
 (new ConfigRepository())->salvar(['aceita_mesa' => '0']);
 conferir('Mesa desligada em Configurações: some do cardápio e o pedido é recusado', [(new LojaService())->publica()['tipos_pedido'], array_keys(camposDoErro(fn () => $pedidos->criar(['tipo' => 'mesa', 'cliente' => ['nome' => 'Carla'], 'itens' => $itensMesa])))], [['entrega', 'retirada'], ['tipo']]);
 (new ConfigRepository())->salvar(['aceita_mesa' => '1']);
 
-Banco::conexao()->prepare('DELETE FROM pedidos WHERE id = ?')->execute([$naMesa['id']]);
+Banco::conexao()->prepare('DELETE FROM pedidos WHERE atendimento_id = ?')->execute([$naMesa['atendimento_id']]);
 Banco::conexao()->prepare('DELETE FROM atendimentos WHERE id = ?')->execute([$naMesa['atendimento_id']]);
 
 echo "\nPERFIS E TELAS\n";
@@ -862,6 +916,7 @@ Env::definir('APP_URL', 'https://exemplo.test');
 App\WhatsApp\WhatsApp::usarMensageiro($falsoWhats);
 ini_set('error_log', sys_get_temp_dir() . '/familiamassas-whatsapp-teste.log');
 $repoIa = new App\IA\AssistenteRepository();
+$repoIa->salvarConfig(['ia_pedido' => '0']);   // esta parte testa o assistente que só tira dúvidas; o pedido pela IA (D106) tem a parte dele
 
 // O OpenRouter de mentira: guarda o que seria enviado e devolve as respostas na ordem.
 $pedidosIa = [];
@@ -1036,7 +1091,7 @@ foreach (['whatsapp_eventos', 'whatsapp_conversas'] as $tabelaIa) {
 foreach (App\IA\AssistenteRepository::PADROES as $chaveConfig => $padraoConfig) {
     $pdoIa->prepare('DELETE FROM configuracoes WHERE chave = ?')->execute([$chaveConfig]);
 }
-(new ConfigRepository())->salvar([]);   // limpa o cache da configuração
+(new ConfigRepository())->salvar(['ia_pedido' => '0']);   // limpa o cache da configuração
 Env::definir('OPENROUTER_API_KEY', '');
 Env::definir('APP_URL', '');
 App\WhatsApp\WhatsApp::usarMensageiro(null);
@@ -1135,7 +1190,7 @@ foreach (App\IA\AssistenteRepository::PADROES as $chaveConfig => $padraoConfig) 
     $pdoIa->prepare('DELETE FROM configuracoes WHERE chave = ?')->execute([$chaveConfig]);
 }
 $pdoIa->exec("DELETE FROM configuracoes WHERE chave = 'ia_sem_credito_em'");
-(new ConfigRepository())->salvar([]);
+(new ConfigRepository())->salvar(['ia_pedido' => '0']);   // o passo a passo com IA (D89) é o modo sem o pedido pela IA
 Env::definir('OPENROUTER_API_KEY', '');
 Env::definir('APP_URL', '');
 App\WhatsApp\WhatsApp::usarMensageiro(null);
@@ -1517,6 +1572,153 @@ App\WhatsApp\WhatsApp::usarMensageiro(null);
 ini_set('error_log', $logAntesWa);
 @unlink(sys_get_temp_dir() . '/familiamassas-whatsapp-teste.log');
 
+echo "\nPEDIDO PELA IA (D106): a IA conversa, o servidor confere, resume e cria\n";
+$pdoPi = App\Core\Banco::conexao();
+$pdoPi->exec('DELETE FROM whatsapp_sessoes');
+$pdoPi->exec('DELETE FROM ia_uso');
+Env::definir('OPENROUTER_API_KEY', $chaveIa);
+Env::definir('APP_URL', 'https://exemplo.test');
+App\WhatsApp\WhatsApp::usarMensageiro($falsoWhats);
+ini_set('error_log', sys_get_temp_dir() . '/familiamassas-whatsapp-teste.log');
+(new ConfigRepository())->salvar(['funcionamento' => 'aberta']);
+$repoIa->salvarConfig(['ia_ativo' => '1', 'ia_pedido' => '1', 'ia_teto_usd' => '100']);
+App\Services\Geocodificador::$transporte = static fn (string $url): ?string => null;
+$botPi = new App\WhatsApp\Bot(assistente: $assistenteIa);
+$nPi = 0;
+$dizPi = static function (string $fone, string $texto, ?array $local = null) use ($botPi, &$nPi): string {
+    $nPi++;
+    return $botPi->receber(['wamid' => "pi.{$nPi}", 'telefone' => $fone, 'tipo' => $local !== null ? 'location' : 'text', 'texto' => $texto, 'botao' => null, 'nome' => 'Ana Souza', 'local' => $local, 'enquete' => null]);
+};
+// Uma resposta do modelo com várias chamadas de ferramenta (com argumentos).
+$chamadasPi = static function (array ...$chamadas): array {
+    $lista = [];
+    foreach ($chamadas as $n => [$nome, $args]) {
+        $lista[] = ['id' => "c{$n}", 'type' => 'function', 'function' => ['name' => $nome, 'arguments' => json_encode($args === [] ? new stdClass() : $args)]];
+    }
+    return ['status' => 200, 'erro' => null, 'corpo' => json_encode(['choices' => [['message' => ['role' => 'assistant', 'content' => null, 'tool_calls' => $lista]]],
+        'usage' => ['prompt_tokens' => 3000, 'completion_tokens' => 60, 'cost' => 0.0004]])];
+};
+// O que as ferramentas responderam ao modelo na última chamada (mensagens "tool").
+$respostasDasFerramentas = static function () use (&$pedidosIa): string {
+    $ultima = $pedidosIa[count($pedidosIa) - 1]['corpo']['messages'] ?? [];
+    return implode("\n---\n", array_column(array_filter($ultima, static fn (array $m): bool => $m['role'] === 'tool'), 'content'));
+};
+$enviadasPi = static fn (int $desde): array => array_map(static fn (array $e): string => $e['text']['body'] ?? '', array_slice($falsoWhats->enviadas, $desde));
+$carbPi = $cardapio['itens'][array_search('Carbonara da casa', array_column($cardapio['itens'], 'nome'), true)];
+$tamPi = $carbPi['precos'][0]['tamanho_id'];
+$aguaPi = $id('itens', 'Água mineral');
+$esperadoPi = (new PedidoService())->validarItens(['itens' => [
+    ['tipo' => 'montado', 'item_id' => $carbPi['id'], 'tamanho_id' => $tamPi, 'quantidade' => 2], ['tipo' => 'simples', 'item_id' => $aguaPi, 'quantidade' => 1],
+]])['subtotal'];
+$reaisPi = static fn (int $c): string => 'R$ ' . number_format($c / 100, 2, ',', '.');
+
+// 1. O pedido inteiro na primeira mensagem.
+$fonePi = '5511977771001';
+$pedidosIa = [];
+$filaIa = [
+    $chamadasPi(
+        ['adicionar_ao_pedido', ['itens' => [['item_id' => $carbPi['id'], 'tamanho_id' => $tamPi, 'quantidade' => 2, 'observacao' => 'sem pimenta'], ['item_id' => $aguaPi, 'quantidade' => 1]]]],
+        ['definir_entrega', ['tipo' => 'retirada']],
+        ['definir_cliente', ['nome' => 'Ana', 'pagamento' => 'pix']],
+        ['mostrar_resumo', []],
+    ),
+    $textoIa('Anotei tudo! Confere o resumo aqui embaixo:'),
+];
+$antesPi = count($falsoWhats->enviadas);
+$resPi = $dizPi($fonePi, 'oi, quero 2 carbonara e uma água, vou retirar, pago no pix, sou a Ana');
+$saidasPi = $enviadasPi($antesPi);
+conferir('Pedido na primeira mensagem: a IA monta tudo de uma vez e o sistema manda o resumo dele logo depois da frase da IA', [
+    $resPi, count($saidasPi), $saidasPi[0] ?? null, str_contains($saidasPi[1] ?? '', '*Total: ' . $reaisPi($esperadoPi) . '*'), str_contains($saidasPi[1] ?? '', '2x Carbonara da casa'), str_contains($saidasPi[1] ?? '', '(sem pimenta)'), str_contains($saidasPi[1] ?? '', 'Retirada no balcão'), str_contains($saidasPi[1] ?? '', 'Responda *sim*'),
+], ['ia', 2, 'Anotei tudo! Confere o resumo aqui embaixo:', true, true, true, true, true]);
+$primeiraPi = $pedidosIa[0]['corpo'] ?? [];
+$sistemaPi = $primeiraPi['messages'][0]['content'] ?? '';
+conferir('O modelo recebe as ferramentas do pedido, o cardápio com os códigos, as regras do pedido e a situação de agora', [
+    count($primeiraPi['tools'] ?? []), str_contains($sistemaPi, "[P{$carbPi['id']}] Carbonara da casa"), str_contains($sistemaPi, 'Você MONTA O PEDIDO'), str_contains($sistemaPi, 'Você não monta pedido'), str_contains($sistemaPi, 'SITUAÇÃO AGORA') && str_contains($sistemaPi, 'O pedido está vazio.'),
+], [9, true, true, false, true]);
+conferir('Nenhum pedido ainda: só depois do "sim"', (int) $pdoPi->query("SELECT COUNT(*) FROM pedidos WHERE cliente_telefone = '{$fonePi}'")->fetchColumn(), 0);
+
+$filaIa = [$chamadasPi(['confirmar_pedido', []]), $textoIa('Obrigada, Ana! 😊')];
+$antesPi = count($falsoWhats->enviadas);
+$resPi = $dizPi($fonePi, 'sim, pode mandar');
+$criadoPi = $pdoPi->query("SELECT * FROM pedidos WHERE cliente_telefone = '{$fonePi}' ORDER BY id DESC")->fetch();
+conferir('"Sim" depois do resumo: o pedido entra no Kanban (origem whatsapp, preço do servidor, retirada, Pix) e o carrinho some', [
+    $resPi, $criadoPi['origem'] ?? null, (int) ($criadoPi['total_centavos'] ?? 0), $criadoPi['tipo'] ?? null, $criadoPi['pagamento'] ?? null, $criadoPi['cliente_nome'] ?? null,
+    (int) $pdoPi->query("SELECT COUNT(*) FROM whatsapp_sessoes WHERE telefone = '{$fonePi}'")->fetchColumn(),
+], ['pedido_criado', 'whatsapp', $esperadoPi, 'retirada', 'pix', 'Ana', 0]);
+conferir('O cliente recebe a frase da IA e a confirmação com o número do pedido', [in_array('Obrigada, Ana! 😊', $enviadasPi($antesPi), true), (bool) array_filter($enviadasPi($antesPi), static fn (string $t): bool => str_contains($t, "#{$criadoPi['id']}"))], [true, true]);
+
+// 2. Confirmar sem ter mostrado o resumo: recusado.
+$fonePi2 = '5511977771002';
+$filaIa = [
+    $chamadasPi(['adicionar_ao_pedido', ['itens' => [['item_id' => $aguaPi, 'quantidade' => 1]]]], ['definir_entrega', ['tipo' => 'retirada']], ['definir_cliente', ['nome' => 'Bia', 'pagamento' => 'cartao']], ['confirmar_pedido', []]),
+    $textoIa('Vou te mandar o resumo antes.'),
+];
+$dizPi($fonePi2, 'uma água, retiro, cartão, Bia. Pode fechar');
+conferir('A IA tenta confirmar sem mostrar o resumo: a ferramenta recusa e nada é criado', [
+    str_contains($respostasDasFerramentas(), 'ainda não viu o resumo'), (int) $pdoPi->query("SELECT COUNT(*) FROM pedidos WHERE cliente_telefone = '{$fonePi2}'")->fetchColumn(),
+], [true, 0]);
+
+// 3. O pedido muda depois do resumo: precisa mostrar de novo.
+$filaIa = [$chamadasPi(['mostrar_resumo', []]), $textoIa('Confere aí:')];
+$dizPi($fonePi2, 'ok');
+$filaIa = [$chamadasPi(['adicionar_ao_pedido', ['itens' => [['item_id' => $aguaPi, 'quantidade' => 1]]]], ['confirmar_pedido', []]), $textoIa('Coloquei mais uma.')];
+$dizPi($fonePi2, 'sim, e mais uma água');
+conferir('Mudou o pedido depois do resumo: confirmar é recusado até o cliente ver o resumo novo', [
+    str_contains($respostasDasFerramentas(), 'mudou depois do último resumo'), (int) $pdoPi->query("SELECT COUNT(*) FROM pedidos WHERE cliente_telefone = '{$fonePi2}'")->fetchColumn(),
+], [true, 0]);
+
+// 4. Código que não existe e prato da casa sem tamanho: o item é recusado com o motivo; o resto entra.
+$fonePi3 = '5511977771003';
+$filaIa = [$chamadasPi(['adicionar_ao_pedido', ['itens' => [['item_id' => 999999, 'quantidade' => 1], ['item_id' => $carbPi['id'], 'quantidade' => 1], ['item_id' => $aguaPi, 'quantidade' => 3]]]]), $textoIa('Qual tamanho?')];
+$dizPi($fonePi3, 'quero um x-tudo, uma carbonara e 3 águas');
+$ferrPi = $respostasDasFerramentas();
+conferir('Item inexistente e prato da casa sem tamanho são recusados; a água entra com o preço do servidor', [
+    substr_count($ferrPi, 'Item recusado'), str_contains($ferrPi, 'Adicionado: 3x Água mineral'), str_contains($ferrPi, '1. 3x Água mineral'),
+], [2, true, true]);
+
+// 5. A localização: o sistema guarda o ponto, tira a rua dela e conta para a IA.
+App\Services\Geocodificador::$transporte = static fn (string $url): ?string => json_encode(['address' => ['road' => 'Rua das Acácias', 'suburb' => 'Jardim Paulista', 'house_number' => '']]);
+$filaIa = [$textoIa('Recebi! Qual é o número da casa?')];
+$dizPi($fonePi3, '', ['lat' => -23.55, 'lng' => -46.63]);
+$ultimaPi = $pedidosIa[count($pedidosIa) - 1]['corpo']['messages'] ?? [];
+$userPi = $ultimaPi[count($ultimaPi) - 1]['content'] ?? '';
+$sessaoPi = json_decode((string) $pdoPi->query("SELECT dados FROM whatsapp_sessoes WHERE telefone = '{$fonePi3}'")->fetchColumn(), true);
+conferir('Pin no meio da conversa: vira entrega com rua e bairro, e a IA é avisada para perguntar o número', [
+    str_contains($userPi, 'Rua das Acácias, Jardim Paulista'), str_contains($userPi, 'Pergunte o número'), $sessaoPi['tipo'] ?? null, $sessaoPi['endereco']['rua'] ?? null, $sessaoPi['endereco']['lat'] ?? null,
+], [true, true, 'entrega', 'Rua das Acácias', -23.55]);
+App\Services\Geocodificador::$transporte = static fn (string $url): ?string => null;
+
+// 6. A IA falha: o cliente segue pelo passo a passo, sem ficar sem resposta.
+$fonePi4 = '5511977771004';
+$filaIa = [$erroIa(500, 'erro interno')];
+$antesPi = count($falsoWhats->enviadas);
+$resPi = $dizPi($fonePi4, 'quero pedir');
+conferir('IA fora do ar: avisa e abre o cardápio passo a passo', [$resPi, str_contains(implode('|', $enviadasPi($antesPi)), 'probleminha')], ['menu', true]);
+$pdoPi->exec("DELETE FROM whatsapp_sessoes WHERE telefone = '{$fonePi4}'");
+
+// 7. "Atendente" continua indo para uma pessoa, sem passar pela IA.
+$antesChamadasPi = count($pedidosIa);
+conferir('"Atendente" vai direto para uma pessoa (sem chamar a IA)', [$dizPi('5511977771005', 'atendente'), count($pedidosIa) - $antesChamadasPi], ['atendente', 0]);
+
+// 8. Alguém da loja respondeu pelo celular: o bot fica quieto.
+$fonePi6 = '5511977771006';
+$botPi->equipeRespondeu($fonePi6);
+$antesChamadasPi = count($pedidosIa);
+conferir('A equipe respondeu pelo celular: a conversa vai para atendimento humano e o bot não chama a IA', [$dizPi($fonePi6, 'oi?'), count($pedidosIa) - $antesChamadasPi], ['humano', 0]);
+$repoIa->salvarConfig(['ia_pedido' => '0']);
+$botPi->equipeRespondeu('5511977771007');
+conferir('Com o pedido pela IA desligado, a mensagem do celular da loja não pausa o bot (a saudação do WhatsApp Business também sai de lá)', (new App\WhatsApp\Conversas())->emAtendimentoHumano('5511977771007'), false);
+
+$pdoPi->exec('DELETE FROM whatsapp_sessoes');
+$pdoPi->exec('DELETE FROM ia_uso');
+$pdoPi->exec('DELETE FROM whatsapp_envios_pendentes');
+$repoIa->salvarConfig(['ia_ativo' => '0']);
+Env::definir('OPENROUTER_API_KEY', '');
+Env::definir('APP_URL', '');
+App\WhatsApp\WhatsApp::usarMensageiro(null);
+ini_set('error_log', $logAntesWa);
+@unlink(sys_get_temp_dir() . '/familiamassas-whatsapp-teste.log');
+
 echo "\nTOKEN DO WHATSAPP\n";
 $tokens = new TokenWhatsApp();
 $agora = 1_800_000_000;
@@ -1599,6 +1801,37 @@ if ($emPg) {
         App\Controllers\PublicoController::fotoGuardada('abc.png'),
         App\Controllers\PublicoController::fotoGuardada(bin2hex(random_bytes(12)) . '.php'),
     ], [null, null, null]);
+
+    // D103: miniatura com o mesmo nome e "-mini"; foto antiga sem miniatura entrega a grande; foto sem uso sai do banco.
+    $semMini = str_replace('.png', '-mini.png', $nomeFoto);
+    conferir('Miniatura que não existe: entrega a foto grande', App\Controllers\PublicoController::fotoGuardada($semMini)['dados'] === $bytes, true);
+    $base = bin2hex(random_bytes(12));
+    $imagens->guardar("{$base}.webp", 'image/webp', 'grande');
+    $imagens->guardar("{$base}-mini.webp", 'image/webp', 'pequena');
+    conferir('Miniatura que existe: entrega a pequena', App\Controllers\PublicoController::fotoGuardada("{$base}-mini.webp")['dados'], 'pequena');
+    $pdoPg = Banco::conexao();
+    $pdoPg->prepare('UPDATE imagens SET criado_em = ?')->execute([gmdate('Y-m-d H:i:s', time() - 2 * 86400)]);
+    $itemComFoto = (int) $pdoPg->query('SELECT MIN(id) FROM itens')->fetchColumn();
+    $pdoPg->prepare('UPDATE itens SET imagem = ? WHERE id = ?')->execute(["/uploads/{$base}.webp", $itemComFoto]);
+    $recente = bin2hex(random_bytes(12)) . '.webp';
+    $imagens->guardar($recente, 'image/webp', 'acabou de subir');
+    $apagadas = $imagens->apagarSemUso();
+    conferir('Limpeza: sai a foto sem uso; ficam a do item (com a miniatura) e a enviada há pouco', [
+        $apagadas, $imagens->porNome($nomeFoto), $imagens->porNome("{$base}.webp") !== null, $imagens->porNome("{$base}-mini.webp") !== null, $imagens->porNome($recente) !== null,
+    ], [1, null, true, true, true]);
+    $pdoPg->prepare('UPDATE itens SET imagem = NULL WHERE id = ?')->execute([$itemComFoto]);
+    $pdoPg->prepare('UPDATE imagens SET criado_em = ?')->execute([gmdate('Y-m-d H:i:s', time() - 2 * 86400)]);
+    conferir('Item sem a foto: a grande e a miniatura saem juntas', [$imagens->apagarSemUso(), (int) $pdoPg->query('SELECT COUNT(*) FROM imagens')->fetchColumn()], [3, 0]);
+} else {
+    echo "\nSQLITE: miniatura das fotos (D103)\n";
+    $base = bin2hex(random_bytes(12));
+    $arquivoFoto = RAIZ . "/public/uploads/{$base}.webp";
+    @mkdir(dirname($arquivoFoto), 0775, true);
+    file_put_contents($arquivoFoto, 'grande');
+    conferir('Miniatura que não existe no disco: entrega a foto grande; a grande que falta continua 404', [
+        App\Controllers\PublicoController::fotoGuardada("{$base}-mini.webp"), App\Controllers\PublicoController::fotoGuardada(bin2hex(random_bytes(12)) . '.webp'),
+    ], [['tipo' => 'image/webp', 'dados' => 'grande'], null]);
+    unlink($arquivoFoto);
 }
 
 echo "\nPRIMEIRO ACESSO EM PARALELO (corrida na criação do banco)\n";
@@ -1727,7 +1960,7 @@ foreach ([['A1', 'Mesa 5', 'local', '5', 'pix', 'concluido', 'balcao'], ['A2', '
 }
 
 $aplicadas = App\Core\Banco::migrar($antigo, $arquivoAntigo);
-conferir('Banco da versão 1 recebe as migrações 002 a 012', $aplicadas, [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+conferir('Banco da versão 1 recebe as migrações 002 a 013', $aplicadas, [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]);
 conferir('A versão do banco passa a ser a atual', (int) $antigo->query('PRAGMA user_version')->fetchColumn(), App\Core\Banco::VERSAO_DO_ESQUEMA);
 conferir('Uma cópia do banco antigo foi guardada antes de mexer', count(glob($pastaMigracao . '/backups/antigo-antes-da-v2-*.sqlite') ?: []), 1);
 conferir('Rodar de novo não faz nada', App\Core\Banco::migrar($antigo, $arquivoAntigo), []);

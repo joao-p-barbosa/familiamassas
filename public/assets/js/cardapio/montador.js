@@ -4,7 +4,7 @@
 import { $, $$, esc, delegar } from '../shared/dom.js';
 import { icone, iconeMassa, iconePorcao } from '../shared/icones.js';
 import { reais, acrescimo, plural } from '../shared/formato.js';
-import { calcularMontagem, precoDoPrato } from '../shared/preco.js';
+import { calcularMontagem, precoDoPrato, noTamanho, faixa } from '../shared/preco.js';
 import { abrirFolha, fecharFolha } from '../shared/folha.js';
 import { avisar } from '../shared/avisos.js';
 import { estado, adicionarAoCarrinho, atualizarLinha } from './estado.js';
@@ -156,6 +156,18 @@ function opcaoUnica(nome, o, { descricao, detalhe = '', lado, figura = '', fora 
     </label>`;
 }
 
+
+/**
+ * O acréscimo que aparece ao lado de uma massa, molho ou ingrediente (D108). Com o tamanho já escolhido (voltou para alterar),
+ * o valor daquele tamanho; antes dele, a faixa entre os tamanhos ("+ R$ 3,00 a R$ 5,00", "+ até R$ 2,00").
+ */
+function lado(opcao, campo) {
+  if (m.escolha.tamanho_id) return acrescimo(noTamanho(opcao, campo, m.escolha.tamanho_id));
+  const [menor, maior] = faixa(opcao, campo, estado.cardapio.tamanhos);
+  if (menor === maior) return acrescimo(menor);
+  return menor === 0 ? `+ até ${reais(maior)}` : `+ ${reais(menor)} a ${reais(maior)}`;
+}
+
 const CONTEUDO = {
   // Meio e Inteiro: o desenho do prato (metade ou cheio), a descrição de quanto serve e o preço do prato nesse tamanho.
   tamanho: () => `
@@ -173,7 +185,7 @@ const CONTEUDO = {
     <fieldset class="grupo-opcoes grupo-opcoes--duas">
       <legend class="so-leitor">Massa</legend>
       ${estado.cardapio.massas.map((x) => opcaoUnica('massa_id', x, {
-        descricao: x.descricao, lado: acrescimo(x.acrescimo_centavos),
+        descricao: x.descricao, lado: lado(x, 'acrescimo_centavos'),
         figura: `<span class="opcao__figura">${iconeMassa(x.nome)}</span>`,
       })).join('')}
     </fieldset>`,
@@ -182,7 +194,7 @@ const CONTEUDO = {
     <fieldset class="grupo-opcoes grupo-opcoes--duas">
       <legend class="so-leitor">Molho</legend>
       ${estado.cardapio.molhos.map((x) => opcaoUnica('molho_id', x, {
-        descricao: x.descricao, lado: acrescimo(x.acrescimo_centavos),
+        descricao: x.descricao, lado: lado(x, 'acrescimo_centavos'),
         figura: `<span class="opcao__figura bolinha" style="background: ${esc(x.cor)}" aria-hidden="true"></span>`,
       })).join('')}
     </fieldset>`,
@@ -203,7 +215,7 @@ const CONTEUDO = {
               <input class="opcao__entrada" type="checkbox" name="ingrediente" value="${i.id}" ${m.escolha.ingrediente_ids.includes(i.id) ? 'checked' : ''} ${disponivel(i) ? '' : 'disabled'}>
               ${marca}
               <span class="opcao__corpo"><span class="opcao__titulo">${esc(i.nome)}</span></span>
-              <span class="opcao__lado">${!disponivel(i) ? esgotado : i.preco_extra_centavos > 0 ? `+ ${reais(i.preco_extra_centavos)}` : ''}</span>
+              <span class="opcao__lado">${!disponivel(i) ? esgotado : lado(i, 'preco_extra_centavos')}</span>
             </label>`).join('')}
         </fieldset>`).join('')}`;
   },

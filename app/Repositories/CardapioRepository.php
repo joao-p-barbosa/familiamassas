@@ -22,6 +22,9 @@ final class CardapioRepository
         'itens'        => ['colunas' => ['categoria_id', 'tipo', 'nome', 'descricao', 'preco_centavos', 'imagem', 'massa_id', 'molho_id', 'preparo_min', 'ordem', 'estado'], 'estados' => ['disponivel', 'esgotado', 'oculto']],
     ];
 
+    /** Cadastros cujo valor pode mudar com o tamanho do prato (D108), na tabela acrescimo_precos. */
+    public const COM_ACRESCIMO = ['massas', 'molhos', 'ingredientes'];
+
     private const INTEIROS = ['id', 'ordem', 'preco_centavos', 'inclusos', 'acrescimo_centavos', 'preco_extra_centavos', 'categoria_id', 'massa_id', 'molho_id', 'preparo_min'];
 
     /** Cardápio inteiro, do jeito que o painel precisa (inclui ocultos). */
@@ -43,6 +46,18 @@ final class CardapioRepository
         foreach ($dados['itens'] as &$item) {
             $item['ingrediente_ids'] = $porItem[$item['id']] ?? [];
             $item['precos'] = $precos[$item['id']] ?? [];   // prato da casa: preço fixo por tamanho (D87)
+        }
+        unset($item);
+        // D108: acréscimo por tamanho de massas, molhos e ingredientes. Só os tamanhos preenchidos; o resto usa o valor do cadastro.
+        $acrescimos = [];
+        foreach ($pdo->query('SELECT tipo, opcao_id, tamanho_id, preco_centavos FROM acrescimo_precos ORDER BY tamanho_id') as $linha) {
+            $acrescimos[$linha['tipo']][(int) $linha['opcao_id']][] = ['tamanho_id' => (int) $linha['tamanho_id'], 'preco_centavos' => (int) $linha['preco_centavos']];
+        }
+        foreach (self::COM_ACRESCIMO as $recurso) {
+            foreach ($dados[$recurso] as &$opcao) {
+                $opcao['precos'] = $acrescimos[$recurso][$opcao['id']] ?? [];
+            }
+            unset($opcao);
         }
         return $dados;
     }
@@ -93,6 +108,9 @@ final class CardapioRepository
     {
         $this->exigirRecurso($recurso);
         Banco::conexao()->prepare("DELETE FROM {$recurso} WHERE id = ?")->execute([$id]);
+        if (in_array($recurso, self::COM_ACRESCIMO, true)) {
+            Banco::conexao()->prepare('DELETE FROM acrescimo_precos WHERE tipo = ? AND opcao_id = ?')->execute([$recurso, $id]);
+        }
     }
 
     public function proximaOrdem(string $recurso): int
@@ -124,8 +142,9 @@ final class CardapioRepository
      * Valor null num prato = aquele tamanho não é vendido para ele.
      * @param array<int,int> $monte tamanho_id => centavos
      * @param array<int,array<int,?int>> $pratos item_id => [tamanho_id => centavos|null]
+     * @param array<string,array<int,array<int,?int>>> $acrescimos massas|molhos|ingredientes => [id => [tamanho_id => centavos|null]] (D108)
      */
-    public function definirPrecos(array $monte, array $pratos): void
+    public function definirPrecos(array $monte, array $pratos, array $acrescimos = []): void
     {
         $pdo = Banco::conexao();
         $tamanho = $pdo->prepare('UPDATE tamanhos SET preco_centavos = ? WHERE id = ?');
@@ -139,6 +158,19 @@ final class CardapioRepository
                 $apaga->execute([$itemId, $tamanhoId]);
                 if ($centavos !== null) {
                     $insere->execute([$itemId, $tamanhoId, $centavos]);
+                }
+            }
+        }
+        // D108: tipo => [opcao_id => [tamanho_id => centavos|null]]; null = volta ao valor do cadastro.
+        $apagaAcr = $pdo->prepare('DELETE FROM acrescimo_precos WHERE tipo = ? AND opcao_id = ? AND tamanho_id = ?');
+        $insereAcr = $pdo->prepare('INSERT INTO acrescimo_precos (tipo, opcao_id, tamanho_id, preco_centavos) VALUES (?, ?, ?, ?)');
+        foreach ($acrescimos as $tipo => $porOpcao) {
+            foreach ($porOpcao as $opcaoId => $porTamanho) {
+                foreach ($porTamanho as $tamanhoId => $centavos) {
+                    $apagaAcr->execute([$tipo, $opcaoId, $tamanhoId]);
+                    if ($centavos !== null) {
+                        $insereAcr->execute([$tipo, $opcaoId, $tamanhoId, $centavos]);
+                    }
                 }
             }
         }

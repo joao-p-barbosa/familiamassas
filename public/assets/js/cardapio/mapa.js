@@ -26,7 +26,8 @@ const PINO = `
 let leaflet = null;      // Promise que entrega a biblioteca (carregada uma vez)
 let sessao = null;       // estado do mapa aberto
 
-function carregarLeaflet() {
+/** A biblioteca Leaflet (carregada uma vez). Também usada pelo mapa do raio de entrega no painel (D105). */
+export function carregarLeaflet() {
   if (window.L) return Promise.resolve(window.L);
   leaflet ??= new Promise((resolver, rejeitar) => {
     const css = document.createElement('link');

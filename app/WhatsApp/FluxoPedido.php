@@ -367,7 +367,7 @@ final class FluxoPedido
      * "Recebemos seu pedido #N" é o aviso de status de D58, que já está na fila: manda agora mesmo. Se a fila não puder andar
      * (WhatsApp caído há pouco, fila retida), manda uma confirmação direta para o cliente não ficar sem resposta.
      */
-    private function confirmar(string $telefone, int $pedidoId): void
+    public function confirmar(string $telefone, int $pedidoId): void
     {
         try {
             (new Avisos())->processar(5);
@@ -549,7 +549,7 @@ final class FluxoPedido
                 $titulo = $massa ? 'Monte a sua massa 🍝 Primeiro, qual massa? (escolha 1)' : 'Qual molho? (escolha 1)';
                 $linhas[] = $massa ? '*Monte a sua massa* 🍝 Primeiro, qual massa?' : $titulo;
                 foreach ($this->disponiveis($catalogo[$massa ? 'massas' : 'molhos']) as $o) {
-                    $lista($o['id'], $o['nome'] . ($o['acrescimo_centavos'] > 0 ? ' (+' . self::reais($o['acrescimo_centavos']) . ')' : ''));
+                    $lista($o['id'], $o['nome'] . self::acrescimoTexto($o, 'acrescimo_centavos', $catalogo['tamanhos']));
                 }
                 $pergunta = $titulo;
                 break;
@@ -561,7 +561,7 @@ final class FluxoPedido
                     $ambos('Escolha quantos quiser. Os que têm preço ao lado são cobrados à parte.');
                 }
                 foreach ($this->disponiveis(array_filter($catalogo['ingredientes'], static fn (array $i): bool => $i['grupo'] === $grupo)) as $i) {
-                    $lista($i['id'], $i['nome'] . ($i['preco_extra_centavos'] > 0 ? ' (+' . self::reais($i['preco_extra_centavos']) . ')' : ''));
+                    $lista($i['id'], $i['nome'] . self::acrescimoTexto($i, 'preco_extra_centavos', $catalogo['tamanhos']));
                 }
                 $pergunta = "{$grupo}: marque o que quiser e toque em ✅ Pronto";
                 $multipla = true;
@@ -868,7 +868,8 @@ final class FluxoPedido
 
     private function carregar(string $telefone): ?array
     {
-        $consulta = Banco::conexao()->prepare('SELECT dados, atualizado_em FROM whatsapp_sessoes WHERE telefone = ?');
+        // A linha com a etapa "ia" é o carrinho do pedido pela IA (D106), não um passo deste fluxo.
+        $consulta = Banco::conexao()->prepare("SELECT dados, atualizado_em FROM whatsapp_sessoes WHERE telefone = ? AND etapa <> 'ia'");
         $consulta->execute([$telefone]);
         $linha = $consulta->fetch();
         if (!$linha) {
@@ -929,6 +930,19 @@ final class FluxoPedido
     {
         $n = array_sum(array_column($carrinho, 'quantidade'));
         return $n === 1 ? '1 item' : "{$n} itens";
+    }
+
+    /** " (+R$ 3,00)", " (+R$ 3,00 a R$ 5,00)" quando muda com o tamanho (D108; o tamanho vem por último), ou "" se não custa nada. */
+    private static function acrescimoTexto(array $opcao, string $campo, array $tamanhos): string
+    {
+        [$menor, $maior] = PrecoService::faixa($opcao, $campo, $tamanhos);
+        if ($maior === 0) {
+            return '';
+        }
+        if ($menor === $maior) {
+            return ' (+' . self::reais($menor) . ')';
+        }
+        return $menor === 0 ? ' (+até ' . self::reais($maior) . ')' : ' (+' . self::reais($menor) . ' a ' . self::reais($maior) . ')';
     }
 
     private static function reais(int $centavos): string

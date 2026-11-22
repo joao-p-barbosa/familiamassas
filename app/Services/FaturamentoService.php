@@ -392,7 +392,7 @@ final class FaturamentoService
     {
         $hoje = self::hoje();
         $fechamento = $this->fechamentoAtivo($data);
-        $anterior = Banco::conexao()->prepare('SELECT data, contado_centavos FROM fechamentos_caixa WHERE data < ? AND cancelado_em IS NULL ORDER BY data DESC, id DESC LIMIT 1');
+        $anterior = Banco::conexao()->prepare('SELECT data, caixa_inicial_centavos, contado_centavos FROM fechamentos_caixa WHERE data < ? AND cancelado_em IS NULL ORDER BY data DESC, id DESC LIMIT 1');
         $anterior->execute([$data]);
         $historico = Banco::conexao()->prepare('SELECT f.*, u.nome AS fechado_por_nome FROM fechamentos_caixa f LEFT JOIN usuarios u ON u.id = f.fechado_por WHERE f.data = ? AND f.cancelado_em IS NOT NULL ORDER BY f.id DESC');
         $historico->execute([$data]);
@@ -402,7 +402,7 @@ final class FaturamentoService
             'estado' => $fechamento !== null ? 'fechado' : ($data > $hoje ? 'futuro' : ($data === $hoje ? 'hoje' : 'pendente')),
             'resumo' => $data > $hoje ? null : $this->resumoDoDia($data),
             'fechamento' => $fechamento,
-            'anterior' => ($a = $anterior->fetch()) ? ['data' => $a['data'], 'contado_centavos' => (int) $a['contado_centavos']] : null,
+            'anterior' => ($a = $anterior->fetch()) ? ['data' => $a['data'], 'caixa_inicial_centavos' => (int) $a['caixa_inicial_centavos'], 'contado_centavos' => (int) $a['contado_centavos']] : null,
             'historico' => array_map([self::class, 'tiparFechamento'], $historico->fetchAll()),
         ];
     }
@@ -425,14 +425,18 @@ final class FaturamentoService
             }
             return (int) $v;
         };
+        // D104: a tela pede só o caixa inicial. Retiradas e contado continuam aceitos (API e fechamentos antigos); sem eles,
+        // retiradas = 0 e contado = esperado (sem sobra nem falta).
+        $opcional = static fn (string $campo): bool => !isset($d[$campo]) || $d[$campo] === '';
         $inicial = $valor('caixa_inicial_centavos', 'Informe quanto havia na gaveta ao abrir (0 se nada).');
-        $retiradas = $valor('retiradas_centavos', 'Informe as retiradas (0 se nenhuma).');
-        $contado = $valor('contado_centavos', 'Conte o dinheiro da gaveta e informe o total.');
+        $retiradas = $opcional('retiradas_centavos') ? 0 : $valor('retiradas_centavos', 'Informe as retiradas (0 se nenhuma).');
+        $contado = $opcional('contado_centavos') ? null : $valor('contado_centavos', 'Conte o dinheiro da gaveta e informe o total.');
         if ($erros !== []) {
             throw ErroHttp::validacao($erros);
         }
         $resumo = $this->resumoDoDia($data);
         $esperado = $inicial + $resumo['dinheiro_centavos'] - $retiradas;
+        $contado ??= $esperado;
         try {
             $this->gravarFechamento($data, $inicial, $retiradas, $contado, $esperado, $resumo, $d, $usuario);
         } catch (\PDOException $e) {

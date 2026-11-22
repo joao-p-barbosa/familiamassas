@@ -13,6 +13,8 @@ use App\Core\ErroHttp;
  *   Prato da casa:   preço fixo do prato no tamanho escolhido (tabela item_precos). O cliente não troca nada.
  *   Monte sua massa: preço do tamanho + acréscimo da massa + acréscimo do molho + preço de cada ingrediente escolhido.
  *                    Ingrediente com preço 0 vem sem custo ("inclusos"); os de preço maior que 0 são os "extras".
+ *   D108: cada acréscimo pode ter um valor por tamanho (opcao['precos']); tamanho sem valor usa o do cadastro.
+ *         Um ingrediente pode ser incluso no Meio e extra no Inteiro.
  */
 final class PrecoService
 {
@@ -40,6 +42,11 @@ final class PrecoService
         }
         // Na ordem do cardápio, para a comanda sair igual não importa a ordem do clique.
         usort($ingredientes, static fn (array $a, array $b): int => [$a['ordem'], $a['id']] <=> [$b['ordem'], $b['id']]);
+        // O valor de cada opção neste tamanho (D108) substitui o do cadastro em tudo que segue (preço, extras, comanda).
+        $t = (int) $tamanho['id'];
+        $massa['acrescimo_centavos'] = self::noTamanho($massa, 'acrescimo_centavos', $t);
+        $molho['acrescimo_centavos'] = self::noTamanho($molho, 'acrescimo_centavos', $t);
+        $ingredientes = array_map(static fn (array $i): array => ['preco_extra_centavos' => self::noTamanho($i, 'preco_extra_centavos', $t)] + $i, $ingredientes);
         $extras = array_values(array_filter($ingredientes, static fn (array $i): bool => $i['preco_extra_centavos'] > 0));
         $inclusos = array_values(array_filter($ingredientes, static fn (array $i): bool => $i['preco_extra_centavos'] === 0));
 
@@ -87,6 +94,27 @@ final class PrecoService
                 'extras'   => [],
             ],
         ];
+    }
+
+    /** Valor de uma massa, molho ou ingrediente num tamanho (D108): o da tabela por tamanho ou, sem ele, o do cadastro. */
+    public static function noTamanho(array $opcao, string $campo, int $tamanhoId): int
+    {
+        foreach ($opcao['precos'] ?? [] as $p) {
+            if ((int) $p['tamanho_id'] === $tamanhoId) {
+                return (int) $p['preco_centavos'];
+            }
+        }
+        return (int) ($opcao[$campo] ?? 0);
+    }
+
+    /**
+     * Menor e maior valor da opção entre os tamanhos à venda, para mostrar antes de o cliente escolher o tamanho
+     * ("+ R$ 3,00" ou "+ R$ 3,00 a R$ 5,00"). @param list<array> $tamanhos @return array{0:int, 1:int}
+     */
+    public static function faixa(array $opcao, string $campo, array $tamanhos): array
+    {
+        $valores = array_map(static fn (array $t): int => self::noTamanho($opcao, $campo, (int) $t['id']), array_values(array_filter($tamanhos, static fn (array $t): bool => ($t['estado'] ?? 'disponivel') !== 'oculto')));
+        return $valores === [] ? [(int) ($opcao[$campo] ?? 0), (int) ($opcao[$campo] ?? 0)] : [min($valores), max($valores)];
     }
 
     private static function tamanho(array $t, int $preco): array
