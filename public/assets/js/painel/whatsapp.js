@@ -1,12 +1,13 @@
-// WhatsApp (Etapa 4): situação da integração, simulador do bot, caixa de entrada do atendimento humano, atividade recente,
-// fila de avisos de status e o link de teste do cardápio. Só o proprietário abre esta tela.
+// WhatsApp (Etapa 4): situação da integração, simulador do bot, caixa de entrada do atendimento humano, números das últimas
+// 24 horas com a fila de avisos de status e, embaixo, o assistente com IA (D119). Só o proprietário abre esta tela.
 // Nenhum segredo chega aqui: a API só diz se cada credencial está preenchida.
 import { $, esc, delegar, guardado } from '../shared/dom.js';
 import { icone } from '../shared/icones.js';
-import { telefone as formatarTelefone, hora, dataHora, plural } from '../shared/formato.js';
+import { telefone as formatarTelefone, hora, plural } from '../shared/formato.js';
 import { api } from '../shared/api.js';
 import { avisar } from '../shared/avisos.js';
 import { recipienteDaTela, mostrarErro } from './casca.js';
+import { montarEm as montarAssistente } from './assistente.js';
 
 const conteudo = recipienteDaTela();   // o contêiner desta tela (criado pelo roteador)
 const CHAVE_SIMULADOR = 'fm_simulador_whatsapp';
@@ -18,15 +19,13 @@ let atendendo = null;        // telefone da conversa aberta na caixa de entrada
 let ultimaAssinatura = {};   // por quadro de conversa: só redesenha quando chega mensagem nova
 let relogio = 0;
 
-const DIRECAO = { in: 'Recebida', out: 'Enviada' };
-
 // ---------- Conversa (balões) ----------
 function balaoHtml(m, { clicavel }) {
   if (m.direcao === 'in') {
     return `
       <li class="balao balao--cliente">
         ${m.nome ? `<span class="balao__quem">${esc(m.nome)}</span>` : ''}
-        <p>${esc(m.texto || `(${m.tipo})`)}</p>
+        <p>${m.tipo === 'audio' ? '🎤 ' : ''}${esc(m.texto || (m.tipo === 'audio' ? 'áudio não ouvido' : `(${m.tipo})`))}</p>
         <time class="balao__hora">${hora(m.em)}</time>
       </li>`;
   }
@@ -39,13 +38,9 @@ function balaoHtml(m, { clicavel }) {
       </li>`;
   }
   const botoes = Object.entries(m.botoes ?? {});
-  // Enquete (canal QR): a pergunta e as opções como texto, para a conversa de teste continuar legível.
-  const enquete = m.enquete?.opcoes?.length
-    ? `<p><strong>📊 ${esc(m.texto)}</strong></p><ul style="margin: var(--e-1) 0; padding-left: 1.2em; list-style: none;">${m.enquete.opcoes.map((o) => `<li>${esc(o)}</li>`).join('')}</ul><p class="balao__apagado">${m.enquete.multipla ? 'Enquete: escolha vários e marque “Pronto”.' : 'Enquete: escolha uma opção.'}</p>`
-    : '';
   return `
     <li class="balao balao--loja">
-      ${enquete || `<p>${esc(m.texto)}</p>`}
+      <p>${esc(m.texto)}</p>
       ${m.link ? `<a class="balao__acao" href="${esc(m.link.url)}" target="_blank" rel="noopener">${icone('externo', 14)}${esc(m.link.rotulo)}</a>` : ''}
       ${botoes.length ? `<div class="balao__botoes">${botoes.map(([id, titulo]) => clicavel
         ? `<button type="button" class="balao__acao" data-botao="${esc(id)}">${esc(titulo)}</button>`
@@ -73,7 +68,7 @@ function conectorHtml(s) {
   const c = s.conector;
   const desde = c.desde ? ` desde ${hora(c.desde)}` : '';
   const explicacao = {
-    conectado: 'O número da loja está conectado. O bot só responde quando o cliente digita a palavra do pedido (a que você configura em Assistente, “Cardápio” por padrão): aí conduz o pedido passo a passo, até a confirmação, e o pedido cai no Kanban. As escolhas (prato, tamanho, massa, molho, pagamento…) chegam como enquete: o cliente toca na opção, e nos ingredientes marca o que quiser e toca em “Pronto”. Digitar o número da opção também vale. “Acompanhar” mostra o pedido em andamento e “atendente” chama uma pessoa. Fora dessas palavras o bot fica em silêncio: a saudação é a do seu WhatsApp Business. A IA só entra para tirar uma dúvida no meio do pedido.',
+    conectado: 'O número da loja está conectado. Com o assistente ligado (logo abaixo), ele responde toda mensagem, monta o pedido e o pedido cai no Kanban depois do “sim” do cliente. Se a IA falhar, o pedido segue passo a passo, com as opções numeradas. “Acompanhar” mostra o pedido em andamento e “atendente” chama uma pessoa. Com o assistente desligado, o bot fica em silêncio fora dessas palavras: a saudação é a do seu WhatsApp Business.',
     aguardando_qr: 'No celular da loja: WhatsApp → Aparelhos conectados → Conectar um aparelho, e aponte a câmera para o QR code abaixo. O código troca sozinho a cada poucos segundos. Use um número dedicado à loja.',
     desconectado: `O WhatsApp está desconectado${desde}. O conector tenta voltar sozinho; se o celular tiver desconectado o aparelho, aparece um QR code novo aqui.`,
     sem_sinal: `O conector não dá sinal${desde}. Ele reinicia sozinho; se passar de alguns minutos, veja os logs do serviço na Render.`,
@@ -169,14 +164,6 @@ function atendimentoHtml(s) {
 }
 
 function atividadeHtml(s) {
-  const linhaEvento = (e) => `
-    <tr ${e.erro ? 'data-erro' : ''}>
-      <td class="numero">${dataHora(e.em)}</td>
-      <td>${e.tipo === 'falha' || e.tipo === 'falha_entrega' ? 'Falha' : DIRECAO[e.direcao]}</td>
-      <td>${esc(e.motivo ?? e.tipo)}</td>
-      <td class="numero">${esc(e.telefone)}</td>
-      <td>${e.erro ? esc(e.erro) : ''}</td>
-    </tr>`;
   return `
     <section class="bloco">
       <h2 class="bloco__titulo">Últimas 24 horas</h2>
@@ -187,13 +174,6 @@ function atividadeHtml(s) {
         <div><dt>Avisos na fila</dt><dd class="numero">${s.envios_pendentes}</dd></div>
         <div><dt>Pedidos pelo WhatsApp hoje</dt><dd class="numero">${s.pedidos_whatsapp_hoje}</dd></div>
       </dl>
-    </section>
-    <section class="bloco">
-      <h2 class="bloco__titulo">Atividade recente</h2>
-      <p class="campo__ajuda">Sem o texto das mensagens e com o número mascarado.</p>
-      ${s.recentes.length ? `<div class="tabela-rolagem"><table class="tabela">
-        <thead><tr><th>Quando</th><th>Direção</th><th>O quê</th><th>Número</th><th>Erro</th></tr></thead>
-        <tbody>${s.recentes.map(linhaEvento).join('')}</tbody></table></div>` : '<p class="campo__ajuda">Nada por aqui ainda.</p>'}
       ${s.fila.length ? `
         <h3 class="detalhe__titulo" style="margin-top: var(--e-4);">Fila de avisos de status</h3>
         <ul class="fila-avisos">${s.fila.map((a) => `
@@ -202,41 +182,23 @@ function atividadeHtml(s) {
     </section>`;
 }
 
-function linkHtml() {
-  return `
-    <form class="bloco" id="form-link" novalidate>
-      <h2 class="bloco__titulo">Link de teste do cardápio</h2>
-      <p class="bloco__nota">${icone('ligacao', 16)}<span>É o link que o bot manda no botão “Fazer pedido”. Quem abre já entra com o WhatsApp preenchido e o pedido chega com origem “WhatsApp”.</span></p>
-      <label class="campo">
-        <span class="campo__rotulo">Número do cliente</span>
-        <input class="entrada" type="tel" name="telefone" inputmode="numeric" placeholder="(11) 91234-5678" aria-describedby="erro-telefone">
-        <span class="campo__erro" id="erro-telefone" hidden></span>
-      </label>
-      <div><button type="submit" class="botao botao--secundario">Gerar link</button></div>
-      <div id="link-gerado" hidden>
-        <code class="codigo" id="link-url"></code>
-        <p class="campo__ajuda" id="link-validade" style="margin-top: var(--e-2);"></p>
-        <div style="display: flex; gap: var(--e-2); margin-top: var(--e-3);">
-          <button type="button" class="botao botao--p" data-copiar>Copiar link</button>
-          <a class="botao botao--secundario botao--p" id="link-abrir" target="_blank" rel="noopener">Abrir o cardápio</a>
-        </div>
-      </div>
-    </form>`;
-}
-
 function desenhar(s) {
   situacao = s;
   ultimaAssinatura = {};
   if (atendendo && !s.atendimento.some((c) => c.telefone === atendendo)) atendendo = null;
-  conteudo.innerHTML = `
-    <div class="cabecalho-tela"><h1 class="cabecalho-tela__titulo">WhatsApp</h1></div>
-    <div class="config whatsapp">
+  // D119: o assistente com IA fica nesta tela, num contêiner próprio que não é redesenhado junto com a situação.
+  if (!$('#whatsapp-area', conteudo)) {
+    conteudo.innerHTML = `
+      <div class="cabecalho-tela"><h1 class="cabecalho-tela__titulo">WhatsApp</h1></div>
+      <div class="config whatsapp" id="whatsapp-area"></div>
+      <div id="whatsapp-assistente"></div>`;
+    montarAssistente($('#whatsapp-assistente', conteudo));
+  }
+  $('#whatsapp-area', conteudo).innerHTML = `
       ${situacaoHtml(s)}
       ${s.simulado ? simuladorHtml() : ''}
       ${atendimentoHtml(s)}
-      ${atividadeHtml(s)}
-      ${linkHtml()}
-    </div>`;
+      ${atividadeHtml(s)}`;
 }
 
 // ---------- Dados ----------
@@ -312,15 +274,6 @@ delegar(conteudo, 'click', '[data-devolver]', async () => {
     mostrarErro(erro);
   }
 });
-delegar(conteudo, 'click', '[data-copiar]', async () => {
-  try {
-    await navigator.clipboard.writeText($('#link-url', conteudo).textContent);
-    avisar('Link copiado');
-  } catch {
-    avisar('Não deu para copiar. Selecione o link e copie à mão.', { tipo: 'erro' });
-  }
-});
-
 conteudo.addEventListener('submit', async (e) => {
   e.preventDefault();
   const form = e.target;
@@ -348,32 +301,11 @@ conteudo.addEventListener('submit', async (e) => {
     }
     return;
   }
-  if (form.id === 'form-link') {
-    const erro = $('#erro-telefone', conteudo);
-    erro.hidden = true;
-    const botao = form.querySelector('button[type="submit"]');
-    botao.setAttribute('aria-busy', 'true');
-    try {
-      const r = await api('/api/admin/whatsapp/link', { metodo: 'POST', corpo: { telefone: form.telefone.value } });
-      $('#link-url', conteudo).textContent = r.url;
-      $('#link-abrir', conteudo).href = r.url;
-      $('#link-validade', conteudo).textContent = `Vale por ${r.validade_minutos / 60} horas. Depois disso o cardápio abre normal, sem o número preenchido.`;
-      $('#link-gerado', conteudo).hidden = false;
-    } catch (falha) {
-      if (falha.codigo === 'validacao') {
-        erro.textContent = falha.campos.telefone;
-        erro.hidden = false;
-        form.telefone.focus();
-      } else {
-        mostrarErro(falha);
-      }
-    }
-    botao.removeAttribute('aria-busy');
-  }
 });
 
 /** A tela abriu (a primeira vez ou de novo): busca a situação, desenha e acompanha as conversas abertas. */
 export async function montar() {
+  conteudo.innerHTML = '';   // de volta à tela: redesenha tudo, inclusive o assistente
   try {
     desenhar(await api('/api/admin/whatsapp'));
   } catch (erro) {

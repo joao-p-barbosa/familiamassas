@@ -46,13 +46,6 @@ final class FaturamentoController
         Resposta::json(['ok' => true]);
     }
 
-    /** POST /api/admin/vendas/zerar   corpo: {"confirmacao": "ZERAR"} (D116) */
-    public function zerar(Requisicao $req): void
-    {
-        $usuario = Sessao::exigir($req, ['admin'], true);
-        Resposta::json(['ok' => true, 'apagados' => $this->servico->zerar((string) ($req->json()['confirmacao'] ?? ''), $usuario)]);
-    }
-
     /** GET /api/admin/fechamento?mes=AAAA-MM */
     public function calendario(Requisicao $req): void
     {

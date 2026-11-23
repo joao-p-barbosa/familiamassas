@@ -17,12 +17,12 @@ use App\Services\TokenWhatsApp;
  *   [Acompanhar pedido]   → status do pedido em andamento deste telefone
  *   [Falar com atendente] → modo humano: o bot fica em silêncio por algumas horas (configuração whatsapp_humano_horas)
  * Montar o prato fica no cardápio web (a API aceita no máximo 3 botões e listas de 10 linhas).
- * Pedido pelo chat (D74): "Cardápio" abre o passo a passo (FluxoPedido); "acompanhar" e "atendente" também valem como palavras.
- * No canal QR code o bot fica em SILÊNCIO fora dessas palavras: quem cumprimenta é a saudação do WhatsApp Business do dono.
- * Nos outros canais, o texto livre recebe a IA (se ligada, D70) ou o menu acima.
+ * "acompanhar" e "atendente" valem como palavras. No canal QR code, sem a IA, o bot fica em SILÊNCIO fora delas: quem cumprimenta
+ * é a saudação do WhatsApp Business do dono. Nos outros canais, o texto livre recebe a IA (se ligada, D70) ou o menu acima.
  *
  * Pedido pela IA (D106, padrão quando o assistente está ligado): TODA mensagem vai para a IA, que conversa e monta o pedido
- * (PedidoPorIa). Se a IA estiver indisponível ou falhar, vale tudo o que está acima (palavra "Cardápio" e passo a passo).
+ * (PedidoPorIa). Se a IA falhar, o pedido segue pelo passo a passo numerado (FluxoPedido). A palavra "Cardápio" e as enquetes
+ * saíram no D119.
  */
 final class Bot
 {
@@ -89,16 +89,13 @@ final class Bot
             WhatsApp::enviar($m['telefone'], WhatsApp::texto('Opa, tive um probleminha para entender agora. Vamos pelo cardápio, passo a passo:'), 'ia_falhou');
             return $this->fluxo->iniciar($m['telefone'], $m['nome']);
         }
-        if (in_array($chave, $this->fluxo->palavras(), true)) {
-            return $this->fluxo->iniciar($m['telefone'], $m['nome']);
-        }
         if ($chave === 'acompanhar') {
             return $this->acompanhar($m['telefone']);
         }
         if ($chave === 'atendente') {
             return $this->atendente($m['telefone']);
         }
-        // Canal QR: silêncio. A saudação (com o link e "digite Cardápio") é do WhatsApp Business do dono, e o bot não gasta nada.
+        // Canal QR: silêncio. A saudação (com o link do cardápio) é do WhatsApp Business do dono, e o bot não gasta nada.
         return Conector::ativo() ? 'silencio' : $this->livre($m);
     }
 
@@ -166,7 +163,7 @@ final class Bot
     {
         $pedido = $this->pedidos->ultimoAbertoDoTelefone($telefone);
         if ($pedido === null && Conector::ativo()) {
-            WhatsApp::enviar($telefone, WhatsApp::texto('Você não tem pedido em andamento. Para pedir por aqui, digite *Cardápio*.'), 'acompanhar_sem_pedido');
+            WhatsApp::enviar($telefone, WhatsApp::texto('Você não tem pedido em andamento.'), 'acompanhar_sem_pedido');
             return 'acompanhar';
         }
         if ($pedido === null) {

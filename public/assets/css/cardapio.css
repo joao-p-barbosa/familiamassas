@@ -1346,6 +1346,98 @@ details.bloco[open] > summary svg {
   transform: translateY(10px) scale(0.6);
   opacity: 0.6;
 }
+/* D119: busca de endereço em cima do mapa, com as sugestões abrindo por cima dele. */
+.mapa__busca {
+  position: relative;
+  z-index: 1100;
+  padding: var(--e-3) var(--e-4);
+  border-bottom: 1px solid var(--cor-borda);
+  background: var(--cor-superficie);
+}
+.mapa__busca .entrada {
+  padding-left: 2.5rem;
+}
+.mapa__busca-icone {
+  position: absolute;
+  left: calc(var(--e-4) + var(--e-3));
+  top: 50%;
+  translate: 0 -50%;
+  display: grid;
+  color: var(--cor-texto-2);
+  pointer-events: none;
+}
+.mapa__sugestoes {
+  position: absolute;
+  left: var(--e-4);
+  right: var(--e-4);
+  top: calc(100% - var(--e-2));
+  max-height: 18rem;
+  margin: 0;
+  padding: var(--e-1) 0;
+  overflow-y: auto;
+  list-style: none;
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio-2);
+  background: var(--cor-superficie);
+  box-shadow: var(--sombra-2);
+}
+.mapa__sugestoes[hidden] {
+  display: none;
+}
+.mapa__sugestao {
+  all: unset;
+  box-sizing: border-box;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--e-2);
+  width: 100%;
+  padding: var(--e-2) var(--e-3);
+  cursor: pointer;
+  color: var(--cor-texto-2);
+}
+.mapa__sugestao span {
+  display: grid;
+  color: var(--cor-texto);
+}
+.mapa__sugestao small {
+  font-size: var(--texto-2);
+  color: var(--cor-texto-2);
+}
+.mapa__sugestao:hover,
+[aria-selected="true"] > .mapa__sugestao {
+  background: var(--cor-superficie-2);
+}
+.mapa__sugestoes-vazio {
+  padding: var(--e-2) var(--e-3);
+  font-size: var(--texto-3);
+  color: var(--cor-texto-2);
+}
+/* D119: Ruas | Satélite. */
+.mapa__camadas {
+  display: flex;
+  overflow: hidden;
+  border-radius: var(--raio-1);
+  background: var(--cor-superficie);
+  box-shadow: var(--sombra-2);
+}
+.mapa__camadas button {
+  min-height: 2.5rem;
+  padding: 0 var(--e-3);
+  border: 0;
+  background: transparent;
+  color: var(--cor-texto);
+  font: inherit;
+  font-size: var(--texto-3);
+  font-weight: 650;
+  cursor: pointer;
+}
+.mapa__camadas button[aria-pressed="true"] {
+  background: var(--cor-acento);
+  color: var(--cor-acento-texto);
+}
+.mapa__camadas button:focus-visible {
+  outline-offset: -2px;
+}
 .mapa__localizar {
   position: absolute;
   right: var(--e-3);
@@ -1357,7 +1449,7 @@ details.bloco[open] > summary svg {
   position: absolute;
   left: var(--e-3);
   right: 4.25rem;
-  top: var(--e-3);
+  top: 3.75rem;   /* abaixo do botão Ruas | Satélite */
   z-index: 1000;
   padding: var(--e-2) var(--e-3);
   border-radius: var(--raio-1);
@@ -1415,23 +1507,72 @@ details.bloco[open] > summary svg {
   }
 }
 
-/* D117: porções do mesmo ingrediente (Acompanhamentos e Proteínas). O controle aparece embaixo da opção marcada. */
-.opcao-porcoes {
-  display: flex;
-  flex-direction: column;
-  gap: var(--e-1);
+/* D117/D119: porções do mesmo ingrediente (Acompanhamentos e Proteínas). Nome à esquerda, controle à direita na mesma linha:
+   com 0 só o "+" redondo; depois do primeiro toque, "− 1 +". */
+.opcao--porcoes {
+  grid-template-columns: 1fr auto;
+  cursor: default;
+}
+.opcao--porcoes.opcao--marcada {
+  border-color: var(--cor-acento);
+  background: var(--cor-acento-suave);
+  box-shadow: inset 0 0 0 1px var(--cor-acento);
+}
+.opcao--porcoes[aria-disabled="true"] .opcao__titulo {
+  color: var(--cor-texto-2);
+  text-decoration: line-through;
 }
 .porcoes {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--e-2);
-  padding: 0 var(--e-2);
+  gap: var(--e-1);
 }
-.porcoes[hidden] {
+.porcoes__botao {
+  display: grid;
+  place-items: center;
+  width: var(--toque);
+  height: var(--toque);
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--cor-acento-tinta);
+  cursor: pointer;
+}
+.porcoes__botao--mais {
+  border: 1px solid var(--cor-borda-forte);
+  background: var(--cor-superficie);
+}
+.porcoes__botao:disabled {
+  color: var(--cor-texto-desabilitado);
+  cursor: not-allowed;
+}
+.porcoes__botao:active:not(:disabled) {
+  transform: scale(0.92);
+}
+.porcoes__valor {
+  min-width: 1.5rem;
+  text-align: center;
+  font-weight: 700;
+}
+.porcoes--vazia [data-porcao="-1"],
+.porcoes--vazia .porcoes__valor {
   display: none;
 }
-.porcoes__rotulo {
+@media (hover: hover) and (pointer: fine) {
+  .porcoes__botao:not(:disabled):hover {
+    background: var(--cor-superficie-2);
+  }
+}
+/* D119: "3 de 8" ao lado do nome do grupo. */
+.grupo-opcoes__conta {
+  margin-left: var(--e-1);
+  padding: 0.125rem var(--e-2);
+  border-radius: 999px;
+  background: var(--cor-superficie-2);
   font-size: var(--texto-2);
-  color: var(--cor-texto-2);
+  font-weight: 700;
+}
+.grupo-opcoes__conta--cheia {
+  background: var(--cor-acento);
+  color: var(--cor-acento-texto);
 }

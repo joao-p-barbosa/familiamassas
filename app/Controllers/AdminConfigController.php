@@ -161,23 +161,5 @@ final class AdminConfigController
         ];
     }
 
-    /**
-     * POST /api/admin/whatsapp/link   corpo: {"telefone": "..."}
-     * Gera o mesmo link que o bot vai mandar ("?t=<token>"), para testar o fluxo antes de o bot existir.
-     */
-    public function linkDeTeste(Requisicao $req): void
-    {
-        Sessao::exigir($req, ['admin'], true);
-        $telefone = PedidoService::normalizarTelefone((string) ($req->json()['telefone'] ?? ''));
-        if ($telefone === null) {
-            throw ErroHttp::validacao(['telefone' => 'Informe o número com DDD, por exemplo (11) 91234-5678.']);
-        }
-        $esquema = $req->https() ? 'https' : 'http';
-        $host = preg_replace('/[^A-Za-z0-9.:\-\[\]]/', '', (string) ($_SERVER['HTTP_HOST'] ?? 'localhost'));
-        Resposta::json([
-            'url' => "{$esquema}://{$host}/?t=" . (new \App\Services\TokenWhatsApp())->gerar($telefone),
-            'validade_minutos' => intdiv(\App\Services\TokenWhatsApp::VALIDADE_SEGUNDOS, 60),
-        ]);
-    }
     // A situação da integração com o WhatsApp (GET /api/admin/whatsapp) fica em WhatsAppController::situacao.
 }

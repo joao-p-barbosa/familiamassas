@@ -4,9 +4,11 @@
 // O mapa NUNCA é obrigatório: sem permissão, sem internet ou sem endereço encontrado, a pessoa volta ao formulário e
 // digita o endereço como antes. Tudo que o mapa preenche continua editável.
 //
-// Terceiros usados (os dois são do OpenStreetMap, sem chave de acesso):
-//   * imagens do mapa: tile.openstreetmap.org;
-//   * "qual é o endereço deste ponto": nominatim.openstreetmap.org (uma consulta quando a pessoa para de mexer o mapa).
+// Terceiros usados (sem chave de acesso no navegador):
+//   * imagens do mapa: tile.openstreetmap.org (Ruas) e server.arcgisonline.com (Satélite, da Esri, com os nomes das ruas por cima);
+//   * "qual é o endereço deste ponto": nominatim.openstreetmap.org (uma consulta quando a pessoa para de mexer o mapa);
+//   * busca de endereço (D119): passa pelo nosso servidor (/api/endereco/...), que usa o Google Places quando há chave
+//     configurada, ou o Photon (OpenStreetMap). Serve à atendente no pedido externo, que não está no local da entrega.
 // A biblioteca Leaflet fica no próprio site (assets/vendor/leaflet) e só é carregada quando o mapa é aberto.
 import { $, esc, delegar } from '../shared/dom.js';
 import { icone } from '../shared/icones.js';
@@ -45,6 +47,51 @@ export function carregarLeaflet() {
   return leaflet;
 }
 
+const OSM = '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>';
+const ESRI = 'Imagens © <a href="https://www.esri.com" target="_blank" rel="noopener">Esri</a>, Maxar, Earthstar Geographics';
+const CHAVE_CAMADA = 'fm_mapa_camada';
+
+/**
+ * As imagens do mapa com o botão Ruas | Satélite (D119). A escolha fica guardada no aparelho.
+ * Também usada pelo mapa do raio de entrega no painel. Devolve a camada de ruas (para avisar quando as imagens não carregam).
+ */
+export function camadasDoMapa(L, map) {
+  const ruas = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { referrerPolicy: 'origin', maxZoom: 19, attribution: OSM });
+  const esri = (servico, opcoes = {}) => L.tileLayer(`https://server.arcgisonline.com/ArcGIS/rest/services/${servico}/MapServer/tile/{z}/{y}/{x}`, { maxZoom: 19, maxNativeZoom: 18, ...opcoes });
+  const satelite = L.layerGroup([
+    esri('World_Imagery', { attribution: ESRI }),
+    esri('Reference/World_Transportation'),
+    esri('Reference/World_Boundaries_and_Places'),
+  ]);
+  let atual = 'ruas';
+  try { atual = localStorage.getItem(CHAVE_CAMADA) === 'satelite' ? 'satelite' : 'ruas'; } catch { /* sem armazenamento: começa em Ruas */ }
+  (atual === 'satelite' ? satelite : ruas).addTo(map);
+
+  const Botao = L.Control.extend({
+    options: { position: 'topleft' },
+    onAdd() {
+      const caixa = L.DomUtil.create('div', 'mapa__camadas');
+      caixa.setAttribute('role', 'group');
+      caixa.setAttribute('aria-label', 'Tipo de mapa');
+      caixa.innerHTML = [['ruas', 'Ruas'], ['satelite', 'Satélite']]
+        .map(([id, nome]) => `<button type="button" data-camada="${id}" aria-pressed="${id === atual}">${nome}</button>`).join('');
+      L.DomEvent.disableClickPropagation(caixa);
+      caixa.addEventListener('click', (e) => {
+        const botao = e.target.closest('[data-camada]');
+        if (!botao || botao.dataset.camada === atual) return;
+        map.removeLayer(atual === 'satelite' ? satelite : ruas);
+        atual = botao.dataset.camada;
+        (atual === 'satelite' ? satelite : ruas).addTo(map);
+        caixa.querySelectorAll('[data-camada]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.camada === atual)));
+        try { localStorage.setItem(CHAVE_CAMADA, atual); } catch { /* sem armazenamento */ }
+      });
+      return caixa;
+    },
+  });
+  new Botao().addTo(map);
+  return ruas;
+}
+
 /** "Rua das Flores, 120" / "Rua das Flores" / "" */
 const ruaComNumero = (e) => [e.rua, e.numero].filter(Boolean).join(', ');
 
@@ -69,13 +116,24 @@ async function descobrirEndereco(lat, lng, sinal) {
  */
 export function escolherNoMapa({ inicial = null, enderecoDaLoja = '', loja = false } = {}) {
   return new Promise((resolver) => {
-    sessao = { resolver, resultado: null, map: null, endereco: null, buscando: null, pontoEscolhido: false, temporizador: null, enderecoDaLoja, loja };
+    sessao = {
+      resolver, resultado: null, map: null, endereco: null, buscando: null, pontoEscolhido: false, temporizador: null, enderecoDaLoja, loja,
+      escolhido: null,      // D119: o endereço da busca (com número); vale enquanto o pino estiver nele
+      sessaoBusca: novaSessaoDeBusca(), digitando: null, consulta: null,
+    };
     const ondeTexto = loja ? 'do restaurante' : 'da entrega';
     dialogo.innerHTML = `
       <header class="folha__topo">
         <h2 class="folha__titulo" id="mapa-titulo">${loja ? 'Onde fica o restaurante?' : 'Onde entregamos?'}</h2>
         <button type="button" class="botao botao--fantasma botao--icone" data-fechar aria-label="Fechar o mapa">${icone('fechar')}</button>
       </header>
+      <div class="mapa__busca" role="search">
+        <label class="so-leitor" for="mapa-busca">Buscar o endereço</label>
+        <span class="mapa__busca-icone" aria-hidden="true">${icone('busca', 18)}</span>
+        <input class="entrada" id="mapa-busca" type="search" placeholder="Buscar o endereço (rua e número)" autocomplete="off"
+          role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="mapa-sugestoes">
+        <ul class="mapa__sugestoes" id="mapa-sugestoes" role="listbox" aria-label="Endereços encontrados" hidden></ul>
+      </div>
       <div class="mapa" id="mapa">
         <div class="mapa__tela" id="mapa-tela" aria-label="Mapa para marcar o local ${ondeTexto}. Setas movem o mapa; mais e menos aproximam ou afastam."></div>
         <div class="mapa__pino" aria-hidden="true">${PINO}<span class="mapa__sombra"></span></div>
@@ -110,12 +168,8 @@ async function iniciarMapa(inicial) {
   L.control.zoom({ position: 'topright', zoomInTitle: 'Aproximar', zoomOutTitle: 'Afastar' }).addTo(s.map);
   s.map.attributionControl.setPrefix(false);
   // O OpenStreetMap exige saber de que site vem o pedido (política de uso dos tiles). O site todo manda
-  // Referrer-Policy "same-origin", então só nestas chamadas informamos a origem (endereço do site, sem o caminho).
-  const imagens = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    referrerPolicy: 'origin',
-    maxZoom: 19,
-    attribution: '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>',
-  }).addTo(s.map);
+  // Referrer-Policy "same-origin", então só nas imagens de Ruas informamos a origem (endereço do site, sem o caminho).
+  const imagens = camadasDoMapa(L, s.map);
   imagens.once('tileerror', () => avisar(s.loja ? 'As imagens do mapa não carregaram. Confira a internet.' : 'As imagens do mapa não carregaram. Confira a internet ou digite o endereço.', true));
 
   const mapa = $('#mapa');
@@ -202,6 +256,15 @@ function agendarBusca() {
   escrever();
   s.temporizador = setTimeout(async () => {
     const { lat, lng } = s.map.getCenter();
+    // D119: o pino ainda está no endereço escolhido na busca: vale o dele (o mapa não sabe o número da casa).
+    if (s.escolhido && s.map.distance([lat, lng], [s.escolhido.lat, s.escolhido.lng]) < 25) {
+      s.endereco = { rua: s.escolhido.rua, numero: s.escolhido.numero, bairro: s.escolhido.bairro };
+      s.falhou = false;
+      s.carregando = false;
+      escrever();
+      return;
+    }
+    s.escolhido = null;
     const controle = new AbortController();
     s.buscando = controle;
     const limite = setTimeout(() => controle.abort(), 8000);
@@ -256,10 +319,100 @@ function encerrar() {
   if (!s) return;
   sessao = null;
   clearTimeout(s.temporizador);
+  clearTimeout(s.digitando);
   s.buscando?.abort();
+  s.consulta?.abort();
   s.map?.remove();
   s.resolver(s.resultado);
 }
+
+// ---------- Busca de endereço (D119) ----------
+function novaSessaoDeBusca() {
+  return globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+}
+
+function mostrarSugestoes(lista, mensagem = '') {
+  const ul = $('#mapa-sugestoes');
+  const entrada = $('#mapa-busca');
+  if (!ul || !entrada) return;
+  ul.innerHTML = lista.length
+    ? lista.map((x, i) => `
+        <li role="option" id="mapa-sugestao-${i}" aria-selected="false">
+          <button type="button" class="mapa__sugestao" data-sugestao="${esc(x.id)}" tabindex="-1">
+            ${icone('pin', 16)}<span><strong>${esc(x.principal)}</strong>${x.secundario ? `<small>${esc(x.secundario)}</small>` : ''}</span>
+          </button>
+        </li>`).join('')
+    : mensagem ? `<li class="mapa__sugestoes-vazio">${esc(mensagem)}</li>` : '';
+  ul.hidden = !lista.length && !mensagem;
+  entrada.setAttribute('aria-expanded', String(!ul.hidden));
+}
+
+async function buscarSugestoes(texto) {
+  const s = sessao;
+  if (!s) return;
+  s.consulta?.abort();
+  if (texto.trim().length < 3) {
+    mostrarSugestoes([]);
+    return;
+  }
+  const controle = new AbortController();
+  s.consulta = controle;
+  try {
+    const r = await fetch(`/api/endereco/sugestoes?q=${encodeURIComponent(texto)}&sessao=${encodeURIComponent(s.sessaoBusca)}`, { signal: controle.signal });
+    const dados = await r.json();
+    if (sessao !== s || s.consulta !== controle) return;
+    mostrarSugestoes(dados.sugestoes ?? [], 'Nenhum endereço encontrado. Confira a rua ou arraste o mapa até o local.');
+  } catch (erro) {
+    if (erro.name !== 'AbortError' && sessao === s) mostrarSugestoes([], 'A busca não respondeu agora. Arraste o mapa até o local.');
+  }
+}
+
+async function escolherSugestao(id, rotulo) {
+  const s = sessao;
+  if (!s?.map) return;
+  mostrarSugestoes([]);
+  $('#mapa-busca').value = rotulo;
+  try {
+    const r = await fetch(`/api/endereco/detalhe?id=${encodeURIComponent(id)}&sessao=${encodeURIComponent(s.sessaoBusca)}`);
+    if (!r.ok) throw new Error('detalhe');
+    const d = await r.json();
+    if (sessao !== s) return;
+    s.sessaoBusca = novaSessaoDeBusca();   // o Google cobra por sessão: autocompletar + detalhe = uma sessão
+    s.escolhido = d;
+    s.pontoEscolhido = true;
+    avisar('Confira se o pino está no local certo. Se não estiver, arraste o mapa.');
+    s.map.setView([d.lat, d.lng], 18);
+    agendarBusca();
+  } catch {
+    if (sessao === s) avisar('Não achamos esse endereço no mapa. Arraste o mapa até o local.', true);
+  }
+}
+
+delegar(dialogo, 'input', '#mapa-busca', (e, entrada) => {
+  const s = sessao;
+  if (!s) return;
+  clearTimeout(s.digitando);
+  s.digitando = setTimeout(() => buscarSugestoes(entrada.value), 300);
+});
+delegar(dialogo, 'keydown', '#mapa-busca', (e) => {
+  const opcoes = [...dialogo.querySelectorAll('[data-sugestao]')];
+  if (!opcoes.length) return;
+  const atual = opcoes.findIndex((b) => b.closest('li').getAttribute('aria-selected') === 'true');
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    const proxima = (atual + (e.key === 'ArrowDown' ? 1 : -1) + opcoes.length) % opcoes.length;
+    opcoes.forEach((b, i) => b.closest('li').setAttribute('aria-selected', String(i === proxima)));
+    $('#mapa-busca').setAttribute('aria-activedescendant', `mapa-sugestao-${proxima}`);
+  } else if (e.key === 'Enter') {
+    e.preventDefault();
+    const alvo = opcoes[atual >= 0 ? atual : 0];
+    escolherSugestao(alvo.dataset.sugestao, alvo.querySelector('strong').textContent);
+  } else if (e.key === 'Escape') {
+    e.stopPropagation();
+    mostrarSugestoes([]);
+  }
+});
+delegar(dialogo, 'click', '[data-sugestao]', (e, botao) => escolherSugestao(botao.dataset.sugestao, botao.querySelector('strong').textContent));
 
 delegar(dialogo, 'click', '#mapa-localizar', () => {
   if (!sessao?.map) return;

@@ -910,7 +910,7 @@ dialog.folha[data-arrastando] {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--e-2);
+  gap: var(--e-1) var(--e-2);
 }
 .cartao-pedido__numero {
   font-size: var(--texto-6);
@@ -926,6 +926,7 @@ dialog.folha[data-arrastando] {
   font-weight: 700;
   color: var(--cor-texto-2);
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 .cartao-pedido__cliente {
   font-weight: 700;
@@ -993,6 +994,10 @@ dialog.folha[data-arrastando] {
 .cartao-pedido__faixa {
   font-size: var(--texto-2);
   font-weight: 800;
+  white-space: nowrap;
+}
+.cartao-pedido__avancar {
+  white-space: nowrap;
 }
 .cartao-pedido__faixa[hidden] {
   display: none;
@@ -1025,6 +1030,22 @@ dialog.folha[data-arrastando] {
   }
   .grupo-opcoes--tres {
     grid-template-columns: repeat(3, 1fr);
+  }
+  /* Três lado a lado (Pix, Cartão, Dinheiro): sobra pouco espaço para o nome. A marca vai para o canto e o nome não quebra no meio da palavra. */
+  .grupo-opcoes--tres .opcao--figura {
+    grid-template-columns: auto 1fr;
+    gap: var(--e-2);
+    padding-inline: var(--e-3);
+  }
+  .grupo-opcoes--tres .opcao--figura .opcao__marca {
+    position: absolute;
+    top: var(--e-1);
+    right: var(--e-1);
+    width: 1.125rem;
+    height: 1.125rem;
+  }
+  .grupo-opcoes--tres .opcao--figura .opcao__titulo {
+    overflow-wrap: normal;
   }
 }
 .opcao--figura {

@@ -108,6 +108,28 @@ final class OpenRouter
     }
 
     /**
+     * Transcrição de um áudio (D120): POST /audio/transcriptions com o áudio em base64 (bytes crus, sem "data:").
+     * @return array{ok:bool, texto:string, custo_usd:?float, ms:int, erro:?string, status:int}
+     */
+    public function transcrever(string $modelo, string $base64, string $formato): array
+    {
+        $corpo = ['model' => $modelo, 'input_audio' => ['data' => $base64, 'format' => $formato], 'language' => 'pt'];
+        $inicio = microtime(true);
+        $r = $this->enviar('POST', self::base() . '/audio/transcriptions', json_encode($corpo, JSON_UNESCAPED_SLASHES));
+        $ms = (int) round((microtime(true) - $inicio) * 1000);
+        $dados = json_decode($r['corpo'], true);
+        $dados = is_array($dados) ? $dados : [];
+        if ($r['erro'] !== null) {
+            return ['ok' => false, 'texto' => '', 'custo_usd' => null, 'ms' => $ms, 'erro' => 'Sem conexão com o OpenRouter: ' . mb_substr($r['erro'], 0, 150), 'status' => 0];
+        }
+        if ($r['status'] !== 200 || isset($dados['error']) || !is_string($dados['text'] ?? null)) {
+            return ['ok' => false, 'texto' => '', 'custo_usd' => null, 'ms' => $ms, 'erro' => self::erroLegivel($r['status'], $dados), 'status' => $r['status']];
+        }
+        $custo = $dados['usage']['cost'] ?? null;
+        return ['ok' => true, 'texto' => $dados['text'], 'custo_usd' => is_numeric($custo) ? (float) $custo : null, 'ms' => $ms, 'erro' => null, 'status' => 200];
+    }
+
+    /**
      * Saldo e uso da chave (GET /api/v1/key).
      * @return array{ok:bool, erro:?string, limite:?float, restante:?float, uso_total:float, uso_mes:float, uso_hoje:float, gratuito:bool, gratis_hoje:?array{usadas:int, limite:int}}
      */

@@ -143,15 +143,31 @@ function acrescimosHtml(tamanhos) {
     </table></div>`;
 }
 
+// Título do grupo. Nos ingredientes, com subir/descer: a ordem dos grupos é a do cliente ao montar o prato (D119).
+function grupoHtml(grupo, grupos) {
+  if (aba !== 'ingredientes' || !ehAdmin || grupos.length < 2) return `<h2 class="cadastro__grupo">${esc(grupo)}</h2>`;
+  const i = grupos.indexOf(grupo);
+  return `
+    <div class="cadastro__grupo cadastro__grupo--ordem" data-grupo="${esc(grupo)}">
+      <h2>${esc(grupo)}</h2>
+      <button type="button" class="botao botao--fantasma botao--icone" data-ordem-grupo="-1" ${i === 0 ? 'disabled' : ''} aria-label="Subir o grupo ${esc(grupo)}">${icone('seta-cima', 18)}</button>
+      <button type="button" class="botao botao--fantasma botao--icone" data-ordem-grupo="1" ${i === grupos.length - 1 ? 'disabled' : ''} aria-label="Descer o grupo ${esc(grupo)}">${icone('seta-baixo', 18)}</button>
+    </div>`;
+}
+
 function desenhar() {
   const info = ABAS.find((a) => a.id === aba);
+  // Título e o botão "Novo" na mesma linha; abas, nota e lista na mesma largura (o botão alinha com a borda da lista).
+  const topo = `
+    <div class="cabecalho-tela">
+      <h1 class="cabecalho-tela__titulo">Cardápio</h1>
+      ${ehAdmin && info.novo ? `<button type="button" class="botao" data-novo>${icone('mais', 18)}${info.novo}</button>` : ''}
+    </div>
+    <div class="abas" role="tablist" aria-label="Cadastros do cardápio">
+      ${ABAS.map((a) => `<button type="button" class="chip" role="tab" data-aba="${a.id}" aria-selected="${a.id === aba}">${a.titulo}</button>`).join('')}
+    </div>`;
   if (aba === 'precos') {
-    conteudo.innerHTML = `
-      <div class="cabecalho-tela"><h1 class="cabecalho-tela__titulo">Cardápio</h1></div>
-      <div class="abas" role="tablist" aria-label="Cadastros do cardápio">
-        ${ABAS.map((a) => `<button type="button" class="chip" role="tab" data-aba="${a.id}" aria-selected="${a.id === aba}">${a.titulo}</button>`).join('')}
-      </div>
-      <div class="cadastro" role="tabpanel">${precosHtml()}</div>`;
+    conteudo.innerHTML = `<div class="cadastro">${topo}<div role="tabpanel">${precosHtml()}</div></div>`;
     return;
   }
   const linhas = linhasDaAba();
@@ -161,22 +177,16 @@ function desenhar() {
         ehAdmin ? `<p>${aba === 'itens' && dados.categorias.length === 0 ? 'Crie primeiro uma categoria, depois os itens dela.' : `Comece pelo botão “${info.novo}”.`}</p>` : ''}</div>`
     : grupos.map((grupo) => {
         const doGrupo = linhas.filter((l) => l.grupo === grupo);
-        return `${grupo ? `<h2 class="cadastro__grupo">${esc(grupo)}</h2>` : ''}<ul class="lista-cadastro">${doGrupo.map((l, i) => linhaHtml(l, i, doGrupo.length)).join('')}</ul>`;
+        return `${grupo ? grupoHtml(grupo, grupos) : ''}<ul class="lista-cadastro">${doGrupo.map((l, i) => linhaHtml(l, i, doGrupo.length)).join('')}</ul>`;
       }).join('');
 
   conteudo.innerHTML = `
-    <div class="cabecalho-tela">
-      <h1 class="cabecalho-tela__titulo">Cardápio</h1>
-    </div>
-    <div class="abas" role="tablist" aria-label="Cadastros do cardápio">
-      ${ABAS.map((a) => `<button type="button" class="chip" role="tab" data-aba="${a.id}" aria-selected="${a.id === aba}">${a.titulo}</button>`).join('')}
-    </div>
-    <div class="cadastro" role="tabpanel">
-      <div class="cadastro__topo">
+    <div class="cadastro">
+      ${topo}
+      <div role="tabpanel">
         <p class="cadastro__nota">${aba === 'categorias' ? 'Categoria desligada some do cardápio com todos os itens dela.' : 'Desligue o que acabou: no cardápio do cliente aparece como esgotado na hora.'}</p>
-        ${ehAdmin ? `<button type="button" class="botao" data-novo>${icone('mais', 18)}${info.novo}</button>` : ''}
+        ${lista}
       </div>
-      ${lista}
     </div>`;
 }
 
@@ -457,6 +467,29 @@ delegar(conteudo, 'click', '[data-ordem]', async (e, botao) => {
     dados[aba].sort((a, b) => a.ordem - b.ordem || a.id - b.id);
     desenhar();
     $(`[data-id="${id}"] [data-ordem="${botao.dataset.ordem}"]:not(:disabled)`)?.focus() ?? $(`[data-id="${id}"] [data-ordem]:not(:disabled)`)?.focus();
+  } catch (erro) {
+    mostrarErro(erro);
+    carregar();
+  }
+});
+
+// Subir/descer um grupo de ingredientes: o bloco troca de lugar com o vizinho e a ordem de todos é regravada (só quem mudou).
+delegar(conteudo, 'click', '[data-ordem-grupo]', async (e, botao) => {
+  const grupo = botao.closest('[data-grupo]').dataset.grupo;
+  const grupos = [...new Set(dados.ingredientes.map((i) => i.grupo))];
+  const de = grupos.indexOf(grupo);
+  const para = de + Number(botao.dataset.ordemGrupo);
+  if (de < 0 || para < 0 || para >= grupos.length) return;
+  [grupos[de], grupos[para]] = [grupos[para], grupos[de]];
+  const linhas = grupos.flatMap((g) => dados.ingredientes.filter((i) => i.grupo === g));
+  const mudancas = linhas.map((registro, ordem) => ({ registro, ordem })).filter((m) => m.registro.ordem !== m.ordem);
+  try {
+    await Promise.all(mudancas.map((m) => api(`/api/admin/cardapio/ingredientes/${m.registro.id}`, { metodo: 'PUT', corpo: { ordem: m.ordem } })));
+    mudancas.forEach((m) => (m.registro.ordem = m.ordem));
+    dados.ingredientes.sort((a, b) => a.ordem - b.ordem || a.id - b.id);
+    desenhar();
+    const alvo = [...conteudo.querySelectorAll('[data-grupo]')].find((el) => el.dataset.grupo === grupo);
+    ($(`[data-ordem-grupo="${botao.dataset.ordemGrupo}"]:not(:disabled)`, alvo) ?? $('[data-ordem-grupo]:not(:disabled)', alvo))?.focus();
   } catch (erro) {
     mostrarErro(erro);
     carregar();

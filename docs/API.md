@@ -21,6 +21,10 @@ Tudo em JSON, dinheiro em centavos, datas em ISO 8601 UTC. Rotas em `app/routes.
 
 ## Pública (cardápio)
 
+### `GET /api/endereco/sugestoes?q=&sessao=` e `GET /api/endereco/detalhe?id=&sessao=` (D119)
+
+Busca de endereço do mapa. `sugestoes` → `{sugestoes: [{id, principal, secundario}], google: bool}` (até 6, perto da loja; texto com menos de 3 letras não consulta). `detalhe` → `{lat, lng, rua, numero, bairro}` ou 404. Com `GOOGLE_MAPS_API_KEY` usa o Google Places (New) com a `sessao` do navegador (autocompletar + detalhe = uma sessão); sem a chave, o Photon (OpenStreetMap).
+
 ### `GET /api/cardapio`
 Loja + cardápio sem nada oculto (esgotados vêm, com `estado: "esgotado"`).
 
@@ -105,7 +109,6 @@ Toda escrita exige o cabeçalho `X-CSRF-Token` (o valor está na `<meta name="cs
 | `GET /api/admin/configuracoes` | admin | Todas as configurações + `estado_agora`. |
 | `PUT /api/admin/configuracoes` | admin | Salva tudo de uma vez; devolve igual ao GET. |
 | `GET /api/admin/whatsapp` | admin | Quais credenciais estão preenchidas (nunca os valores), HTTPS, contadores de 24 h. |
-| `POST /api/admin/whatsapp/link` | admin | `{telefone}` → `{url, validade_minutos}`: o mesmo link que o bot vai mandar. |
 
 ### Assistente com IA (Etapa 4c, só proprietário)
 
@@ -125,7 +128,6 @@ Toda escrita exige o cabeçalho `X-CSRF-Token` (o valor está na `<meta name="cs
 |---|---|
 | `GET /api/admin/vendas?de&ate&canal&pagamento&situacao&pagina` | Período em dias locais (padrão hoje, até 1 ano). Devolve `periodo`, `hoje`, `resumo` (`faturamento_centavos`, `vendas`, `ticket_centavos`, `itens`, `mais_vendido`, `canceladas`, `cancelado_centavos`), `calor` (`horas`, `dias[{nome, rotulo, celulas[{vendas, total, nivel}], vendas, total}]`, `pico`, `melhor_dia`), `por_canal` e `por_pagamento` (`[{chave, rotulo, vendas, total_centavos, ticket_centavos}]`) e os `lancamentos` filtrados (30 por página; cada um com `chave` `pedido:N` ou `conta:N`, valores, `situacao` `ativa` \| `parcial` \| `cancelada` e `itens[{id, nome, quantidade, cancelada, preco_unit_centavos}]`). Os filtros valem só para os lançamentos. |
 | `POST /api/admin/vendas/cancelar` | `{venda, tipo: total \| parcial, itens: [{id, quantidade}], motivo}`. Motivo obrigatório. `409 ja_cancelada`, `409 dia_fechado` (o caixa do dia da venda já foi fechado). |
-| `POST /api/admin/vendas/zerar` | `{confirmacao: "ZERAR"}` (D116). Apaga pedidos, contas do Salão, cancelamentos e fechamentos e volta a numeração para #1. Devolve `{ok, apagados: {pedidos, contas, fechamentos}}`. Sem ZERAR: `422 validacao`. |
 | `GET /api/admin/fechamento?mes=AAAA-MM` | Calendário: `mes`, `anterior`, `proximo` (null no mês atual), `hoje`, `dias[{data, dia, semana, estado: fechado \| pendente \| hoje \| futuro \| neutro, valor_centavos}]`, `pendentes` (datas). |
 | `GET /api/admin/fechamento/{data}` | O dia: `estado`, `resumo` (`faturamento_centavos`, `vendas`, `por_pagamento`, `por_canal`, `dinheiro_centavos`), `fechamento` ativo ou null, `anterior` (`{data, contado_centavos}` do último fechamento) e `historico` (fechamentos reabertos). |
 | `POST /api/admin/fechamento/{data}` | `{caixa_inicial_centavos, retiradas_centavos, contado_centavos, observacao}` → fecha o caixa (esperado = inicial + dinheiro − retiradas). `409 ja_fechado`; data futura → `422`. Devolve o dia. |
@@ -157,7 +159,6 @@ O OpenStreetMap exige saber de que site vem o pedido, então só essas chamadas 
 | `GET /api/admin/whatsapp/conversa?telefone=` | `{telefone, modo: "bot"\|"humano", humano_ate, janela_aberta, mensagens: [{direcao, tipo, em, texto, botoes, link, erro, nome}]}`. |
 | `POST /api/admin/whatsapp/conversas/{telefone}/responder` | `{texto}` → resposta da equipe. Fora da janela de 24 h → `409 janela_fechada`. Falha na Meta → `502 whatsapp_falhou`. |
 | `POST /api/admin/whatsapp/conversas/{telefone}/bot` | Encerra o atendimento humano (o bot volta a responder). |
-| `POST /api/admin/whatsapp/link` | `{telefone}` → `{url, validade_minutos}`: o mesmo link do botão "Fazer pedido". |
 
 ### Canal QR code (Etapa 4b, `WHATSAPP_CANAL=qr`)
 

@@ -30,8 +30,6 @@ final class AssistenteRepository
     /** @var array<string,string> */
     public const PADROES = [
         'ia_ativo' => '0',
-        'whatsapp_palavras_cardapio' => 'Cardápio',   // abre o pedido pelo chat (D74); não é da IA, mas mora na mesma tela
-        'whatsapp_enquetes' => '1',                    // escolhas como enquete no canal QR (D85); desligado: lista numerada (D97)
         'ia_pedido' => '1',                            // a IA conversa e monta o pedido (D106); desligado: só tira dúvidas e o pedido é pelo passo a passo
         'ia_modelo' => self::MODELO_PADRAO,
         'ia_nome' => 'Assistente',
@@ -198,7 +196,7 @@ final class AssistenteRepository
         if ((int) $linha['n'] === 0) {
             return ['ativa' => false, 'saldo_usd' => 0.0, 'recargas_usd' => 0.0, 'gasto_usd' => 0.0, 'desde' => null];
         }
-        $gasto = $pdo->prepare("SELECT COALESCE(SUM(custo_micro), 0) FROM ia_uso WHERE origem = 'whatsapp' AND criado_em >= ?");
+        $gasto = $pdo->prepare("SELECT COALESCE(SUM(custo_micro), 0) FROM ia_uso WHERE origem IN ('whatsapp', 'audio') AND criado_em >= ?");   // D120: o áudio transcrito também gasta
         $gasto->execute([$linha['primeira']]);
         $gastoMicro = (int) $gasto->fetchColumn();
         return [

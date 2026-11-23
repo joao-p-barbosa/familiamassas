@@ -219,7 +219,8 @@ const CONTEUDO = {
       <div class="contador" id="montador-contador" role="status" aria-live="polite"></div>
       ${[...grupos].map(([grupo, lista]) => `
         <fieldset class="grupo-opcoes grupo-opcoes--duas">
-          <legend class="grupo-opcoes__titulo">${esc(grupo)}${dicaDoGrupo(grupo) ? ` <span class="grupo-opcoes__dica">${dicaDoGrupo(grupo)}</span>` : ''}</legend>
+          <legend class="grupo-opcoes__titulo">${esc(grupo)}${dicaDoGrupo(grupo) ? ` <span class="grupo-opcoes__dica">${dicaDoGrupo(grupo)}</span>` : ''}${
+            limiteDoGrupo(grupo) !== null ? ` <span class="grupo-opcoes__conta numero" data-conta-grupo="${esc(grupo)}" role="status" aria-live="polite"></span>` : ''}</legend>
           ${lista.map((i) => {
             const caixa = `
             <label class="opcao opcao--caixa">
@@ -229,16 +230,26 @@ const CONTEUDO = {
               <span class="opcao__lado">${!disponivel(i) ? esgotado : lado(i, 'preco_extra_centavos')}</span>
             </label>`;
             if (!repeteNoGrupo(grupo)) return caixa;
-            // D117: Acompanhamentos e Proteínas aceitam mais de uma porção do mesmo ingrediente.
+            // D117/D119: Acompanhamentos e Proteínas aceitam mais de uma porção. Linha com o "+" à direita; depois do primeiro
+            // toque vira "− 1 +" no mesmo lugar (sem caixa de marcar).
+            if (!disponivel(i)) {
+              return `
+            <div class="opcao opcao--porcoes" aria-disabled="true">
+              <span class="opcao__corpo"><span class="opcao__titulo">${esc(i.nome)}</span></span>
+              <span class="opcao__lado">${esgotado}</span>
+            </div>`;
+            }
+            const preco = lado(i, 'preco_extra_centavos');
             return `
-            <div class="opcao-porcoes">${caixa}
-              <div class="porcoes" data-porcoes="${i.id}" hidden>
-                <span class="porcoes__rotulo" id="porcoes-${i.id}">Porções</span>
-                <div class="quantidade quantidade--p" role="group" aria-labelledby="porcoes-${i.id}">
-                  <button type="button" class="quantidade__botao" data-porcao="-1" data-id="${i.id}" aria-label="Uma porção a menos de ${esc(i.nome)}">${icone('menos', 16)}</button>
-                  <output class="quantidade__valor" data-porcoes-qtd="${i.id}">1</output>
-                  <button type="button" class="quantidade__botao" data-porcao="1" data-id="${i.id}" aria-label="Mais uma porção de ${esc(i.nome)}">${icone('mais', 16)}</button>
-                </div>
+            <div class="opcao opcao--porcoes" data-linha-porcao="${i.id}">
+              <span class="opcao__corpo">
+                <span class="opcao__titulo" id="porcoes-${i.id}">${esc(i.nome)}</span>
+                ${preco ? `<span class="opcao__descricao">${preco}</span>` : ''}
+              </span>
+              <div class="porcoes" role="group" aria-labelledby="porcoes-${i.id}">
+                <button type="button" class="porcoes__botao" data-porcao="-1" data-id="${i.id}" aria-label="Uma porção a menos de ${esc(i.nome)}">${icone('menos', 18)}</button>
+                <output class="porcoes__valor numero" data-porcoes-qtd="${i.id}">0</output>
+                <button type="button" class="porcoes__botao porcoes__botao--mais" data-porcao="1" data-id="${i.id}" aria-label="${esc(i.nome)}: uma porção a mais">${icone('mais', 18)}</button>
               </div>
             </div>`;
           }).join('')}
@@ -374,15 +385,24 @@ function atualizar() {
   }
 
   if (passo !== 'ingredientes') return;
-  // D117: as porções de cada ingrediente marcado; o "+" para quando o grupo chega ao limite.
-  $$('[data-porcoes]', dialogo).forEach((caixa) => {
-    const id = Number(caixa.dataset.porcoes);
+  // D117/D119: as porções de cada ingrediente; com 0 só aparece o "+", que para quando o grupo chega ao limite.
+  $$('[data-linha-porcao]', dialogo).forEach((linha) => {
+    const id = Number(linha.dataset.linhaPorcao);
     const vezes = m.escolha.ingrediente_ids.filter((x) => x === id).length;
-    caixa.hidden = vezes === 0;
-    $(`[data-porcoes-qtd="${id}"]`, caixa).textContent = vezes;
+    linha.classList.toggle('opcao--marcada', vezes > 0);
+    $('.porcoes', linha).classList.toggle('porcoes--vazia', vezes === 0);
+    $(`[data-porcoes-qtd="${id}"]`, linha).textContent = vezes;
     const grupo = grupoDoIngrediente(id);
     const limite = limiteDoGrupo(grupo);
-    $('[data-porcao="1"]', caixa).disabled = (limite !== null && porcoesNoGrupo(grupo) >= limite) || vezes >= 10;
+    $('[data-porcao="1"]', linha).disabled = (limite !== null && porcoesNoGrupo(grupo) >= limite) || vezes >= 10;
+  });
+  // D119: quantos já foram escolhidos do limite do grupo ("3 de 8").
+  $$('[data-conta-grupo]', dialogo).forEach((conta) => {
+    const grupo = conta.dataset.contaGrupo;
+    const usadas = porcoesNoGrupo(grupo);
+    const limite = limiteDoGrupo(grupo);
+    conta.textContent = `${usadas} de ${limite}`;
+    conta.classList.toggle('grupo-opcoes__conta--cheia', usadas >= limite);
   });
   $('#montador-contador').innerHTML = `
     <div class="contador__texto">
@@ -440,10 +460,6 @@ delegar(dialogo, 'click', '[data-porcao]', (e, botao) => {
   } else {
     const posicao = m.escolha.ingrediente_ids.lastIndexOf(id);
     if (posicao >= 0) m.escolha.ingrediente_ids = m.escolha.ingrediente_ids.filter((x, n) => n !== posicao);
-    if (!m.escolha.ingrediente_ids.includes(id)) {
-      const marcada = $(`input[name="ingrediente"][value="${id}"]`, dialogo);
-      if (marcada) marcada.checked = false;
-    }
   }
   atualizar();
 });

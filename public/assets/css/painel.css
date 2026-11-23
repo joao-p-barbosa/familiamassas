@@ -506,7 +506,8 @@
 /* ---------- Kanban ---------- */
 .quadro {
   display: grid;
-  grid-template-columns: repeat(3, minmax(16.5rem, 1fr));
+  /* No celular cada coluna ocupa quase a tela (o cartão não fica espremido); a vizinha aparece na borda para indicar a rolagem. */
+  grid-template-columns: repeat(3, minmax(min(82vw, 20rem), 1fr));
   align-items: start;
   gap: var(--e-4);
   margin-inline: calc(var(--margem) * -1);
@@ -722,6 +723,18 @@
   gap: var(--e-3);
   margin-bottom: var(--e-3);
 }
+.cadastro [role="tabpanel"] > .cadastro__nota {
+  margin-bottom: var(--e-3);
+}
+/* No computador as abas quebram linha e ficam na largura da lista, sem sangrar até a borda da tela. */
+@media (min-width: 48rem) {
+  .cadastro .abas {
+    flex-wrap: wrap;
+    margin-inline: 0;
+    padding-inline: 0;
+    overflow: visible;
+  }
+}
 .cadastro__nota {
   font-size: var(--texto-3);
   color: var(--cor-texto-2);
@@ -731,6 +744,19 @@
   font-size: var(--texto-3);
   font-weight: 800;
   color: var(--cor-texto-2);
+}
+.cadastro__grupo--ordem {
+  display: flex;
+  align-items: center;
+  gap: var(--e-1);
+}
+.cadastro__grupo--ordem h2 {
+  margin-right: auto;
+  font: inherit;
+}
+.cadastro__grupo--ordem .botao--icone {
+  min-height: 2rem;
+  min-width: 2rem;
 }
 .lista-cadastro {
   display: grid;
@@ -1428,7 +1454,7 @@ a.balao__acao {
 
 /* ---------- Quadro de pedidos com a coluna "Salão" (pedidos da atendente) ---------- */
 .quadro--quatro {
-  grid-template-columns: repeat(4, minmax(14rem, 1fr));
+  grid-template-columns: repeat(4, minmax(min(82vw, 18rem), 1fr));
 }
 @media (min-width: 75rem) {
   /* Entre 75 e 80rem as quatro colunas podem não caber: o quadro rola por dentro e a página não estoura. */

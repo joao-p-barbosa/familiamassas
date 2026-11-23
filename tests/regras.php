@@ -586,7 +586,7 @@ echo "\nPERFIS E TELAS\n";
 conferir('Só existem os perfis proprietário (admin) e atendente', Sessao::PERFIS, ['admin', 'atendente']);
 conferir('Os dois perfis entram no quadro de pedidos (o salão é uma coluna dele)', [PainelController::telaInicial('atendente'), PainelController::telaInicial('admin')], ['/painel/pedidos', '/painel/pedidos']);
 conferir('Menu da atendente: só pedidos (D92); o cardápio é do proprietário', [array_keys(PainelController::menuDo('atendente')), PainelController::TELAS['cardapio']['perfis']], [['pedidos'], ['admin']]);
-conferir('Menu do proprietário: pedidos, vendas, fechamento do dia, cardápio, usuários, configurações, WhatsApp, assistente, iFood e impressora', array_keys(PainelController::menuDo('admin')), ['pedidos', 'vendas', 'fechamento', 'cardapio', 'usuarios', 'configuracoes', 'whatsapp', 'assistente', 'ifood', 'impressora']);
+conferir('Menu do proprietário: pedidos, vendas, fechamento do dia, cardápio, usuários, configurações, WhatsApp (com o assistente dentro, D119), iFood e impressora', array_keys(PainelController::menuDo('admin')), ['pedidos', 'vendas', 'fechamento', 'cardapio', 'usuarios', 'configuracoes', 'whatsapp', 'ifood', 'impressora']);
 conferir('"Produtos do atendimento" é uma tela de apoio: fora do menu, mas a atendente a abre', [isset(PainelController::menuDo('atendente')['atendimento']), PainelController::TELAS['atendimento']['perfis']], [false, ['admin', 'atendente']]);
 conferir('Cozinha, Salão e Histórico do salão não são mais telas', [isset(PainelController::TELAS['cozinha']), isset(PainelController::TELAS['salao']), isset(PainelController::TELAS['historico'])], [false, false, false]);
 conferir('Usuários, Configurações e WhatsApp são só do proprietário', [PainelController::TELAS['usuarios']['perfis'], PainelController::TELAS['configuracoes']['perfis'], PainelController::TELAS['whatsapp']['perfis']], [['admin'], ['admin'], ['admin']]);
@@ -799,7 +799,6 @@ conferir('"Devolver ao bot" no painel encerra o atendimento humano', $conversasW
 // Status de entrega que a Meta manda de volta: só as falhas ficam registradas, uma vez só.
 $statusFalho = ['entry' => [['changes' => [['value' => ['statuses' => [['id' => 'wamid.saida.9', 'status' => 'failed', 'recipient_id' => $foneWa, 'errors' => [['code' => 131026, 'title' => 'Message undeliverable']]]]]]]]]];
 conferir('Status "failed" da Meta fica registrado uma vez (repetido não duplica)', [$webhook->processar($statusFalho)['falhas_de_entrega'], $webhook->processar($statusFalho)['falhas_de_entrega']], [1, 0]);
-conferir('A atividade recente mostra o telefone mascarado e nunca o texto', [($conversasWa->recentes(1)[0]['telefone'] ?? ''), array_key_exists('texto', $conversasWa->recentes(1)[0] ?? [])], ['55 11 9••••-0001', false]);
 conferir('Sem credenciais da Meta o WhatsApp fica no modo simulado', App\WhatsApp\WhatsApp::simulado(), true);
 App\WhatsApp\WhatsApp::usarMensageiro(null);
 Env::definir('APP_URL', '');
@@ -925,11 +924,9 @@ conferir('Mensagem nova passa pelo bot; repetida não; atrasada não; vazia é i
 $antes = count($falsoWhats->enviadas);
 $conector->receber([['id' => 'm.um', 'telefone' => '5511911112222', 'texto' => '1', 'em' => time()]], new App\WhatsApp\Bot());
 conferir('Fora de um pedido, "1" também fica sem resposta (não existe mais o menu de 3 opções no canal QR)', count($falsoWhats->enviadas) - $antes, 0);
+$antes = count($falsoWhats->enviadas);
 $conector->receber([['id' => 'm.cardapio', 'telefone' => '5511911112222', 'texto' => 'Cardápio', 'em' => time()]], new App\WhatsApp\Bot());
-$cardapioQr = array_slice($falsoWhats->enviadas, -2);
-conferir('"Cardápio" abre o cardápio pelo chat, também no canal QR (o contexto em texto e as escolhas em enquete, D85)', [
-    str_contains($cardapioQr[0]['text']['body'] ?? '', 'Cardápio'), $cardapioQr[1]['type'] ?? null, str_contains(implode('|', $cardapioQr[1]['poll']['options'] ?? []), 'Carbonara da casa'),
-], [true, 'poll', true]);
+conferir('"Cardápio" não abre mais o pedido pelo chat (D119): sem a IA, no canal QR, fica sem resposta', [count($falsoWhats->enviadas) - $antes, (new App\WhatsApp\FluxoPedido())->ativo('5511911112222')], [0, false]);
 $pdoQr->exec('DELETE FROM whatsapp_sessoes');
 
 // O envio ao Node: com o conector fora do ar, a falha é "tentar de novo" (e não um erro definitivo).
@@ -1149,6 +1146,48 @@ App\WhatsApp\WhatsApp::usarMensageiro(null);
 ini_set('error_log', $logAntesWa);
 @unlink(sys_get_temp_dir() . '/familiamassas-whatsapp-teste.log');
 
+echo "\nÁUDIO DO CLIENTE VIRA TEXTO (D120)\n";
+$ativoAntesAudio = $repoIa->config()['ia_ativo'] ?? '0';
+App\WhatsApp\WhatsApp::usarMensageiro($falsoWhats);
+$repoIa->salvarConfig(['ia_ativo' => '1']);
+Env::definir('OPENROUTER_API_KEY', $chaveIa);
+$transcricaoAudio = new App\IA\Transcricao($assistenteIa, new App\IA\OpenRouter($transporteIa), $repoIa);
+$botAudio = new App\WhatsApp\Bot(assistente: $assistenteIa);
+$foneAudio = '5511977770099';
+$audioOgg = base64_encode('OggS-de-mentira');
+$pedidosIa = [];
+$filaIa = [['status' => 200, 'erro' => null, 'corpo' => json_encode(['text' => 'Quero uma carbonara inteira', 'usage' => ['cost' => 0.0006]])]];
+$rAudio = (new App\WhatsApp\Conector())->receber([['id' => 'audio.1', 'telefone' => $foneAudio, 'texto' => '', 'nome' => 'Bia', 'em' => time(), 'audio' => ['dados' => $audioOgg, 'formato' => 'ogg', 'segundos' => 9]]], $botAudio, $transcricaoAudio);
+$msgsAudio = $conversasWa->mensagens($foneAudio);
+$usoAudio = Banco::conexao()->query("SELECT origem, modelo, custo_micro FROM ia_uso WHERE telefone = '{$foneAudio}' AND origem = 'audio'")->fetch();
+conferir('Áudio do cliente: vai ao modelo de transcrição (ogg em base64, português), o texto chega ao bot e o custo entra como "audio"', [
+    $pedidosIa[0]['url'] ?? null, $pedidosIa[0]['corpo']['model'] ?? null, $pedidosIa[0]['corpo']['input_audio'] ?? null, $pedidosIa[0]['corpo']['language'] ?? null,
+    $rAudio['respondidas'], $msgsAudio[0]['tipo'] ?? null, $msgsAudio[0]['texto'] ?? null, $usoAudio,
+], [App\IA\OpenRouter::URL . '/audio/transcriptions', App\IA\Transcricao::MODELO, ['data' => $audioOgg, 'format' => 'ogg'], 'pt', 1, 'audio', 'Quero uma carbonara inteira',
+    ['origem' => 'audio', 'modelo' => App\IA\Transcricao::MODELO, 'custo_micro' => 600]]);
+$pedidosIa = [];
+$rRepetido = (new App\WhatsApp\Conector())->receber([['id' => 'audio.1', 'telefone' => $foneAudio, 'texto' => '', 'em' => time(), 'audio' => ['dados' => $audioOgg, 'segundos' => 9]]], $botAudio, $transcricaoAudio);
+conferir('O mesmo áudio de novo (o conector repetiu) não é transcrito outra vez', [count($pedidosIa), $rRepetido['repetidas']], [0, 1]);
+
+$enviadasAntesAudio = count($falsoWhats->enviadas);
+$filaIa = [$erroIa(500, 'falhou')];
+$rFalhou = (new App\WhatsApp\Conector())->receber([['id' => 'audio.2', 'telefone' => $foneAudio, 'texto' => '', 'em' => time(), 'audio' => ['dados' => $audioOgg, 'segundos' => 5]]], $botAudio, $transcricaoAudio);
+conferir('Transcrição falhou: o cliente recebe "pode escrever?" e a falha fica no registro sem custo', [
+    $rFalhou['ignoradas'], count($falsoWhats->enviadas) - $enviadasAntesAudio, str_contains($falsoWhats->enviadas[count($falsoWhats->enviadas) - 1]['text']['body'] ?? '', 'Pode escrever'),
+], [1, 1, true]);
+$pedidosIa = [];
+$enviadasAntesAudio = count($falsoWhats->enviadas);
+(new App\WhatsApp\Conector())->receber([['id' => 'audio.3', 'telefone' => $foneAudio, 'texto' => '', 'em' => time(), 'audio' => ['dados' => '', 'segundos' => 400]]], $botAudio, $transcricaoAudio);
+conferir('Áudio longo demais (o conector não baixou): nada é cobrado e o cliente é avisado', [count($pedidosIa), str_contains($falsoWhats->enviadas[count($falsoWhats->enviadas) - 1]['text']['body'] ?? '', 'comprido demais')], [0, true]);
+$repoIa->salvarConfig(['ia_ativo' => '0']);
+$enviadasAntesAudio = count($falsoWhats->enviadas);
+$rDesligada = (new App\WhatsApp\Conector())->receber([['id' => 'audio.4', 'telefone' => $foneAudio, 'texto' => '', 'em' => time(), 'audio' => ['dados' => $audioOgg, 'segundos' => 5]]], $botAudio, $transcricaoAudio);
+conferir('IA desligada: o áudio é ignorado como antes (sem transcrição e sem resposta)', [$rDesligada['ignoradas'], count($pedidosIa), count($falsoWhats->enviadas) - $enviadasAntesAudio], [1, 0, 0]);
+conferir('Normalizar: formato desconhecido vira ogg e base64 inválido vira vazio', App\WhatsApp\Conector::normalizar(['id' => 'a', 'telefone' => '5511900000000', 'audio' => ['dados' => 'não é base64!', 'formato' => 'exe', 'segundos' => 3]])['audio'], ['dados' => '', 'formato' => 'ogg', 'segundos' => 3]);
+$repoIa->salvarConfig(['ia_ativo' => $ativoAntesAudio]);
+Banco::conexao()->exec("DELETE FROM ia_uso WHERE telefone = '{$foneAudio}'");
+App\WhatsApp\WhatsApp::usarMensageiro(null);
+
 echo "\nCRÉDITO DO CLIENTE NO ASSISTENTE: recargas, saldo, alerta e \"sem crédito\" (D72)\n";
 foreach (['ia_uso', 'ia_recargas'] as $tabelaCr) {
     $pdoIa->exec("DELETE FROM {$tabelaCr}");
@@ -1269,9 +1308,11 @@ $opcao = static function (string $nome) use ($tela): string {
     return preg_match('/^(\d+)\. [^\n]*' . preg_quote($nome, '/') . '/mu', $tela(), $m) === 1 ? $m[1] : 'não achei ' . $nome;
 };
 $taxaFx = 0;   // sem faixas de distância, a entrega sai sem taxa
+// D119: sem palavra-chave, o passo a passo só abre quando a IA falha; aqui ele é aberto direto.
+$abre = static fn (string $fone = '5511966660001'): string => (new App\WhatsApp\FluxoPedido())->iniciar($fone, 'Ana Souza');
 
-conferir('"CARDÁPIO" (com acento e maiúscula) abre o cardápio: pratos da casa, monte a sua massa, bebidas e sobremesas', [
-    $diz('CARDÁPIO!'), str_contains($tela(), 'Carbonara da casa'), str_contains($tela(), 'Monte a sua massa'), str_contains($tela(), 'Bebidas') && str_contains($tela(), 'Sobremesas'),
+conferir('O passo a passo abre o cardápio: pratos da casa, monte a sua massa, bebidas e sobremesas', [
+    $abre(), str_contains($tela(), 'Carbonara da casa'), str_contains($tela(), 'Monte a sua massa'), str_contains($tela(), 'Bebidas') && str_contains($tela(), 'Sobremesas'),
 ], ['menu', true, true, true]);
 conferir('Prato da casa: escolhe o prato e o tamanho, com o preço de cada tamanho', [$diz($opcao('Carbonara da casa')), str_contains($tela(), 'Inteiro')], ['prato_tamanho', true]);
 conferir('Tamanho escolhido: pergunta a quantidade', $diz($opcao('Inteiro')), 'quantidade');
@@ -1312,7 +1353,7 @@ conferir('O cliente recebe na hora o "Recebemos seu pedido" (o mesmo aviso de st
 
 // D110: no passo a passo, o molho é de marcar (mais de um); nenhum molho não vale.
 $fone2m = '5511966660021';
-$diz('cardapio', null, $fone2m);
+$abre($fone2m);
 $diz($opcao('Monte a sua massa'), null, $fone2m);
 $diz($opcao('Nhoque'), null, $fone2m);
 $telaMolho = $tela();
@@ -1328,7 +1369,7 @@ conferir('O prato sai com os dois molhos no nome e os dois acréscimos no preço
 $pdoFx->exec("DELETE FROM whatsapp_sessoes WHERE telefone = '{$fone2m}'");
 
 // Menu por categoria (D97): bebidas e sobremesas aparecem cada uma com as suas opções.
-$diz('cardapio', null, '5511966660020');
+$abre('5511966660020');
 $diz($opcao('Sobremesas'), null, '5511966660020');
 conferir('Sobremesas: opção própria no menu, com os doces listados (e sem as bebidas)', [str_contains($tela(), 'Tiramisù'), str_contains($tela(), 'Cannoli'), str_contains($tela(), 'Água mineral')], [true, true, false]);
 $diz($opcao('Tiramisù'), null, '5511966660020');
@@ -1338,7 +1379,7 @@ $pdoFx->exec("DELETE FROM whatsapp_sessoes WHERE telefone = '5511966660020'");
 // Pin vira endereço (D98): rua e bairro saem do mapa; o cliente manda só o número.
 App\Services\Geocodificador::$transporte = static fn (string $url): ?string => json_encode(['address' => ['road' => 'Rua das Acácias', 'suburb' => 'Jardim Paulista', 'house_number' => '']]);
 $fonePin = '5511966660021';
-$diz('cardapio', null, $fonePin);
+$abre($fonePin);
 $diz($opcao('Bebidas'), null, $fonePin);
 $diz($opcao('Água mineral'), null, $fonePin);
 $diz('1', null, $fonePin);
@@ -1359,7 +1400,7 @@ conferir('Taxa pela distância: 0,5 km paga a 1ª faixa, 2 km a 2ª, 10 km não 
     $taxaRaio->calcular(null, null)['taxa_centavos'],
 ], [300, 800, false, 0]);
 $fonePin = '5511966660022';
-$diz('cardapio', null, $fonePin);
+$abre($fonePin);
 $diz($opcao('Bebidas'), null, $fonePin);
 $diz($opcao('Água mineral'), null, $fonePin);
 $diz('1', null, $fonePin);
@@ -1374,7 +1415,7 @@ conferir('Pin a 2 km: mostra a distância e a taxa da faixa', [$diz('', ['lat' =
 $pdoFx->exec("DELETE FROM whatsapp_sessoes WHERE telefone = '{$fonePin}'");
 // D112: só com o endereço escrito o pedido fecha; a taxa fica a confirmar e a comanda avisa.
 $foneSemPin = '5511966660023';
-$diz('cardapio', null, $foneSemPin);
+$abre($foneSemPin);
 $diz($opcao('Bebidas'), null, $foneSemPin);
 $diz($opcao('Água mineral'), null, $foneSemPin);
 $diz('1', null, $foneSemPin);
@@ -1389,7 +1430,7 @@ conferir('Sem mandar a localização: não trava; resumo com a taxa a confirmar 
     ['pagamento', 'resumo', true, 'pedido_criado', 0, true, 'apto 3']);
 // Mandou a localização depois do pedido: a taxa sai pela distância e o endereço escrito fica.
 $foneComPin = '5511966660024';
-$diz('cardapio', null, $foneComPin);
+$abre($foneComPin);
 $diz($opcao('Bebidas'), null, $foneComPin);
 $diz($opcao('Água mineral'), null, $foneComPin);
 $diz('1', null, $foneComPin);
@@ -1413,7 +1454,7 @@ App\Services\Geocodificador::$transporte = static fn (string $url): ?string => n
 
 // Um pedido de retirada, só com bebida.
 $foneFx2 = '5511966660002';
-$diz('cardapio', null, $foneFx2);
+$abre($foneFx2);
 $diz($opcao('Bebidas'), null, $foneFx2);
 $diz($opcao('Água mineral'), null, $foneFx2);
 $diz('3', null, $foneFx2);
@@ -1425,28 +1466,20 @@ conferir('Retirada confirmada: pedido sem endereço e sem taxa', [$diz('1', null
     ['pedido_criado', 'retirada', null, 0, 1200]);
 
 // Cancelar, voltar ao cardápio e expirar.
-$diz('cardapio', null, '5511966660003');
+$abre('5511966660003');
 $diz($opcao('Carbonara da casa'), null, '5511966660003');
-conferir('"cardápio" no meio do pedido volta ao cardápio; "cancelar" encerra e o bot volta ao silêncio', [
-    $diz('Cardápio', null, '5511966660003'), $diz('cancelar', null, '5511966660003'), str_contains($tela(), 'Pedido cancelado'), (new App\WhatsApp\FluxoPedido())->ativo('5511966660003'),
-], ['menu', 'cancelado', true, false]);
-$diz('cardapio', null, '5511966660004');
+conferir('"cancelar" encerra e o bot volta ao silêncio', [
+    $diz('cancelar', null, '5511966660003'), str_contains($tela(), 'Pedido cancelado'), (new App\WhatsApp\FluxoPedido())->ativo('5511966660003'),
+], ['cancelado', true, false]);
+$abre('5511966660004');
 $pdoFx->prepare('UPDATE whatsapp_sessoes SET atualizado_em = ? WHERE telefone = ?')->execute([gmdate('Y-m-d H:i:s', time() - 31 * 60), '5511966660004']);
 conferir('Pedido parado há mais de 30 minutos some sozinho', (new App\WhatsApp\FluxoPedido())->ativo('5511966660004'), false);
-$diz('cardapio', null, '5511966660005');
+$abre('5511966660005');
 conferir('"atendente" no meio do pedido passa para uma pessoa', [$diz('atendente', null, '5511966660005'), $conversasWa->emAtendimentoHumano('5511966660005')], ['atendente', true]);
 (new ConfigRepository())->salvar(['funcionamento' => 'fechada']);
-conferir('Loja fechada: "Cardápio" avisa o horário e não abre pedido', [$diz('cardapio', null, '5511966660006'), str_contains($tela(), 'Agora estamos fechados'), (new App\WhatsApp\FluxoPedido())->ativo('5511966660006')], ['fechada', true, false]);
+conferir('Loja fechada: o passo a passo avisa o horário e não abre pedido', [$abre('5511966660006'), str_contains($tela(), 'Agora estamos fechados'), (new App\WhatsApp\FluxoPedido())->ativo('5511966660006')], ['fechada', true, false]);
 (new ConfigRepository())->salvar(['funcionamento' => 'aberta']);
 
-// A palavra que abre o cardápio é do dono (tela Assistente).
-(new ConfigRepository())->salvar(['whatsapp_palavras_cardapio' => 'Quero pedir, Fome, cancelar']);
-conferir('Palavras configuradas pelo dono abrem o cardápio (sem acento e maiúscula); as reservadas do bot são ignoradas', [
-    (new App\WhatsApp\FluxoPedido())->palavras(), $diz('QUERO PEDIR!', null, '5511966660008'), $diz('cardápio', null, '5511966660009'),
-], [['quero pedir', 'fome'], 'menu', 'boas_vindas']);
-(new ConfigRepository())->salvar(['whatsapp_palavras_cardapio' => '']);
-conferir('Sem palavra configurada vale "cardapio"', (new App\WhatsApp\FluxoPedido())->palavras(), ['cardapio']);
-(new ConfigRepository())->salvar(['whatsapp_palavras_cardapio' => 'Cardápio']);
 $pdoFx->exec('DELETE FROM whatsapp_sessoes');
 
 // Dúvida no meio do pedido: a IA responde e o passo se repete.
@@ -1455,7 +1488,7 @@ $repoIa->salvarConfig(['ia_ativo' => '1']);
 $pedidosIa = [];
 $filaIa = [$textoIa('{"tipo":"duvida"}'), $textoIa('Temos sim: a massa sem glúten custa R$ 5 a mais.')];   // a IA primeiro tenta ler como resposta do passo (D89)
 $botFxIa = new App\WhatsApp\Bot(assistente: $assistenteIa);
-$botFxIa->receber(['wamid' => 'fx.ia.1', 'telefone' => '5511966660007', 'tipo' => 'text', 'texto' => 'cardapio', 'botao' => null, 'nome' => null]);
+(new App\WhatsApp\FluxoPedido())->iniciar('5511966660007', null);
 $enviadasAntes = count($falsoWhats->enviadas);
 $resultadoIa = $botFxIa->receber(['wamid' => 'fx.ia.2', 'telefone' => '5511966660007', 'tipo' => 'text', 'texto' => 'tem opção sem glúten?', 'botao' => null, 'nome' => null]);
 $doisUltimos = array_slice($falsoWhats->enviadas, -2);
@@ -1478,7 +1511,7 @@ $dizIa = static function (string $texto) use ($botFxIa, $foneIa): string {
     return $botFxIa->receber(['wamid' => "fx.ia.int.{$n}", 'telefone' => $foneIa, 'tipo' => 'text', 'texto' => $texto, 'botao' => null, 'nome' => 'Carla Dias', 'local' => null]);
 };
 $etapaIa = static fn (): ?string => ($pdoFx->query("SELECT etapa FROM whatsapp_sessoes WHERE telefone = '{$foneIa}'")->fetchColumn() ?: null);
-$dizIa('cardapio');
+(new App\WhatsApp\FluxoPedido())->iniciar($foneIa, 'Carla Dias');
 $dizIa($opcao('Bebidas'));
 $dizIa($opcao('Água mineral'));
 $pedidosIa = [];
@@ -1503,7 +1536,7 @@ $filaIa = [$textoIa('não sei')];
 conferir('Resposta da IA fora do JSON: o bot não trava, repete a pergunta', [$dizIa('cartao de credito sem contato'), $etapaIa()], ['ia', 'pagamento']);
 $repoIa->salvarConfig(['ia_ativo' => '0']);
 $dizIa('2');
-$dizIa('cardapio');
+(new App\WhatsApp\FluxoPedido())->iniciar($foneIa, 'Carla Dias');
 $dizIa($opcao('Bebidas'));
 $dizIa($opcao('Água mineral'));
 $dizIa('1');
@@ -1518,154 +1551,6 @@ $pdoFx->exec('DELETE FROM whatsapp_sessoes');
 $pdoFx->exec('DELETE FROM ia_uso');
 $repoIa->salvarConfig(['ia_ativo' => '0']);
 Env::definir('OPENROUTER_API_KEY', '');
-Env::definir('APP_URL', '');
-App\WhatsApp\WhatsApp::usarMensageiro(null);
-ini_set('error_log', $logAntesWa);
-@unlink(sys_get_temp_dir() . '/familiamassas-whatsapp-teste.log');
-
-echo "\nPEDIDO POR ENQUETE NO CANAL QR (D85)\n";
-$pdoEq = App\Core\Banco::conexao();
-$pdoEq->exec('DELETE FROM whatsapp_sessoes');
-Env::definir('WHATSAPP_CANAL', 'qr');
-Env::definir('APP_URL', 'https://exemplo.test');
-App\WhatsApp\WhatsApp::usarMensageiro($falsoWhats);
-ini_set('error_log', sys_get_temp_dir() . '/familiamassas-whatsapp-teste.log');
-(new ConfigRepository())->salvar(['funcionamento' => 'aberta']);
-$botEq = new App\WhatsApp\Bot();
-$foneEq = '5511966670001';
-$nEq = 0;
-// O cliente: digita (sem tag) ou vota (com a tag da enquete, que o conector manda junto com o número da opção).
-$dizEq = static function (string $texto, ?string $enquete = null, string $fone = '5511966670001') use ($botEq, &$nEq): string {
-    $nEq++;
-    return $botEq->receber(['wamid' => "eq.{$nEq}", 'telefone' => $fone, 'tipo' => $enquete !== null ? 'poll_vote' : 'text', 'texto' => $texto, 'botao' => null, 'nome' => 'Ana Souza', 'local' => null, 'enquete' => $enquete]);
-};
-$ultimaEq = static fn (): array => $falsoWhats->enviadas[count($falsoWhats->enviadas) - 1] ?? [];
-$enqueteEq = static fn (): ?array => ($ultimaEq()['type'] ?? '') === 'poll' ? $ultimaEq()['poll'] : null;
-$numeroEq = static function (?array $enquete, string $nome): string {
-    foreach ($enquete['options'] ?? [] as $opcao) {
-        if (preg_match('/^(\d+)\. .*' . preg_quote($nome, '/') . '/u', $opcao, $m) === 1) {
-            return $m[1];
-        }
-    }
-    return 'não achei ' . $nome;
-};
-$sessaoEq = static function (string $fone) use ($pdoEq): array {
-    $consulta = $pdoEq->prepare('SELECT etapa, dados FROM whatsapp_sessoes WHERE telefone = ?');
-    $consulta->execute([$fone]);
-    $linha = $consulta->fetch();
-    return $linha ? ['etapa' => $linha['etapa'], 'enquete' => json_decode((string) $linha['dados'], true)['enquete'] ?? null] : ['etapa' => null, 'enquete' => null];
-};
-
-// O menu: o contexto vai como texto comum e as escolhas, numeradas, vão na enquete.
-$resultadoEq = $dizEq('Cardápio');
-$menuEq = $enqueteEq();
-$contextoEq = $falsoWhats->enviadas[count($falsoWhats->enviadas) - 2] ?? [];
-conferir('Canal QR: "Cardápio" manda o contexto como texto e as escolhas como enquete de escolha única', [
-    $resultadoEq, $contextoEq['type'] ?? null, str_contains($contextoEq['text']['body'] ?? '', 'Monte a sua massa: Meio'), $menuEq['name'] ?? null, $menuEq['multipla'] ?? null,
-    str_starts_with($menuEq['options'][0] ?? '', '1. '), str_contains(implode('|', $menuEq['options'] ?? []), 'Carbonara da casa'), count($menuEq['options'] ?? []) <= 12,
-], ['menu', 'text', true, 'O que vai ser?', false, true, true, true]);
-conferir('A sessão guarda a tag da enquete que está valendo', $sessaoEq($foneEq), ['etapa' => 'menu', 'enquete' => $menuEq['tag']]);
-conferir('O registro da conversa mostra a enquete como pergunta e opções (o simulador do painel fica legível)', (function () use ($conversasWa, $foneEq): array {
-    $m = array_values(array_filter($conversasWa->mensagens($foneEq), static fn (array $x): bool => $x['tipo'] === 'poll'));
-    $u = end($m);
-    return [$u['texto'], count($u['enquete']['opcoes']) > 1, $u['enquete']['multipla']];
-})(), ['O que vai ser?', true, false]);
-
-// Votar é o mesmo que digitar o número da opção.
-conferir('Voto no prato da casa: vai ao tamanho, com a enquete nova (preço de cada tamanho na opção)', [$dizEq($numeroEq($menuEq, 'Carbonara da casa'), $menuEq['tag']), $enqueteEq()['name'] ?? null, str_contains(implode('|', $enqueteEq()['options'] ?? []), 'R$ 39,90')], ['prato_tamanho', 'Carbonara da casa: qual tamanho? (escolha 1)', true]);
-$tamanhoEq = $enqueteEq();
-$antesEq = count($falsoWhats->enviadas);
-conferir('Voto numa enquete antiga (a do menu, depois de avançar) é ignorado em silêncio: o passo e as mensagens não mudam', [
-    $dizEq('1', $menuEq['tag']), count($falsoWhats->enviadas) - $antesEq, $sessaoEq($foneEq)['etapa'], $sessaoEq($foneEq)['enquete'] === $tamanhoEq['tag'],
-], ['enquete_antiga', 0, 'prato_tamanho', true]);
-conferir('O número digitado continua valendo; a quantidade vem em enquete "1 prato, 2 pratos..." com o nome do prato (D97)', [
-    $dizEq($numeroEq($tamanhoEq, 'Inteiro')), $enqueteEq()['name'] ?? null, array_slice($enqueteEq()['options'] ?? [], 0, 2), $sessaoEq($foneEq)['enquete'] === ($enqueteEq()['tag'] ?? 'x'),
-], ['quantidade', 'Quantos pratos de Carbonara da casa?', ['1 prato', '2 pratos'], true]);
-conferir('Quantidade 2: o "Anotado" vai como texto e "mais alguma coisa?" como enquete de duas opções', [
-    $dizEq('2'), str_contains($falsoWhats->enviadas[count($falsoWhats->enviadas) - 2]['text']['body'] ?? '', '2× Carbonara da casa (Inteiro) — R$ 79,80'), $enqueteEq()['name'] ?? null, count($enqueteEq()['options'] ?? []),
-], ['mais', true, 'Mais alguma coisa?', 2]);
-$maisEq = $enqueteEq();
-conferir('Voto em "pedir mais": volta ao menu; "Monte a sua massa", massa e molho por voto', [
-    $dizEq('1', $maisEq['tag']), $dizEq($numeroEq($enqueteEq(), 'Monte a sua massa'), $enqueteEq()['tag']),
-    $dizEq($numeroEq($enqueteEq(), 'Nhoque'), $enqueteEq()['tag']), $dizEq($numeroEq($enqueteEq(), 'Pesto'), $enqueteEq()['tag']),
-], ['menu', 'monte_massa', 'monte_molho', 'monte_grupo']);
-
-// Ingredientes: múltipla com "Pronto"; o grupo com opções demais para uma enquete (12) segue como lista numerada.
-$proteinasEq = $enqueteEq();
-conferir('Proteínas: enquete de escolha múltipla, com "✅ Pronto (ou nenhum)" por último', [
-    $proteinasEq['name'] ?? null, $proteinasEq['multipla'] ?? null, end($proteinasEq['options']), count($proteinasEq['options']),
-], ['Proteínas: marque o que quiser e toque em ✅ Pronto', true, '✅ Pronto (ou nenhum)', 5]);
-conferir('Voto "0" (só o Pronto marcado) segue para o grupo seguinte', [$dizEq('0', $proteinasEq['tag']), $sessaoEq($foneEq)['etapa']], ['monte_grupo', 'monte_grupo']);
-$acompanhamentosEq = $ultimaEq();
-conferir('Acompanhamentos tem 12 ingredientes disponíveis (13 opções com o Pronto, mais que as 12 do WhatsApp): vai como lista numerada, sem enquete', [
-    $acompanhamentosEq['type'] ?? null, str_contains($acompanhamentosEq['text']['body'] ?? '', 'Acompanhamentos'), str_contains($acompanhamentosEq['text']['body'] ?? '', '12. Manjericão'), $sessaoEq($foneEq)['enquete'],
-], ['text', true, true, null]);
-conferir('Digitar "0" na lista numerada passa para os queijos, de novo em enquete', [$dizEq('0'), $enqueteEq()['multipla'] ?? null], ['monte_grupo', true]);
-conferir('Voto múltiplo "Parmesão + Pronto" chega como o número do queijo e vai ao tamanho (o último passo)', [$dizEq($numeroEq($enqueteEq(), 'Parmesão'), $enqueteEq()['tag']), $sessaoEq($foneEq)['etapa'], $enqueteEq()['name'] ?? null], ['monte_tamanho', 'monte_tamanho', 'Por último, o tamanho (escolha 1):']);
-conferir('Tamanho por voto vai à quantidade', $dizEq($numeroEq($enqueteEq(), 'Meio'), $enqueteEq()['tag']), 'quantidade');
-$dizEq('1');
-$dizEq('2', $enqueteEq()['tag']);   // "Fechar o pedido"
-$tipoEq = $enqueteEq();
-conferir('Fechar: entrega ou retirada em enquete; retirada leva ao nome e depois ao pagamento, com o aviso de quando se paga', [
-    $tipoEq['name'] ?? null, $dizEq($numeroEq($tipoEq, 'Retirada'), $tipoEq['tag']), $dizEq('1'), str_contains($falsoWhats->enviadas[count($falsoWhats->enviadas) - 2]['text']['body'] ?? '', 'O pagamento é feito na retirada.'),
-    $enqueteEq()['name'] ?? null, count($enqueteEq()['options'] ?? []),
-], ['Entrega ou retirada?', 'nome', 'pagamento', true, 'Como vai pagar?', 3]);
-conferir('Pix por voto leva ao resumo: o resumo vai como texto e "Confirmar o pedido?" como enquete', [
-    $dizEq($numeroEq($enqueteEq(), 'Pix'), $enqueteEq()['tag']), str_contains($falsoWhats->enviadas[count($falsoWhats->enviadas) - 2]['text']['body'] ?? '', 'Total: R$ 112,70'), $enqueteEq()['name'] ?? null,
-], ['resumo', true, 'Confirmar o pedido?']);
-conferir('Voto em "Confirmar pedido": o pedido é criado', $dizEq($numeroEq($enqueteEq(), 'Confirmar'), $enqueteEq()['tag']), 'pedido_criado');
-$pedidoEq = $pdoEq->query('SELECT origem, cliente_telefone, cliente_nome, tipo, total_centavos FROM pedidos ORDER BY id DESC LIMIT 1')->fetch();
-conferir('O pedido feito por enquete é o mesmo do passo a passo: origem WhatsApp, retirada, preço do servidor (2 carbonaras + a massa montada)', array_values($pedidoEq), ['whatsapp', $foneEq, 'Ana', 'retirada', 11270]);
-conferir('Terminado o pedido, a sessão some', $sessaoEq($foneEq), ['etapa' => null, 'enquete' => null]);
-
-// Falhas e arredores.
-$okEnvioEq = ['ok' => true, 'wamid' => 'teste.ok', 'erro' => null, 'transitorio' => false, 'janela_fechada' => false];
-$falsoWhats->respostas = [$okEnvioEq, ['ok' => false, 'wamid' => null, 'erro' => 'Conector 400: enquete inválida', 'transitorio' => false, 'janela_fechada' => false]];
-$antesEq = count($falsoWhats->enviadas);
-$foneRecusa = '5511966670002';
-$dizEq('Cardápio', null, $foneRecusa);
-conferir('Se o conector recusar a enquete (erro definitivo), o cliente recebe a lista numerada e a sessão fica sem tag', [
-    count($falsoWhats->enviadas) - $antesEq, $ultimaEq()['type'] ?? null, str_contains($ultimaEq()['text']['body'] ?? '', '1. Carbonara da casa'), $sessaoEq($foneRecusa)['enquete'],
-], [3, 'text', true, null]);
-$falsoWhats->respostas = [$okEnvioEq, ['ok' => false, 'wamid' => null, 'erro' => 'Conector 503: WhatsApp desconectado', 'transitorio' => true, 'janela_fechada' => false]];
-$antesEq = count($falsoWhats->enviadas);
-$dizEq('Cardápio', null, '5511966670003');
-conferir('Falha passageira (WhatsApp caído): não duplica nada em texto', [count($falsoWhats->enviadas) - $antesEq, $ultimaEq()['type'] ?? null], [2, 'poll']);
-$antesEq = count($falsoWhats->enviadas);
-conferir('Voto sem pedido em andamento: o bot fica em silêncio', [$dizEq('3', 'abc123def456', '5511966670004'), count($falsoWhats->enviadas) - $antesEq], ['silencio', 0]);
-
-// Enquetes só existem no canal QR e têm os limites do WhatsApp.
-$cortaEq = new ReflectionMethod(App\WhatsApp\FluxoPedido::class, 'enquete');
-conferir('Limites da enquete: 2 a 12 opções (na múltipla o Pronto conta), opção cortada em 100 caracteres, pergunta em 255', [
-    $cortaEq->invoke(null, 'P', ['a'], false), $cortaEq->invoke(null, 'P', array_fill(0, 12, 'x'), false) !== null, $cortaEq->invoke(null, 'P', array_fill(0, 13, 'x'), false),
-    $cortaEq->invoke(null, 'P', array_fill(0, 11, 'x'), true) !== null, $cortaEq->invoke(null, 'P', array_fill(0, 12, 'x'), true),
-    mb_strlen($cortaEq->invoke(null, 'P', [str_repeat('é', 150), 'b'], false)['opcoes'][0]), mb_substr($cortaEq->invoke(null, 'P', [str_repeat('é', 150), 'b'], false)['opcoes'][0], -1),
-    mb_strlen($cortaEq->invoke(null, str_repeat('p', 300), ['a', 'b'], false)['pergunta']),
-    $cortaEq->invoke(null, '*Monte* ~a~', ['*Negrito* ~tachado~', 'b'], false)['pergunta'], $cortaEq->invoke(null, 'P', ['*Negrito* ~tachado~', 'b'], false)['opcoes'][0],
-], [null, true, null, true, null, 100, '…', 255, 'Monte a', '1. Negrito tachado']);
-$opcoesRepetidas = $cortaEq->invoke(null, 'P', ['Pix', 'Pix'], false)['opcoes'];
-conferir('Rótulos iguais não repetem opção: o número na frente as distingue', count(array_unique($opcoesRepetidas)), 2);
-conferir('O corpo enviado ao Node: a enquete vai em "enquete" (texto vazio); o resto segue como texto', [
-    App\WhatsApp\MensageiroConector::corpo($foneEq, App\WhatsApp\WhatsApp::enquete('Qual?', ['1. A', '2. B'], true, 'abc123def456')),
-    App\WhatsApp\MensageiroConector::corpo($foneEq, App\WhatsApp\WhatsApp::texto('oi')),
-], [
-    ['telefone' => $foneEq, 'texto' => '', 'enquete' => ['tag' => 'abc123def456', 'pergunta' => 'Qual?', 'opcoes' => ['1. A', '2. B'], 'multipla' => true]],
-    ['telefone' => $foneEq, 'texto' => 'oi'],
-]);
-conferir('Enquete mandada como texto (reserva) vira a lista de opções com "Responda com o número"', App\WhatsApp\Conector::texto(App\WhatsApp\WhatsApp::enquete('Qual?', ['1. A', '2. B'], false, 'abc123def456')), "Qual?\n\n1. A\n2. B\n\nResponda com o número.");
-conferir('O voto chega do Node com a tag da enquete (marcado como voto); tag estranha é descartada', [
-    App\WhatsApp\Conector::normalizar(['id' => 'v1', 'telefone' => $foneEq, 'texto' => '2', 'enquete' => 'abc123def456']),
-    App\WhatsApp\Conector::normalizar(['id' => 'v2', 'telefone' => $foneEq, 'texto' => '2', 'enquete' => 'tag ruim!'])['enquete'],
-    App\WhatsApp\Conector::normalizar(['id' => 'v3', 'telefone' => $foneEq, 'texto' => '2'])['enquete'],
-], [['wamid' => 'qr.v1', 'telefone' => $foneEq, 'tipo' => 'poll_vote', 'texto' => '2', 'botao' => null, 'nome' => null, 'local' => null, 'enquete' => 'abc123def456'], null, null]);
-Env::definir('WHATSAPP_CANAL', '');
-$antesEq = count($falsoWhats->enviadas);
-$dizEq('Cardápio', null, '5511966670005');
-conferir('Fora do canal QR (Cloud API e simulador) nada vira enquete: segue a lista numerada de sempre', [count($falsoWhats->enviadas) - $antesEq, $ultimaEq()['type'] ?? null, str_contains($ultimaEq()['text']['body'] ?? '', '1. Carbonara da casa')], [1, 'text', true]);
-
-$falsoWhats->respostas = [];
-$pdoEq->exec('DELETE FROM whatsapp_sessoes');
-$pdoEq->exec('DELETE FROM whatsapp_envios_pendentes');
 Env::definir('APP_URL', '');
 App\WhatsApp\WhatsApp::usarMensageiro(null);
 ini_set('error_log', $logAntesWa);
@@ -1824,6 +1709,60 @@ Env::definir('APP_URL', '');
 App\WhatsApp\WhatsApp::usarMensageiro(null);
 ini_set('error_log', $logAntesWa);
 @unlink(sys_get_temp_dir() . '/familiamassas-whatsapp-teste.log');
+
+echo "\nBUSCA DE ENDEREÇO NO MAPA (D119)\n";
+$chamadasGeo = [];
+App\Services\Geocodificador::$transporte = static function (string $url, ?string $corpo = null) use (&$chamadasGeo): ?string {
+    $chamadasGeo[] = ['url' => $url, 'corpo' => $corpo];
+    return json_encode(['features' => [
+        ['geometry' => ['coordinates' => [-46.6519, -23.5649]], 'properties' => ['countrycode' => 'BR', 'street' => 'Avenida Paulista', 'housenumber' => '1000', 'district' => 'Bela Vista', 'city' => 'São Paulo', 'state' => 'São Paulo']],
+        ['geometry' => ['coordinates' => [-58.38, -34.60]], 'properties' => ['countrycode' => 'AR', 'street' => 'Avenida Paulista', 'housenumber' => '1000']],
+    ]]);
+};
+Env::definir('GOOGLE_MAPS_API_KEY', '');
+$sugGeo = App\Services\Geocodificador::sugestoes('Avenida Paulista 1000', -23.56, -46.65, 'sessao-teste-1');
+$detGeo = App\Services\Geocodificador::detalhe($sugGeo[0]['id'] ?? '', 'sessao-teste-1');
+conferir('Sem chave do Google: sugestões do Photon perto da loja, só do Brasil, e o detalhe traz o ponto com o número', [
+    count($sugGeo), $sugGeo[0]['principal'] ?? null, $sugGeo[0]['secundario'] ?? null, str_contains($chamadasGeo[0]['url'], 'photon.komoot.io') && str_contains($chamadasGeo[0]['url'], 'lat=-23.56'),
+    $detGeo, count($chamadasGeo),
+], [1, 'Avenida Paulista, 1000', 'Bela Vista, São Paulo, São Paulo', true, ['lat' => -23.5649, 'lng' => -46.6519, 'rua' => 'Avenida Paulista', 'numero' => '1000', 'bairro' => 'Bela Vista'], 1]);
+conferir('Texto curto não consulta nada; id estranho não vira endereço', [App\Services\Geocodificador::sugestoes('Av', null, null, ''), count($chamadasGeo), App\Services\Geocodificador::detalhe('osm:bGl4bw==', ''), App\Services\Geocodificador::detalhe('x/../y', '')], [[], 1, null, null]);
+
+$chamadasGeo = [];
+Env::definir('GOOGLE_MAPS_API_KEY', 'chave-de-teste');
+App\Services\Geocodificador::$transporte = static function (string $url, ?string $corpo = null) use (&$chamadasGeo): ?string {
+    $chamadasGeo[] = ['url' => $url, 'corpo' => $corpo];
+    return str_contains($url, ':autocomplete')
+        ? json_encode(['suggestions' => [['placePrediction' => ['placeId' => 'ChIJzVvUdWPhmwARJhsy92FKEwI', 'structuredFormat' => ['mainText' => ['text' => 'Estrada do Mendanha, 500'], 'secondaryText' => ['text' => 'Campo Grande, Rio de Janeiro - RJ']]]]]])
+        : json_encode(['location' => ['latitude' => -22.885, 'longitude' => -43.5568], 'addressComponents' => [
+            ['longText' => '500', 'types' => ['street_number']], ['longText' => 'Estrada do Mendanha', 'types' => ['route']], ['longText' => 'Campo Grande', 'types' => ['sublocality_level_1', 'sublocality']],
+        ]]);
+};
+$sugG = App\Services\Geocodificador::sugestoes('Estrada do Mendanha 500', -22.88, -43.59, 'sessao-google-1');
+$corpoG = json_decode((string) ($chamadasGeo[0]['corpo'] ?? ''), true);
+$detG = App\Services\Geocodificador::detalhe($sugG[0]['id'] ?? '', 'sessao-google-1');
+conferir('Com chave: Google Places com a sessão, só Brasil e preferência pelos 15 km da loja; o detalhe usa a mesma sessão', [
+    $sugG, $corpoG['sessionToken'] ?? null, $corpoG['includedRegionCodes'] ?? null, $corpoG['locationBias']['circle']['radius'] ?? null,
+    str_contains($chamadasGeo[1]['url'] ?? '', 'places/ChIJzVvUdWPhmwARJhsy92FKEwI') && str_contains($chamadasGeo[1]['url'] ?? '', 'sessionToken=sessao-google-1'), $detG,
+], [[['id' => 'ChIJzVvUdWPhmwARJhsy92FKEwI', 'principal' => 'Estrada do Mendanha, 500', 'secundario' => 'Campo Grande, Rio de Janeiro - RJ']], 'sessao-google-1', ['br'], 15000, true,
+    ['lat' => -22.885, 'lng' => -43.5568, 'rua' => 'Estrada do Mendanha', 'numero' => '500', 'bairro' => 'Campo Grande']]);
+$hojeGeo = (new DateTimeImmutable('now', App\Core\Relogio::fusoDaLoja()))->format('Y-m-d');
+$usoGeo = static fn (string $chave): ?string => ((string) (Banco::conexao()->query("SELECT valor FROM configuracoes WHERE chave = '{$chave}'")->fetchColumn() ?: '')) ?: null;
+conferir('Cada chamada ao Google conta no dia e no mês (D121)', [$usoGeo("google_uso:dia:{$hojeGeo}:sugestoes"), $usoGeo("google_uso:dia:{$hojeGeo}:detalhes")], ['1', '1']);
+Banco::conexao()->exec("INSERT INTO configuracoes (chave, valor) VALUES ('google_uso:dia:2000-01-01:sugestoes', '5')");
+Banco::conexao()->exec("UPDATE configuracoes SET valor = '1000' WHERE chave = 'google_uso:dia:{$hojeGeo}:sugestoes'");
+$chamadasGeo = [];
+$sugTeto = App\Services\Geocodificador::sugestoes('Estrada do Mendanha 500', -22.88, -43.59, 'sessao-google-2');
+conferir('Passou do teto do dia: a busca segue pelo Photon (grátis), sem chamar o Google', [count($chamadasGeo), str_contains($chamadasGeo[0]['url'] ?? '', 'photon.komoot.io'), $usoGeo("google_uso:dia:{$hojeGeo}:sugestoes")], [1, true, '1000']);
+Banco::conexao()->exec("DELETE FROM configuracoes WHERE chave LIKE 'google_uso:%'");
+App\Services\Geocodificador::cabeNoLimite('sugestoes');
+Banco::conexao()->exec("INSERT INTO configuracoes (chave, valor) VALUES ('google_uso:dia:2000-01-01:sugestoes', '5')");
+Banco::conexao()->exec("DELETE FROM configuracoes WHERE chave = 'google_uso:dia:{$hojeGeo}:sugestoes'");
+App\Services\Geocodificador::cabeNoLimite('sugestoes');
+conferir('Na virada do dia o contador velho some', [$usoGeo('google_uso:dia:2000-01-01:sugestoes'), $usoGeo("google_uso:dia:{$hojeGeo}:sugestoes")], [null, '1']);
+Banco::conexao()->exec("DELETE FROM configuracoes WHERE chave LIKE 'google_uso:%'");
+Env::definir('GOOGLE_MAPS_API_KEY', '');
+App\Services\Geocodificador::$transporte = null;
 
 echo "\nTOKEN DO WHATSAPP\n";
 $tokens = new TokenWhatsApp();
@@ -2034,20 +1973,6 @@ Env::definir('SENHA_ADMIN_INICIAL', '');
 Env::definir('SENHA_ATENDENTE_INICIAL', '');
 ini_set('error_log', $logAntes);
 @unlink(sys_get_temp_dir() . '/familiamassas-seed-teste.log');
-
-echo "\nZERAR VENDAS (D116)\n";
-$fat = new App\Services\FaturamentoService();
-$pdoZ = Banco::conexao();
-$quantos = static fn (string $t): int => (int) $pdoZ->query("SELECT COUNT(*) FROM {$t}")->fetchColumn();
-$antesZ = $quantos('pedidos');
-conferir('Sem digitar ZERAR, nada é apagado', [codigoDoErro(fn () => $fat->zerar('zerar', ['id' => 1])), $quantos('pedidos') === $antesZ, $antesZ > 0], ['422 validacao', true, true]);
-$apagados = $fat->zerar('ZERAR', ['id' => 1]);
-conferir('ZERAR apaga pedidos, itens, contas do Salão, cancelamentos e fechamentos; cardápio e usuários ficam', [
-    $apagados['pedidos'], $quantos('pedidos'), $quantos('itens_pedido'), $quantos('atendimentos'), $quantos('cancelamentos'), $quantos('fechamentos_caixa'), $quantos('itens') > 0, $quantos('usuarios') > 0,
-], [$antesZ, 0, 0, 0, 0, 0, true, true]);
-(new ConfigRepository())->salvar(['funcionamento' => 'aberta']);
-$novoZ = (new PedidoService())->criar(['tipo' => 'retirada', 'cliente' => ['nome' => 'Primeira venda', 'telefone' => '(11) 91234-5678'], 'pagamento' => ['forma' => 'pix'], 'itens' => [['tipo' => 'simples', 'item_id' => (int) $pdoZ->query("SELECT id FROM itens WHERE tipo = 'simples' ORDER BY id LIMIT 1")->fetchColumn(), 'quantidade' => 1]]]);
-conferir('Depois de zerar, o próximo pedido volta a ser o #1', $novoZ['id'], 1);
 
 echo "\nATUALIZAÇÃO DO BANCO (migrações)\n";
 if ($emPg) {

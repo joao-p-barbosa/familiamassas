@@ -6,6 +6,7 @@ namespace App\WhatsApp;
 use App\Core\Banco;
 use App\Core\Env;
 use App\Core\Relogio;
+use App\IA\Transcricao;
 
 /**
  * Canal do WhatsApp por QR code (WHATSAPP_CANAL=qr): um processo Node (pasta /conector, biblioteca Baileys) fica conectado
@@ -129,8 +130,8 @@ final class Conector
 
     /**
      * Uma mensagem do Node no formato que o bot entende.
-     * @param array<string,mixed> $m {id, telefone, texto, nome?, em?: segundos desde 1970, local?: {lat, lng}, enquete?: tag da enquete votada}
-     * @return array{wamid:string, telefone:string, tipo:string, texto:string, botao:?string, nome:?string, local:?array{lat:float, lng:float}, enquete:?string}|null
+     * @param array<string,mixed> $m {id, telefone, texto, nome?, em?: segundos desde 1970, local?: {lat, lng}, audio?: {dados?, formato, segundos}}
+     * @return array{wamid:string, telefone:string, tipo:string, texto:string, botao:?string, nome:?string, local:?array{lat:float, lng:float}, audio:?array{dados:string, formato:string, segundos:int}}|null
      */
     public static function normalizar(array $m): ?array
     {
@@ -142,10 +143,10 @@ final class Conector
         $texto = mb_substr(trim((string) ($m['texto'] ?? '')), 0, 1000);
         $nome = mb_substr(trim((string) ($m['nome'] ?? '')), 0, 60);
         $local = self::local($m['local'] ?? null);
-        $enquete = isset($m['enquete']) && is_string($m['enquete']) && preg_match('/^[A-Za-z0-9_-]{4,40}$/', $m['enquete']) === 1 ? $m['enquete'] : null;
+        $audio = self::audio($m['audio'] ?? null);
         return [
-            'wamid' => 'qr.' . mb_substr($id, 0, 150), 'telefone' => $telefone, 'tipo' => $enquete !== null ? 'poll_vote' : ($local !== null ? 'location' : 'text'),
-            'texto' => $texto, 'botao' => null, 'nome' => $nome !== '' ? $nome : null, 'local' => $local, 'enquete' => $enquete,
+            'wamid' => 'qr.' . mb_substr($id, 0, 150), 'telefone' => $telefone, 'tipo' => $audio !== null ? 'audio' : ($local !== null ? 'location' : 'text'),
+            'texto' => $texto, 'botao' => null, 'nome' => $nome !== '' ? $nome : null, 'local' => $local, 'audio' => $audio,
         ];
     }
 
@@ -166,21 +167,62 @@ final class Conector
      * @param list<array<string,mixed>> $mensagens
      * @return array{respondidas:int, repetidas:int, antigas:int, ignoradas:int}
      */
-    public function receber(array $mensagens, Bot $bot): array
+    public function receber(array $mensagens, Bot $bot, ?Transcricao $transcricao = null): array
     {
         $r = ['respondidas' => 0, 'repetidas' => 0, 'antigas' => 0, 'ignoradas' => 0];
         $limite = time() - self::MENSAGEM_VELHA_MINUTOS * 60;
         foreach (array_slice($mensagens, 0, 50) as $m) {
             $normal = is_array($m) ? self::normalizar($m) : null;
-            if ($normal === null || ($normal['texto'] === '' && $normal['local'] === null)) {
+            if ($normal === null || ($normal['texto'] === '' && $normal['local'] === null && $normal['audio'] === null)) {
                 $r['ignoradas']++;
             } elseif (isset($m['em']) && (int) $m['em'] > 0 && (int) $m['em'] < $limite) {
                 $r['antigas']++;
+            } elseif ($normal['audio'] !== null && $normal['texto'] === '' && !$this->ouvir($normal, $transcricao ??= new Transcricao())) {
+                $r['ignoradas']++;
             } else {
+                unset($normal['audio']);
                 $bot->receber($normal) === 'repetida' ? $r['repetidas']++ : $r['respondidas']++;
             }
         }
         return $r;
+    }
+
+    /**
+     * D120: a mensagem de voz vira o texto da mensagem. Áudio já recebido (o conector repetiu) não é transcrito de novo: o bot
+     * descarta pelo id. Sem a IA, o áudio é ignorado como antes. Com a IA, mas sem conseguir ouvir, o cliente recebe um pedido
+     * para escrever (uma vez por áudio).
+     * @param array<string,mixed> $normal muda o texto quando consegue
+     * @return bool true = segue para o bot
+     */
+    private function ouvir(array &$normal, Transcricao $transcricao): bool
+    {
+        $conversas = new Conversas();
+        if ($conversas->jaRecebido($normal['wamid'])) {
+            return true;   // o bot conta como repetida
+        }
+        $r = $transcricao->texto($normal['audio'], $normal['telefone']);
+        if ($r['texto'] !== null) {
+            $normal['texto'] = $r['texto'];
+            return true;
+        }
+        if ($r['motivo'] !== 'indisponivel' && !$conversas->emAtendimentoHumano($normal['telefone'])) {
+            $conversas->registrarEvento($normal['wamid'], $normal['telefone'], 'in', 'audio', ['texto' => '', 'nome' => $normal['nome']]);
+            WhatsApp::enviar($normal['telefone'], WhatsApp::texto($r['motivo'] === 'longo'
+                ? 'Esse áudio ficou comprido demais para eu ouvir. Pode mandar um mais curto ou escrever?'
+                : 'Não consegui ouvir esse áudio. Pode escrever, por favor?'), 'audio_nao_ouvido');
+        }
+        return false;
+    }
+
+    /** @return array{dados:string, formato:string, segundos:int}|null */
+    private static function audio(mixed $a): ?array
+    {
+        if (!is_array($a)) {
+            return null;
+        }
+        $dados = is_string($a['dados'] ?? null) && preg_match('#^[A-Za-z0-9+/=]+$#', $a['dados']) === 1 ? $a['dados'] : '';
+        $formato = in_array($a['formato'] ?? 'ogg', ['ogg', 'mp3', 'wav', 'm4a', 'webm'], true) ? (string) ($a['formato'] ?? 'ogg') : 'ogg';
+        return ['dados' => $dados, 'formato' => $formato, 'segundos' => max(0, min(3600, (int) ($a['segundos'] ?? 0)))];
     }
 
     /**
@@ -201,9 +243,6 @@ final class Conector
         }
         if (isset($resumo['link'])) {
             $texto .= "\n\n" . $resumo['link']['rotulo'] . ': ' . $resumo['link']['url'];
-        }
-        if (isset($resumo['enquete'])) {   // enquete mandada como texto: as opções já levam o número
-            $texto .= "\n\n" . implode("\n", $resumo['enquete']['opcoes']) . "\n\nResponda com o número" . ($resumo['enquete']['multipla'] ? ' (vários: 1, 3; nenhum: 0).' : '.');
         }
         return $texto;
     }

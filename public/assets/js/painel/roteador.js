@@ -20,7 +20,6 @@ const MODULOS = {
   usuarios: () => import('./usuarios.js'),
   configuracoes: () => import('./configuracoes.js'),
   whatsapp: () => import('./whatsapp.js'),
-  assistente: () => import('./assistente.js'),
   ifood: () => import('./ifood.js'),
   impressora: () => import('./impressora.js'),
   vendas: () => import('./vendas.js'),

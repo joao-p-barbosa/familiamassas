@@ -8,11 +8,9 @@ const path = require('node:path');
 const fs = require('node:fs');
 const pino = require('pino');
 const QRCode = require('qrcode');
-const crypto = require('node:crypto');
-const { default: makeWASocket, DisconnectReason, fetchLatestBaileysVersion, useMultiFileAuthState, Browsers, normalizeMessageContent, decryptPollVote } = require('@whiskeysockets/baileys');
+const { default: makeWASocket, DisconnectReason, fetchLatestBaileysVersion, useMultiFileAuthState, Browsers, normalizeMessageContent, downloadMediaMessage } = require('@whiskeysockets/baileys');
 const { criarServidor } = require('./servidor');
-const { telefoneDe, textoDe, localDe, segundosDe } = require('./util');
-const { criarCofre, interpretar } = require('./enquete');
+const { telefoneDe, textoDe, localDe, segundosDe, audioDe, AUDIO_MAX_BYTES } = require('./util');
 const { criarRegistroDeEnviadas, podeSerDaEquipe, criarVigia } = require('./equipe');
 
 const SEGREDO = process.env.CONECTOR_SEGREDO ?? '';
@@ -57,30 +55,13 @@ function mudar(novo) {
 }
 
 // ---------- Envio (site → WhatsApp) ----------
-// As enquetes enviadas ficam guardadas por ~2 h: o voto do cliente chega cifrado com a chave de cada uma (D85).
-const enquetes = criarCofre();
 // O que o bot enviou: o resto que sai deste número foi digitado por alguém da loja no celular (D106).
 const enviadas = criarRegistroDeEnviadas();
 const vigia = criarVigia({ registro: enviadas, avisar: (telefone) => postar('/api/conector/equipe', { telefone }) });
-const identidades = () => [sock?.user?.id, sock?.user?.lid].filter(Boolean);
-
-async function enviarEnquete(telefone, enquete) {
-  const segredo = crypto.randomBytes(32);   // o Baileys guarda esta chave na enquete; a mesma fica aqui para decifrar os votos
-  const enviada = await sock.sendMessage(`${telefone}@s.whatsapp.net`, {
-    poll: { name: enquete.pergunta, values: enquete.opcoes, selectableCount: enquete.multipla ? enquete.opcoes.length : 1, messageSecret: segredo },
-  });
-  const id = enviada?.key?.id;
-  if (!id) throw new Error('o WhatsApp não devolveu o id da enquete');
-  enviadas.marcar(id);
-  enquetes.guardar({ id, segredo, tag: enquete.tag, opcoes: enquete.opcoes, multipla: enquete.multipla, telefone, criadores: identidades() });
-  console.log(`[conector] enquete enviada (${enquete.opcoes.length} opções, ${enquete.multipla ? 'múltipla' : 'única'})`);
-}
-
 const saida = criarServidor({
   segredo: SEGREDO,
   conectado: () => estado === 'conectado' && sock !== null,
-  enviar: async (telefone, texto, enquete) => {
-    if (enquete) return enviarEnquete(telefone, enquete);
+  enviar: async (telefone, texto) => {
     const enviada = await sock.sendMessage(`${telefone}@s.whatsapp.net`, { text: texto });
     enviadas.marcar(enviada?.key?.id);
     return enviada;
@@ -152,7 +133,6 @@ async function conectar() {
   sock.ev.on('messages.upsert', async ({ messages }) => {
     // "append" também entra: o site ignora o que tem mais de 10 minutos e não repete o mesmo id.
     const lote = [];
-    const votos = [];   // enquetes cujo voto está neste lote: se o site não receber, elas voltam a valer
     for (const m of messages) {
       if (m.key.fromMe) {
         // Digitada no celular da loja? O site decide se pausa o bot (só com o pedido pela IA ligado).
@@ -177,18 +157,27 @@ async function conectar() {
         const pn = await sock.signalRepository?.lidMapping?.getPNForLID(m.key.remoteJid).catch(() => null);
         if (pn) telefone = telefoneDe({ remoteJid: pn.includes('@') ? pn : `${pn}@s.whatsapp.net` });
       }
-      if (conteudo?.pollUpdateMessage) {   // voto numa enquete: vira o número da opção, como se o cliente tivesse digitado
-        const voto = votoDeEnquete(m, conteudo.pollUpdateMessage);
-        if (voto) {
-          lote.push(voto.mensagem);
-          votos.push(voto.entrada);
-        }
-        continue;
-      }
       const texto = textoDe(conteudo);
       const local = localDe(conteudo);   // o pin da entrega, no pedido pelo chat
       if (telefone && (texto || local)) {
         lote.push({ id: m.key.id, telefone, texto, local, nome: m.pushName ?? null, em: segundosDe(m.messageTimestamp) });
+        continue;
+      }
+      // D120: mensagem de voz. Vai sozinha (o site aceita até 200 KB por envio), depois do que veio antes, para manter a ordem.
+      const audio = audioDe(conteudo);
+      if (telefone && audio) {
+        const base = { id: m.key.id, telefone, texto: '', nome: m.pushName ?? null, em: segundosDe(m.messageTimestamp) };
+        let dados = '';
+        if (!audio.longo) {
+          try {
+            const bytes = await downloadMediaMessage(m, 'buffer', {}, { logger: log, reuploadRequest: sock.updateMediaMessage });
+            if (bytes.length <= AUDIO_MAX_BYTES) dados = bytes.toString('base64');
+          } catch (erro) {
+            console.log(`[conector] áudio não baixado: ${erro?.message ?? erro}`);
+          }
+        }
+        if (lote.length > 0) await postar('/api/conector/mensagens', { mensagens: lote.splice(0) }, 60_000);
+        await postar('/api/conector/mensagens', { mensagens: [{ ...base, audio: { dados, formato: 'ogg', segundos: audio.segundos } }] }, 60_000);
         continue;
       }
       // O motivo do descarte, sem o texto e sem o telefone do cliente.
@@ -198,34 +187,9 @@ async function conectar() {
       console.log(`[conector] mensagem ignorada (@${tipoJid}): ${motivo}`);
     }
     if (lote.length > 0) {
-      const entregue = await postar('/api/conector/mensagens', { mensagens: lote }, 60_000);   // a resposta da IA pode levar alguns segundos
-      if (!entregue) for (const e of votos) e.usada = false;
+      await postar('/api/conector/mensagens', { mensagens: lote }, 60_000);   // a resposta da IA pode levar alguns segundos
     }
   });
-}
-
-/** O voto decifrado e convertido na mensagem que o site entende; null (com o motivo no log, sem conteúdo nem telefone) se não vale. */
-function votoDeEnquete(m, atualizacao) {
-  const criacaoId = atualizacao.pollCreationMessageKey?.id;
-  if (!criacaoId || !atualizacao.vote) {
-    console.log('[conector] voto de enquete ignorado: pacote sem a enquete ou sem o voto');
-    return null;
-  }
-  const chave = m.key;
-  const r = interpretar({
-    cofre: enquetes,
-    criacaoId,
-    voto: atualizacao.vote,
-    votantes: [chave.participant, chave.participantAlt, chave.remoteJid, chave.remoteJidAlt, chave.senderPn],
-    decifrar: decryptPollVote,
-  });
-  if (!r.ok) {
-    console.log(`[conector] voto de enquete ignorado: ${r.motivo}`);
-    return null;
-  }
-  r.entrada.usada = true;   // cada enquete vale uma vez só
-  console.log(`[conector] voto de enquete aceito (${r.entrada.multipla ? 'múltipla' : 'única'})`);
-  return { entrada: r.entrada, mensagem: { id: m.key.id, telefone: r.entrada.telefone, texto: r.texto, nome: m.pushName ?? null, em: segundosDe(m.messageTimestamp), enquete: r.entrada.tag } };
 }
 
 /** Reconecta com espera crescente (3 s, 6 s, ... até 60 s). */

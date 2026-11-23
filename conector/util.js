@@ -25,10 +25,23 @@ function localDe(mensagem) {
   return l && Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : null;
 }
 
+// D120: mensagem de voz. Até 2 minutos e 140 KB (o envio ao site, em base64, cabe nos 200 KB que ele aceita).
+const AUDIO_MAX_SEGUNDOS = 120;
+const AUDIO_MAX_BYTES = 140_000;
+
+/** A mensagem de voz (ou áudio comum): {segundos, longo}. longo = passou do limite e não vale baixar. null se não é áudio. */
+function audioDe(mensagem) {
+  const a = mensagem?.audioMessage;
+  if (!a) return null;
+  const segundos = Number(a.seconds) || 0;
+  const bytes = Number(a.fileLength?.toNumber?.() ?? a.fileLength) || 0;
+  return { segundos, longo: segundos > AUDIO_MAX_SEGUNDOS || bytes > AUDIO_MAX_BYTES };
+}
+
 /** messageTimestamp pode vir como número ou como Long. Devolve segundos desde 1970 (0 se não souber). */
 function segundosDe(ts) {
   const n = typeof ts === 'object' && ts !== null ? (ts.toNumber?.() ?? 0) : Number(ts);
   return Number.isFinite(n) ? n : 0;
 }
 
-module.exports = { telefoneDe, textoDe, localDe, segundosDe };
+module.exports = { telefoneDe, textoDe, localDe, segundosDe, audioDe, AUDIO_MAX_SEGUNDOS, AUDIO_MAX_BYTES };

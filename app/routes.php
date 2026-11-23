@@ -34,6 +34,8 @@ return static function (Roteador $r): void {
 
     // ---------- API pública ----------
     $r->get('/api/cardapio', $publico->apiCardapio(...));
+    $r->get('/api/endereco/sugestoes', $publico->apiSugestoesEndereco(...));
+    $r->get('/api/endereco/detalhe', $publico->apiDetalheEndereco(...));
     $r->post('/api/pedidos', $publico->apiCriarPedido(...));
     $r->get('/api/pedidos/{codigo}', $publico->apiPedido(...));
     $r->post('/api/pedidos/{codigo}/dispensar', $publico->apiDispensar(...));
@@ -72,7 +74,6 @@ return static function (Roteador $r): void {
     // Faturamento (D101): Vendas, cancelamento de venda e Fechamento do dia
     $r->get('/api/admin/vendas', static fn ($req) => $faturamento()->vendas($req));
     $r->post('/api/admin/vendas/cancelar', static fn ($req) => $faturamento()->cancelar($req));
-    $r->post('/api/admin/vendas/zerar', static fn ($req) => $faturamento()->zerar($req));
     $r->get('/api/admin/fechamento', static fn ($req) => $faturamento()->calendario($req));
     $r->get('/api/admin/fechamento/{data}', static fn ($req) => $faturamento()->dia($req));
     $r->post('/api/admin/fechamento/{data}', static fn ($req) => $faturamento()->fechar($req));
@@ -88,7 +89,6 @@ return static function (Roteador $r): void {
     $r->post('/api/admin/assistente/testar', $assistente->testar(...));
     $r->post('/api/admin/assistente/recargas', $assistente->recarregar(...));
     $r->delete('/api/admin/assistente/recargas/{id}', $assistente->apagarRecarga(...));
-    $r->post('/api/admin/whatsapp/link', $config->linkDeTeste(...));
 
     // Usuários do painel (só o proprietário)
     $usuarios = new AdminUsuarioController();

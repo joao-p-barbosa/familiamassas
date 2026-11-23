@@ -15,7 +15,7 @@ use App\IA\OpenRouter;
 // A chave do OpenRouter NUNCA passa por aqui: só existe na variável de ambiente OPENROUTER_API_KEY.
 final class AdminAssistenteController
 {
-    private const BOOLEANOS = ['ia_ativo', 'ia_avisar_ia', 'ia_incluir_cardapio', 'ia_incluir_horarios', 'ia_incluir_entrega', 'whatsapp_enquetes', 'ia_pedido'];
+    private const BOOLEANOS = ['ia_ativo', 'ia_avisar_ia', 'ia_incluir_cardapio', 'ia_incluir_horarios', 'ia_incluir_entrega', 'ia_pedido'];
     private const TEXTOS = [   // chave => [rótulo, tamanho máximo]
         'ia_nome' => ['O nome do assistente', 40], 'ia_papel' => ['O papel', 1500], 'ia_tom_texto' => ['O tom personalizado', 300], 'ia_saudacao' => ['A saudação', 200],
         'ia_regras' => ['As regras', 1500], 'ia_escalonar' => ['A regra de passar para uma pessoa', 1000], 'ia_texto_livre' => ['O texto livre', 4000],
@@ -178,14 +178,6 @@ final class AdminAssistenteController
         if ($out['ia_nome'] === '') {
             $erros['ia_nome'] = 'Dê um nome ao assistente.';
         }
-        $palavras = array_values(array_filter(array_map('trim', explode(',', (string) ($in['whatsapp_palavras_cardapio'] ?? ''))), static fn (string $p): bool => $p !== ''));
-        $reservadas = array_intersect(array_map(\App\WhatsApp\FluxoPedido::chave(...), $palavras), \App\WhatsApp\FluxoPedido::RESERVADAS);
-        if ($palavras === [] || count($palavras) > 5 || max(array_map('mb_strlen', $palavras ?: [''])) > 30 || $reservadas !== []) {
-            $erros['whatsapp_palavras_cardapio'] = $reservadas !== []
-                ? 'Essa palavra o bot já usa para outra coisa: ' . implode(', ', $reservadas) . '.'
-                : 'Escreva de 1 a 5 palavras, separadas por vírgula (cada uma com até 30 letras).';
-        }
-        $out['whatsapp_palavras_cardapio'] = implode(', ', $palavras);
         $modelo = trim((string) ($in['ia_modelo'] ?? ''));
         if (!self::modeloValido($modelo)) {
             $erros['ia_modelo'] = 'Informe o identificador do modelo no OpenRouter, como anthropic/claude-haiku-5.5.';

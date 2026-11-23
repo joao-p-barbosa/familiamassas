@@ -41,19 +41,13 @@ final class MensageiroConector implements Mensageiro
     }
 
     /**
-     * O que vai para o Node. Enquete (D85): ele envia como enquete de verdade (o texto fica vazio); o resto vai como texto.
+     * O que vai para o Node: sempre texto (botões e link viram texto em Conector::texto).
      * @param array<string,mixed> $mensagem
-     * @return array<string,mixed>
+     * @return array{telefone:string, texto:string}
      */
     public static function corpo(string $telefone, array $mensagem): array
     {
-        if (($mensagem['type'] ?? '') !== 'poll') {
-            return ['telefone' => $telefone, 'texto' => Conector::texto($mensagem)];
-        }
-        return ['telefone' => $telefone, 'texto' => '', 'enquete' => [
-            'tag' => (string) $mensagem['poll']['tag'], 'pergunta' => (string) $mensagem['poll']['name'],
-            'opcoes' => array_values($mensagem['poll']['options']), 'multipla' => !empty($mensagem['poll']['multipla']),
-        ]];
+        return ['telefone' => $telefone, 'texto' => Conector::texto($mensagem)];
     }
 
     /** @return array{ok:bool, wamid:?string, erro:?string, transitorio:bool, janela_fechada:bool} */

@@ -1,4 +1,5 @@
 // Assistente com IA (D70 a D72), na versão simples para o dono da loja: só o que ele sabe e quer mexer.
+// Desde o D119 não é mais uma tela: aparece dentro da tela WhatsApp (whatsapp.js chama montarEm).
 //   Humor: nome, jeito de falar (cartões com exemplo), tamanho das respostas, saudação.
 //   Conhecimento: perguntas e respostas prontas e outras informações da loja.
 //   Testar: uma pergunta ao assistente, do jeito que está salvo.
@@ -8,9 +9,9 @@ import { $, $$, esc, delegar } from '../shared/dom.js';
 import { icone } from '../shared/icones.js';
 import { api } from '../shared/api.js';
 import { avisar } from '../shared/avisos.js';
-import { recipienteDaTela, mostrarErro } from './casca.js';
+import { mostrarErro } from './casca.js';
 
-const conteudo = recipienteDaTela();   // o contêiner desta tela (criado pelo roteador)
+let conteudo = null;   // o contêiner dentro da tela WhatsApp
 
 const ABAS = [
   { id: 'humor', titulo: 'Humor' },
@@ -135,19 +136,16 @@ function estadoHtml() {
 function desenhar() {
   const c = dados.config;
   conteudo.innerHTML = `
-    <div class="cabecalho-tela"><h1 class="cabecalho-tela__titulo">Assistente</h1></div>
     <form id="form-assistente" class="config assistente" novalidate>
       <section class="bloco assistente__topo">
+        <h2 class="bloco__titulo">Assistente com IA</h2>
         <label class="interruptor"><input type="checkbox" name="ia_ativo" ${c.ia_ativo ? 'checked' : ''}><span class="interruptor__trilho"></span><span><strong>Assistente ligado</strong></span></label>
         <p id="estado-ia" role="status">${estadoHtml()}</p>
       </section>
       <section class="bloco">
         <h2 class="bloco__titulo">Pedido pelo WhatsApp</h2>
         <label class="interruptor"><input type="checkbox" name="ia_pedido" ${c.ia_pedido ? 'checked' : ''}><span class="interruptor__trilho"></span><span><strong>A IA atende e anota o pedido</strong> (o cliente escreve do jeito dele)</span></label>
-        <p class="campo__ajuda">Com o assistente ligado, ele responde toda mensagem, monta o pedido, manda o resumo com o total e só cria o pedido depois do “sim” do cliente. <strong>Desligue a saudação automática do WhatsApp Business</strong>, para o cliente não receber duas respostas. Se alguém da loja responder pelo celular, o assistente fica quieto nessa conversa pelas horas do atendimento humano. Se a IA falhar ou o crédito acabar, o pedido segue pelo passo a passo abaixo.</p>
-        ${campo('whatsapp_palavras_cardapio', 'Palavra que o cliente digita para pedir pelo chat', c.whatsapp_palavras_cardapio, { max: 100, ajuda: 'Use a mesma palavra na saudação do WhatsApp Business ("Se preferir pedir por aqui, digite Cardápio"). Para aceitar mais de uma, separe por vírgula: Cardápio, Pedir.' })}
-        <label class="interruptor"><input type="checkbox" name="whatsapp_enquetes" ${c.whatsapp_enquetes ? 'checked' : ''}><span class="interruptor__trilho"></span><span>Mostrar as opções como enquete (o cliente toca na opção)</span></label>
-        <p class="campo__ajuda">O WhatsApp sempre mostra “Ver votos” embaixo de uma enquete, e não dá para tirar. Se isso confundir os clientes, desligue: as opções vão como lista numerada e o cliente responde com o número.</p>
+        <p class="campo__ajuda">Com o assistente ligado, ele responde toda mensagem, monta o pedido, manda o resumo com o total e só cria o pedido depois do “sim” do cliente. <strong>Desligue a saudação automática do WhatsApp Business</strong>, para o cliente não receber duas respostas. Se alguém da loja responder pelo celular, o assistente fica quieto nessa conversa pelas horas do atendimento humano. Se a IA falhar, o pedido segue passo a passo, com as opções numeradas.</p>
       </section>
       <div class="abas" role="tablist" aria-label="Seções do assistente">
         ${ABAS.map((a) => `<button type="button" class="chip" role="tab" id="aba-${a.id}" data-aba="${a.id}" aria-selected="${a.id === aba}" aria-controls="painel-${a.id}">${a.titulo}</button>`).join('')}
@@ -178,9 +176,8 @@ function coletar() {
   const config = {
     ...dados.config,
     ia_ativo: f.elements.ia_ativo.checked,
-    whatsapp_enquetes: f.elements.whatsapp_enquetes.checked,
     ia_pedido: f.elements.ia_pedido.checked,
-    whatsapp_palavras_cardapio: v('whatsapp_palavras_cardapio'), ia_nome: v('ia_nome'), ia_saudacao: v('ia_saudacao'), ia_tom_texto: v('ia_tom_texto'), ia_texto_livre: v('ia_texto_livre'),
+    ia_nome: v('ia_nome'), ia_saudacao: v('ia_saudacao'), ia_tom_texto: v('ia_tom_texto'), ia_texto_livre: v('ia_texto_livre'),
     ia_tom: f.querySelector('input[name="ia_tom"]:checked')?.value ?? dados.config.ia_tom,
     ia_tamanho: f.querySelector('input[name="ia_tamanho"]:checked')?.value ?? dados.config.ia_tamanho,
   };
@@ -250,40 +247,46 @@ async function testar() {
 }
 
 // ---------- Eventos ----------
-const sujo = () => { $('#nota-salvar', conteudo).textContent = 'Há alterações não salvas.'; };
-delegar(conteudo, 'click', '[data-aba]', (e, botao) => mostrarAba(botao.dataset.aba));
-delegar(conteudo, 'change', 'input[name="ia_tom"]', (e, radio) => {
-  $('#campo-tom-texto', conteudo).hidden = radio.value !== 'personalizado';
-});
-delegar(conteudo, 'input', '#form-assistente', (e) => { if (!e.target.closest('#painel-teste')) sujo(); });
-delegar(conteudo, 'change', '#form-assistente', (e) => { if (!e.target.closest('#painel-teste')) sujo(); });
-delegar(conteudo, 'click', '[data-nova-faq]', () => {
-  $('#lista-faqs', conteudo).insertAdjacentHTML('beforeend', faqHtml());
-  $$('[data-faq]', conteudo).at(-1).querySelector('input').focus();
-  sujo();
-});
-delegar(conteudo, 'click', '[data-tirar]', (e, botao) => {
-  botao.closest('li').remove();
-  sujo();
-});
-delegar(conteudo, 'click', '[data-exemplo]', (e, botao) => {
-  $('input[name="pergunta"]', conteudo).value = botao.dataset.exemplo;
-  testar();
-});
-delegar(conteudo, 'click', '[data-testar]', () => testar());
-delegar(conteudo, 'keydown', '#painel-teste input', (e) => {
-  if (e.key === 'Enter') {   // Enter no teste pergunta; não pode salvar o formulário
-    e.preventDefault();
+function ligarEventos() {
+  const sujo = () => { $('#nota-salvar', conteudo).textContent = 'Há alterações não salvas.'; };
+  delegar(conteudo, 'click', '[data-aba]', (e, botao) => mostrarAba(botao.dataset.aba));
+  delegar(conteudo, 'change', 'input[name="ia_tom"]', (e, radio) => {
+    $('#campo-tom-texto', conteudo).hidden = radio.value !== 'personalizado';
+  });
+  delegar(conteudo, 'input', '#form-assistente', (e) => { if (!e.target.closest('#painel-teste')) sujo(); });
+  delegar(conteudo, 'change', '#form-assistente', (e) => { if (!e.target.closest('#painel-teste')) sujo(); });
+  delegar(conteudo, 'click', '[data-nova-faq]', () => {
+    $('#lista-faqs', conteudo).insertAdjacentHTML('beforeend', faqHtml());
+    $$('[data-faq]', conteudo).at(-1).querySelector('input').focus();
+    sujo();
+  });
+  delegar(conteudo, 'click', '[data-tirar]', (e, botao) => {
+    botao.closest('li').remove();
+    sujo();
+  });
+  delegar(conteudo, 'click', '[data-exemplo]', (e, botao) => {
+    $('input[name="pergunta"]', conteudo).value = botao.dataset.exemplo;
     testar();
-  }
-});
-conteudo.addEventListener('submit', (e) => {
-  e.preventDefault();
-  salvar();
-});
+  });
+  delegar(conteudo, 'click', '[data-testar]', () => testar());
+  delegar(conteudo, 'keydown', '#painel-teste input', (e) => {
+    if (e.key === 'Enter') {   // Enter no teste pergunta; não pode salvar o formulário
+      e.preventDefault();
+      testar();
+    }
+  });
+  conteudo.addEventListener('submit', (e) => {
+    e.preventDefault();
+    salvar();
+  });
+}
 
-/** A tela abriu (a primeira vez ou de novo): busca tudo e desenha. */
-export async function montar() {
+/** Desenha o assistente dentro de `alvo` (a tela WhatsApp). Os eventos são ligados uma vez por contêiner. */
+export async function montarEm(alvo) {
+  if (conteudo !== alvo) {
+    conteudo = alvo;
+    ligarEventos();
+  }
   try {
     dados = await api('/api/admin/assistente');
     desenhar();
@@ -291,5 +294,3 @@ export async function montar() {
     mostrarErro(erro);
   }
 }
-
-export function desmontar() {}

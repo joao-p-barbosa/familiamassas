@@ -514,6 +514,11 @@ $doResumo = array_values(array_filter(array_slice($linhasTeste, (int) $posResumo
 conferir('No resumo: Monte seu prato pela massa e tamanho, prato da casa pelo nome e tamanho, bebida pelo nome, cada um com o valor', array_map(static fn (array $l): string => $l['t'] . ' | ' . ($l['d'] ?? ''), $doResumo), [
     '1x Penne (Inteiro) | R$ 46,90', '1x Lasanha da casa (Meio) | R$ 29,90', '2x Refrigerante lata | R$ 13,00',
 ]);
+$posFone = array_search('(11) 91234-5678', $textos, true);
+conferir('Telefone só no fim, grande, depois do "CLIENTE:" e antes do resumo; o nome segue lá em cima (D119)', [
+    $posFone !== false && $posFone > $posUltimoPrato && $posFone < $posResumo, $linhasTeste[(int) $posFone]['e'] ?? null, $textos[(int) $posFone - 1] ?? null,
+    count(array_filter($textos, static fn (string $t): bool => str_contains($t, '91234-5678'))), $textos[5] ?? null,
+], [true, 'caixa', 'CLIENTE: Comanda de teste', 1, 'Comanda de teste']);
 conferir('Os pratos lá em cima saem sem valor (o valor está no resumo)', array_values(array_filter($linhasTeste, static fn (array $l): bool => $l['t'] === '1x Monte seu prato'))[0]['d'] ?? null, null);
 conferir('Comanda do navegador recebe o nome curto do resumo', Comanda::comChecklist(['itens' => [['nome' => 'Monte seu prato', 'item_id' => null, 'montagem' => ['tamanho' => ['nome' => 'Meio'], 'massa' => ['nome' => 'Nhoque'], 'molho' => ['nome' => 'Sugo'], 'inclusos' => [], 'extras' => []]]]])['itens'][0]['nome_resumo'], 'Nhoque (Meio)');
 conferir('Comanda de teste tem acentos (o agente precisa imprimi-los)', str_contains($texto(Comanda::teste(['nome_loja' => 'X', 'com_preco' => true])), 'ação, pão'), true);
@@ -540,7 +545,9 @@ Banco::conexao()->exec("INSERT INTO ingredientes (nome, grupo, preco_extra_centa
 $comOregano = $montagemLista;
 $comOregano['inclusos'][] = ['nome' => 'Orégano'];
 $comTempero = array_column(Comanda::checklist($comOregano), 'titulo');
-conferir('Grupo "Tempero..." do cardápio sai depois dos ingredientes e antes do molho', array_slice($comTempero, -3), ['Acompanhamentos', 'Tempero (quanto quiser)', 'Molho']);
+conferir('Os grupos saem na ordem do cadastro (D119): o grupo novo, por último no cadastro, vem antes do molho', array_slice($comTempero, -3), ['Acompanhamentos', 'Tempero (quanto quiser)', 'Molho']);
+Banco::conexao()->exec("UPDATE ingredientes SET ordem = -1 WHERE nome = 'Orégano'");
+conferir('Grupo movido para cima no cadastro sai antes na comanda (D119)', array_column(Comanda::checklist($comOregano), 'titulo')[2] ?? null, 'Tempero (quanto quiser)');
 Banco::conexao()->exec("DELETE FROM ingredientes WHERE nome = 'Orégano'");
 $linhasLista = Comanda::linhas(['id' => 7, 'tipo' => 'retirada', 'mesa' => null, 'origem' => 'cardapio', 'criado_em' => '2026-11-20T12:00:00Z', 'cliente_nome' => 'Ana', 'cliente_telefone' => '',
     'observacoes' => '', 'taxa_entrega_centavos' => 0, 'total_centavos' => 0, 'pagamento' => 'pix', 'troco_para_centavos' => null,

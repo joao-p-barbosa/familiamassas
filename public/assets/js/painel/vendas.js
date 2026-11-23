@@ -142,36 +142,7 @@ function desenhar() {
             <span>Página ${d.pagina} de ${d.paginas}</span>
             <button type="button" class="botao botao--secundario botao--p" data-pagina="${d.pagina + 1}" ${d.pagina >= d.paginas ? 'disabled' : ''}>Mais antigas${icone('seta-dir', 16)}</button>
           </nav>` : ''}`}
-    </section>
-
-    <section class="bloco vendas__zerar" aria-labelledby="t-zerar">
-      <h2 class="bloco__titulo" id="t-zerar">Zerar vendas</h2>
-      <p class="campo__ajuda">Apaga todos os pedidos, contas do Salão, cancelamentos e fechamentos de caixa, e o próximo pedido volta a ser o #1. Use uma vez, depois dos testes, antes de começar a vender. Cardápio, clientes, configurações e usuários ficam.</p>
-      <button type="button" class="botao botao--perigo botao--p" data-zerar>${icone('lixeira', 16)}Zerar vendas</button>
     </section>`;
-}
-
-// ---------- Zerar vendas (D116) ----------
-function abrirZerar() {
-  dialogo.innerHTML = `
-    <header class="folha__topo">
-      <h2 class="folha__titulo" id="folha-dialogo-titulo">Zerar todas as vendas?</h2>
-      <button type="button" class="botao botao--fantasma botao--icone" data-fechar aria-label="Fechar">${icone('fechar')}</button>
-    </header>
-    <form class="folha__corpo formulario" id="form-zerar" novalidate>
-      <p>Todos os pedidos, contas do Salão, cancelamentos e fechamentos de caixa serão apagados. <strong>Não tem como desfazer.</strong></p>
-      <label class="campo">
-        <span class="campo__rotulo">Para confirmar, digite ZERAR</span>
-        <input class="entrada" name="confirmacao" autocomplete="off" autocapitalize="characters" aria-describedby="erro-confirmacao">
-        <span class="campo__erro" id="erro-confirmacao" hidden></span>
-      </label>
-    </form>
-    <footer class="folha__rodape folha__rodape--acoes">
-      <button type="button" class="botao botao--secundario" data-fechar>Voltar</button>
-      <button type="submit" form="form-zerar" class="botao botao--perigo">Zerar vendas</button>
-    </footer>`;
-  abrirFolha(dialogo);
-  $('[name="confirmacao"]', dialogo).focus();
 }
 
 const vazio = (figura, titulo, texto) => `
@@ -296,23 +267,6 @@ delegar(dialogo, 'input', '[data-item]', () => {
   $('#cancelar-soma', dialogo).textContent = soma ? `Sai da venda: ${reais(soma)}` : 'Nada escolhido ainda.';
 });
 dialogo.addEventListener('submit', async (e) => {
-  if (e.target.id !== 'form-zerar') return;
-  e.preventDefault();
-  const confirmacao = e.target.confirmacao.value.trim();
-  if (confirmacao !== 'ZERAR') return erroNoDialogo('confirmacao', 'Digite ZERAR, em maiúsculas, para confirmar.');
-  const botao = $('[type="submit"]', dialogo);
-  botao.setAttribute('aria-busy', 'true');
-  try {
-    const r = await api('/api/admin/vendas/zerar', { metodo: 'POST', corpo: { confirmacao } });
-    await fecharFolha(dialogo);
-    avisar(`Vendas zeradas: ${plural(r.apagados.pedidos, 'pedido apagado', 'pedidos apagados')}`);
-    carregar();
-  } catch (erro) {
-    botao.removeAttribute('aria-busy');
-    erroNoDialogo('confirmacao', erro.campos?.confirmacao ?? erro.message);
-  }
-});
-dialogo.addEventListener('submit', async (e) => {
   if (e.target.id !== 'form-cancelar' || !cancelando) return;
   e.preventDefault();
   const form = e.target;
@@ -366,7 +320,6 @@ delegar(conteudo, 'click', '[data-pagina]', (e, botao) => {
   pagina = Number(botao.dataset.pagina);
   carregar();
 });
-delegar(conteudo, 'click', '[data-zerar]', () => abrirZerar());
 delegar(conteudo, 'click', '[data-cancelar]', (e, botao) => {
   const venda = dados.lancamentos.find((v) => v.chave === botao.dataset.cancelar);
   if (venda) abrirCancelamento(venda);

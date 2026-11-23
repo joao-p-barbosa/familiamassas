@@ -2,7 +2,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const http = require('node:http');
-const { telefoneDe, textoDe, localDe, segundosDe } = require('./util');
+const { telefoneDe, textoDe, localDe, segundosDe, audioDe } = require('./util');
 const { criarServidor } = require('./servidor');
 
 test('telefoneDe: conversa individual, LID com senderPn, e o que o bot ignora', () => {
@@ -72,4 +72,12 @@ test('/enviar: desconectado devolve 503 e fila cheia devolve 429; a queda descar
   assert.equal(cheia.dono.limparFila(), 2);
   liberar();
   cheia.fechar();
+});
+
+test('audioDe: mensagem de voz curta, longa demais e o que não é áudio (D120)', () => {
+  assert.deepEqual(audioDe({ audioMessage: { seconds: 12, fileLength: 24000, ptt: true } }), { segundos: 12, longo: false });
+  assert.deepEqual(audioDe({ audioMessage: { seconds: 300, fileLength: 600000 } }), { segundos: 300, longo: true });
+  assert.deepEqual(audioDe({ audioMessage: { seconds: 30, fileLength: { toNumber: () => 900000 } } }), { segundos: 30, longo: true });
+  assert.equal(audioDe({ conversation: 'oi' }), null);
+  assert.equal(audioDe(undefined), null);
 });

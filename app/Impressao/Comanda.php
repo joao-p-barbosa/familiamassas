@@ -20,6 +20,9 @@ use App\Services\PedidoService;
  *
  * D111: depois dos pratos, antes do pagamento, o "RESUMO DO PEDIDO": uma linha por item ("1x Nhoque (Meio)", "2x Coca-Cola lata"),
  * com o valor (se a comanda leva preço), a taxa e o total. Dinheiro sai com "troco para R$ ..." ou "sem troco".
+ *
+ * D119: lá em cima fica só o nome (e o endereço, se entrega). Depois dos pratos vem "CLIENTE: nome" e o telefone em letra grande,
+ * e então o resumo, a taxa, o total e o pagamento.
  */
 final class Comanda
 {
@@ -56,12 +59,7 @@ final class Comanda
 
         // ---- Cliente e endereço ----
         $l[] = ['t' => '', 'e' => 'linha'];
-        $l[] = ['t' => (string) $pedido['cliente_nome'], 'e' => 'negrito'];
-        if ($ifood !== null && $ifood['telefone'] !== '') {
-            $l[] = ['t' => $ifood['telefone'] . ($ifood['localizador'] !== '' ? ' · localizador ' . $ifood['localizador'] : ''), 'e' => 'normal'];
-        } elseif (($pedido['cliente_telefone'] ?? '') !== '') {
-            $l[] = ['t' => self::telefone((string) $pedido['cliente_telefone']), 'e' => 'normal'];
-        }
+        $l[] = ['t' => (string) $pedido['cliente_nome'], 'e' => 'negrito'];   // o telefone vai no fim, grande (D119)
         if ($pedido['tipo'] === 'entrega') {
             $l[] = ['t' => trim($pedido['endereco_rua'] . ', ' . $pedido['endereco_numero'] . ($pedido['endereco_complemento'] ? ' · ' . $pedido['endereco_complemento'] : ''), ', '), 'e' => 'normal'];
             if ($pedido['endereco_bairro']) {
@@ -113,6 +111,17 @@ final class Comanda
             $l[] = ['t' => 'OBS DO PEDIDO: ' . $pedido['observacoes'], 'e' => 'negrito'];
         }
 
+        // ---- Cliente e telefone (D119): no fim, perto do resumo, com o telefone em letra grande para quem liga ou entrega ----
+        $l[] = ['t' => '', 'e' => 'linha'];
+        $l[] = ['t' => 'CLIENTE: ' . $pedido['cliente_nome'], 'e' => 'negrito'];
+        $fone = $ifood !== null ? (string) $ifood['telefone'] : self::telefone((string) ($pedido['cliente_telefone'] ?? ''));
+        if ($fone !== '') {
+            $l[] = ['t' => $fone, 'e' => 'caixa', 'a' => 'c'];
+        }
+        if ($ifood !== null && $ifood['localizador'] !== '') {
+            $l[] = ['t' => 'Localizador ' . $ifood['localizador'], 'e' => 'pequeno', 'a' => 'c'];
+        }
+
         // ---- Resumo do pedido (D111) e valores ----
         $l[] = ['t' => '', 'e' => 'linha'];
         $l[] = ['t' => 'RESUMO DO PEDIDO', 'e' => 'negrito', 'a' => 'c'];
@@ -156,7 +165,7 @@ final class Comanda
 
     /**
      * A lista de marcar de um prato montado: todas as opções do cardápio, a escolhida com marcada=true.
-     * Ordem do panfleto da cozinha: tamanho, massa, ingredientes (um bloco por grupo; os grupos "Tempero..." por último) e molho.
+     * Ordem do panfleto da cozinha: tamanho, massa, ingredientes (um bloco por grupo, na ordem do cadastro, D119) e molho.
      * A escolha é achada pelo id e, na falta dele, pelo nome. O que foi pedido mas não está mais no cardápio (apagado ou oculto
      * depois do pedido) entra no fim da seção, marcado: a cozinha nunca deixa de ver o que o cliente pediu.
      * @param array<string,mixed> $m a montagem gravada no item do pedido
@@ -197,8 +206,7 @@ final class Comanda
         foreach ($visiveis($catalogo['ingredientes'] ?? []) as $i) {
             $grupos[(string) $i['grupo']][] = $i;
         }
-        $ehTempero = static fn (string $g): bool => str_starts_with(mb_strtolower(trim($g)), 'tempero');
-        $ordem = array_merge(array_filter(array_keys($grupos), static fn (string $g): bool => !$ehTempero($g)), array_filter(array_keys($grupos), $ehTempero));
+        $ordem = array_keys($grupos);   // D119: a ordem dos grupos é a do cadastro (a mesma que o cliente vê ao montar)
         $restantes = $escolhidos;   // o que não caiu em nenhum grupo (apagado ou oculto depois do pedido) vai para "Outros"
         foreach ($ordem as $grupo) {
             $doGrupo = array_values(array_filter($escolhidos, static fn (array $e): bool => array_filter($grupos[$grupo], static fn (array $o): bool => $igual($e, $o)) !== []));

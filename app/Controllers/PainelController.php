@@ -28,7 +28,6 @@ final class PainelController
         'usuarios'      => ['titulo' => 'Usuários',                'grupo' => 'Loja',     'perfis' => ['admin']],
         'configuracoes' => ['titulo' => 'Configurações',           'grupo' => 'Loja',     'perfis' => ['admin']],
         'whatsapp'      => ['titulo' => 'WhatsApp',                'grupo' => 'Loja',     'perfis' => ['admin']],
-        'assistente'    => ['titulo' => 'Assistente',              'grupo' => 'Loja',     'perfis' => ['admin']],
         'ifood'         => ['titulo' => 'iFood',                   'grupo' => 'Integrações', 'perfis' => ['admin']],
         'impressora'    => ['titulo' => 'Impressora',              'grupo' => 'Integrações', 'perfis' => ['admin']],
     ];
@@ -82,6 +81,10 @@ final class PainelController
             return;
         }
         $tela = $req->parametro('tela');
+        if ($tela === 'assistente') {   // D119: o Assistente mora dentro da tela WhatsApp
+            Resposta::redirecionar('/painel/whatsapp');
+            return;
+        }
         if (in_array($tela, self::TELAS_RETIRADAS, true)) {
             // Cozinha, Salão e Histórico do salão saíram: o endereço antigo leva ao quadro (e "?novo=1" abre o novo pedido do salão).
             Resposta::redirecionar(self::telaInicial($usuario['perfil']) . ($req->consulta('novo') !== '' ? '?novo=1' : ''));

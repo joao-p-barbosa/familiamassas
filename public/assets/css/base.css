@@ -98,6 +98,10 @@ a {
   outline-offset: 2px;
   border-radius: var(--raio-1);
 }
+/* Título que recebe o foco por código ao trocar de tela (tabindex="-1"): o leitor de tela começa por ele, sem o anel. */
+[tabindex="-1"]:focus-visible {
+  outline: none;
+}
 
 [hidden] {
   display: none !important;

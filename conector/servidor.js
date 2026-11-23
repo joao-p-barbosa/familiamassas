@@ -2,7 +2,6 @@
 const http = require('node:http');
 const crypto = require('node:crypto');
 
-const { validar } = require('./enquete');
 
 const LIMITE_CORPO = 100_000;
 
@@ -21,7 +20,7 @@ function criarServidor({ segredo, conectado, enviar, espacoMs = 2000, filaMax = 
     while (fila.length > 0) {
       const item = fila.shift();
       try {
-        await enviar(item.telefone, item.texto, item.enquete);
+        await enviar(item.telefone, item.texto);
       } catch (erro) {
         registrar(`[conector] envio falhou: ${erro?.message ?? erro}`);
       }
@@ -53,17 +52,11 @@ function criarServidor({ segredo, conectado, enviar, espacoMs = 2000, filaMax = 
       }
       const telefone = String(dados.telefone ?? '').replace(/\D/g, '');
       const texto = String(dados.texto ?? '');
-      let enquete = null;
-      if (dados.enquete !== undefined && dados.enquete !== null) {   // a pergunta com as escolhas vai como enquete (D85)
-        const v = validar(dados.enquete);
-        if (v.erro) return responder(res, 400, { erro: v.erro });
-        enquete = v.enquete;
-      }
-      if (telefone.length < 10 || telefone.length > 15 || (texto === '' && enquete === null)) return responder(res, 400, { erro: 'telefone ou texto inválido' });
+      if (telefone.length < 10 || telefone.length > 15 || texto === '') return responder(res, 400, { erro: 'telefone ou texto inválido' });
       if (!conectado()) return responder(res, 503, { erro: 'WhatsApp desconectado' });
       if (fila.length >= filaMax) return responder(res, 429, { erro: 'fila de envio cheia' });
       const id = crypto.randomUUID();
-      fila.push({ id, telefone, texto, enquete });
+      fila.push({ id, telefone, texto });
       drenar();
       return responder(res, 202, { id });
     });

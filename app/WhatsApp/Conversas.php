@@ -32,6 +32,14 @@ final class Conversas
         return $consulta->rowCount() === 1;
     }
 
+    /** D120: a mensagem já foi registrada (o conector repetiu)? Evita transcrever o mesmo áudio duas vezes. */
+    public function jaRecebido(string $wamid): bool
+    {
+        $consulta = Banco::conexao()->prepare('SELECT 1 FROM whatsapp_eventos WHERE wamid = ?');
+        $consulta->execute([mb_substr($wamid, 0, 200)]);
+        return $consulta->fetchColumn() !== false;
+    }
+
     /** @return array{telefone:string, modo:string, humano_ate:?string, ultima_msg_cliente_em:?string, ultimo_pedido_id:?int, criado_em:string}|null */
     public function conversa(string $telefone): ?array
     {
@@ -110,7 +118,7 @@ final class Conversas
 
     /**
      * Mensagens de uma conversa, da mais antiga para a mais nova.
-     * @return list<array{id:int, direcao:string, tipo:string, em:string, texto:string, botoes:array<string,string>, link:?array, enquete:?array{opcoes:list<string>, multipla:bool}, erro:?string, nome:?string, botao:?string}>
+     * @return list<array{id:int, direcao:string, tipo:string, em:string, texto:string, botoes:array<string,string>, link:?array, erro:?string, nome:?string, botao:?string}>
      */
     public function mensagens(string $telefone, int $limite = 40): array
     {
@@ -128,7 +136,6 @@ final class Conversas
                 'texto' => (string) ($resumo['texto'] ?? ''),
                 'botoes' => is_array($resumo['botoes'] ?? null) ? $resumo['botoes'] : [],
                 'link' => is_array($resumo['link'] ?? null) ? $resumo['link'] : null,
-                'enquete' => is_array($resumo['enquete'] ?? null) ? $resumo['enquete'] : null,
                 'erro' => isset($resumo['erro']) ? (string) $resumo['erro'] : null,
                 'nome' => isset($resumo['nome']) ? (string) $resumo['nome'] : null,
                 'botao' => isset($resumo['botao']) ? (string) $resumo['botao'] : null,
@@ -160,27 +167,6 @@ final class Conversas
                 'humano_ate' => Relogio::iso($c['humano_ate']),
                 'janela_aberta' => $this->janelaAberta($c['telefone']),
                 'ultima_msg_cliente_em' => Relogio::iso($c['ultima_msg_cliente_em']),
-            ];
-        }
-        return $lista;
-    }
-
-    /**
-     * Atividade recente para a tela de integração: sem o texto das mensagens e com o telefone mascarado.
-     * @return list<array{em:string, direcao:string, tipo:string, telefone:string, erro:?string, motivo:?string}>
-     */
-    public function recentes(int $limite = 20): array
-    {
-        $lista = [];
-        foreach (Banco::conexao()->query('SELECT direcao, tipo, telefone, payload_resumido, criado_em FROM whatsapp_eventos ORDER BY id DESC LIMIT ' . max(1, min(100, $limite)))->fetchAll() as $linha) {
-            $resumo = json_decode((string) $linha['payload_resumido'], true);
-            $lista[] = [
-                'em' => Relogio::iso($linha['criado_em']),
-                'direcao' => $linha['direcao'],
-                'tipo' => $linha['tipo'],
-                'telefone' => self::mascarar($linha['telefone']),
-                'erro' => is_array($resumo) && isset($resumo['erro']) ? (string) $resumo['erro'] : null,
-                'motivo' => is_array($resumo) && isset($resumo['motivo']) ? (string) $resumo['motivo'] : null,
             ];
         }
         return $lista;

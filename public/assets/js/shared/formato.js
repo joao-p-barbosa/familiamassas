@@ -40,9 +40,14 @@ export const dataHora = (iso) => (iso ? diaHora.format(new Date(iso)) : '');
 /** Minutos inteiros entre um ISO e agora. */
 export const minutosDesde = (iso, agora = Date.now()) => Math.max(0, Math.floor((agora - new Date(iso).getTime()) / 60000));
 
-/** 7 → "7 min"; 75 → "1 h 15" */
+/** 7 → "7 min"; 75 → "1 h 15"; 1500 → "1 d 1 h" (pedido esquecido aberto não estoura o cartão) */
 export function duracao(minutos) {
   if (minutos < 60) return `${minutos} min`;
+  if (minutos >= 1440) {
+    const d = Math.floor(minutos / 1440);
+    const hd = Math.floor((minutos % 1440) / 60);
+    return hd === 0 ? `${d} d` : `${d} d ${hd} h`;
+  }
   const h = Math.floor(minutos / 60);
   const m = minutos % 60;
   return m === 0 ? `${h} h` : `${h} h ${String(m).padStart(2, '0')}`;

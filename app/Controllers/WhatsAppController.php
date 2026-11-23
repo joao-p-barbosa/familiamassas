@@ -162,7 +162,6 @@ final class WhatsAppController
             'falhas_24h' => $conta("SELECT COUNT(*) FROM whatsapp_eventos WHERE tipo IN ('falha', 'falha_entrega') AND criado_em >= ?", [$ontem]),
             'envios_pendentes' => $conta('SELECT COUNT(*) FROM whatsapp_envios_pendentes WHERE proxima_tentativa_em <> ?', [Avisos::DESISTIU]),
             'pedidos_whatsapp_hoje' => $conta("SELECT COUNT(*) FROM pedidos WHERE origem = 'whatsapp' AND criado_em >= ?", [Relogio::inicioDoDiaDaLoja()]),
-            'recentes' => $conversas->recentes(20),
             'fila' => (new Avisos())->pendentes(20),
             'atendimento' => $conversas->emAtendimento(),
         ]);

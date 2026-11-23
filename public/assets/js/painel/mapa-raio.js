@@ -4,7 +4,7 @@
 import { $, esc, delegar } from '../shared/dom.js';
 import { icone } from '../shared/icones.js';
 import { abrirFolha, fecharFolha } from '../shared/folha.js';
-import { carregarLeaflet } from '../cardapio/mapa.js';
+import { carregarLeaflet, camadasDoMapa } from '../cardapio/mapa.js';
 
 const dialogo = $('#folha-mapa');   // a mesma janela do mapa do local da loja (as duas nunca abrem juntas)
 let sessao = null;
@@ -65,10 +65,7 @@ async function iniciar(outras) {
   s.map = L.map('mapa-tela', { center: centro, zoom: 13, zoomControl: false });
   L.control.zoom({ position: 'topright', zoomInTitle: 'Aproximar', zoomOutTitle: 'Afastar' }).addTo(s.map);
   s.map.attributionControl.setPrefix(false);
-  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    referrerPolicy: 'origin', maxZoom: 19,
-    attribution: '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>',
-  }).addTo(s.map).once('tileerror', () => aviso('As imagens do mapa não carregaram. Confira a internet.'));
+  camadasDoMapa(L, s.map).once('tileerror', () => aviso('As imagens do mapa não carregaram. Confira a internet.'));
 
   const acento = cor('--cor-acento');
   for (const km of outras.filter((k) => k > 0).sort((a, b) => b - a)) {

@@ -23,7 +23,7 @@ use App\WhatsApp\WhatsApp;
  *   - o resumo com o total é escrito pelo servidor, não pela IA, e vai numa mensagem separada;
  *   - o pedido só é criado se o cliente confirmou o resumo E nada mudou desde ele (impressão digital do carrinho).
  * O carrinho fica em whatsapp_sessoes com a etapa "ia" (o passo a passo ignora essas linhas). Se a IA falhar, quem chamou
- * (o Bot) segue pelo passo a passo com enquete: o cliente nunca fica sem resposta.
+ * (o Bot) segue pelo passo a passo numerado: o cliente nunca fica sem resposta.
  */
 final class PedidoPorIa
 {

@@ -63,6 +63,27 @@ final class PublicoController
         Resposta::json(self::dadosCardapio());
     }
 
+    /** GET /api/endereco/sugestoes?q=...&sessao=... (D119): busca de endereço do mapa, com preferência pelos arredores da loja. */
+    public function apiSugestoesEndereco(Requisicao $req): void
+    {
+        $config = new \App\Repositories\ConfigRepository();
+        $lat = $config->get('loja_lat');
+        $lng = $config->get('loja_lng');
+        Resposta::json(['sugestoes' => \App\Services\Geocodificador::sugestoes(
+            $req->consulta('q'), is_numeric($lat) ? (float) $lat : null, is_numeric($lng) ? (float) $lng : null, $req->consulta('sessao'),
+        ), 'google' => \App\Services\Geocodificador::usaGoogle()]);
+    }
+
+    /** GET /api/endereco/detalhe?id=...&sessao=... (D119): o ponto e o endereço da sugestão escolhida. */
+    public function apiDetalheEndereco(Requisicao $req): void
+    {
+        $detalhe = \App\Services\Geocodificador::detalhe($req->consulta('id'), $req->consulta('sessao'));
+        if ($detalhe === null) {
+            throw ErroHttp::naoEncontrado('Não achamos esse endereço no mapa.');
+        }
+        Resposta::json($detalhe);
+    }
+
     public function apiCriarPedido(Requisicao $req): void
     {
         $criado = (new PedidoService())->criar($req->json());
