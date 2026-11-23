@@ -57,7 +57,7 @@ function mudar(novo) {
 // ---------- Envio (site → WhatsApp) ----------
 // O que o bot enviou: o resto que sai deste número foi digitado por alguém da loja no celular (D106).
 const enviadas = criarRegistroDeEnviadas();
-const vigia = criarVigia({ registro: enviadas, avisar: (telefone) => postar('/api/conector/equipe', { telefone }) });
+const vigia = criarVigia({ registro: enviadas, avisar: (telefone, texto, id) => postar('/api/conector/equipe', { telefone, texto, id }) });
 const saida = criarServidor({
   segredo: SEGREDO,
   conectado: () => estado === 'conectado' && sock !== null,
@@ -135,7 +135,7 @@ async function conectar() {
     const lote = [];
     for (const m of messages) {
       if (m.key.fromMe) {
-        // Digitada no celular da loja? O site decide se pausa o bot (só com o pedido pela IA ligado).
+        // Digitada no celular da loja? O site decide se pausa o bot ou se ele continua junto (D123).
         const conteudoMeu = normalizeMessageContent(m.message);
         if (podeSerDaEquipe(m, conteudoMeu, Math.floor(Date.now() / 1000), segundosDe(m.messageTimestamp))) {
           let foneMeu = telefoneDe(m.key);
@@ -143,7 +143,7 @@ async function conectar() {
             const pn = await sock.signalRepository?.lidMapping?.getPNForLID(m.key.remoteJid).catch(() => null);
             if (pn) foneMeu = telefoneDe({ remoteJid: pn.includes('@') ? pn : `${pn}@s.whatsapp.net` });
           }
-          if (foneMeu) vigia(m.key.id, foneMeu).catch(() => {});
+          if (foneMeu) vigia(m.key.id, foneMeu, textoDe(conteudoMeu)).catch(() => {});
         }
         continue;
       }

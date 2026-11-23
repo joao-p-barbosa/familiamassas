@@ -102,11 +102,20 @@ final class Bot
     /**
      * Alguém da loja escreveu nesta conversa pelo celular (canal QR, D106). Com o pedido pela IA, o bot sai da frente e a conversa
      * fica com a pessoa pelas horas configuradas. Sem ele, nada muda: a saudação do WhatsApp Business também sai do celular.
+     * D123: com "o bot continua quando a equipe responde" ligado, o bot não pausa; a mensagem da pessoa entra na conversa
+     * (tipo "equipe") e a IA a lê no histórico, para não contradizer quem está ajudando.
      * @return bool true = o bot pausou
      */
-    public function equipeRespondeu(string $telefone): bool
+    public function equipeRespondeu(string $telefone, string $texto = '', string $id = ''): bool
     {
+        $texto = trim(mb_substr($texto, 0, 1000));
+        if ($texto !== '') {
+            $this->conversas->registrarEvento('equipe:' . ($id !== '' ? $id : bin2hex(random_bytes(8))), $telefone, 'out', 'equipe', ['texto' => $texto]);
+        }
         if (!$this->pedidoIa->ligado() || $this->assistente->indisponivel($telefone, PHP_INT_MAX) === 'desligada') {
+            return false;
+        }
+        if ($this->config->get('ia_continuar_com_equipe', '0') === '1') {
             return false;
         }
         $this->conversas->entrarNoAtendimentoHumano($telefone, max(1, $this->config->inteiro('whatsapp_humano_horas', 2)));

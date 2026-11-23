@@ -31,6 +31,7 @@ final class AssistenteRepository
     public const PADROES = [
         'ia_ativo' => '0',
         'ia_pedido' => '1',                            // a IA conversa e monta o pedido (D106); desligado: só tira dúvidas e o pedido é pelo passo a passo
+        'ia_continuar_com_equipe' => '0',              // D123: alguém da loja respondeu pelo celular e o bot segue junto (desligado: o bot pausa)
         'ia_modelo' => self::MODELO_PADRAO,
         'ia_nome' => 'Assistente',
         'ia_papel' => 'Você atende os clientes da loja pelo WhatsApp: tira dúvidas sobre o cardápio, os horários e a entrega, e leva o cliente a fazer o pedido pelo link do cardápio.',

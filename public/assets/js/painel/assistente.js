@@ -145,7 +145,9 @@ function desenhar() {
       <section class="bloco">
         <h2 class="bloco__titulo">Pedido pelo WhatsApp</h2>
         <label class="interruptor"><input type="checkbox" name="ia_pedido" ${c.ia_pedido ? 'checked' : ''}><span class="interruptor__trilho"></span><span><strong>A IA atende e anota o pedido</strong> (o cliente escreve do jeito dele)</span></label>
-        <p class="campo__ajuda">Com o assistente ligado, ele responde toda mensagem, monta o pedido, manda o resumo com o total e só cria o pedido depois do “sim” do cliente. <strong>Desligue a saudação automática do WhatsApp Business</strong>, para o cliente não receber duas respostas. Se alguém da loja responder pelo celular, o assistente fica quieto nessa conversa pelas horas do atendimento humano. Se a IA falhar, o pedido segue passo a passo, com as opções numeradas.</p>
+        <p class="campo__ajuda">Com o assistente ligado, ele responde toda mensagem, monta o pedido, manda o resumo com o total e só cria o pedido depois do “sim” do cliente. <strong>Desligue a saudação automática do WhatsApp Business</strong>, para o cliente não receber duas respostas. Se a IA falhar, o pedido segue passo a passo, com as opções numeradas.</p>
+        <label class="interruptor"><input type="checkbox" name="ia_continuar_com_equipe" ${c.ia_continuar_com_equipe ? 'checked' : ''}><span class="interruptor__trilho"></span><span><strong>O assistente continua quando alguém da loja responde</strong> pelo celular</span></label>
+        <p class="campo__ajuda">Desligado: se alguém da loja responder pelo celular, o assistente fica quieto nessa conversa pelas horas do atendimento humano. Ligado: a pessoa ajuda e o assistente segue atendendo e anotando o pedido, lendo o que a pessoa escreveu. Bom para a fase de migração. “Falar com atendente” continua pausando o assistente.</p>
       </section>
       <div class="abas" role="tablist" aria-label="Seções do assistente">
         ${ABAS.map((a) => `<button type="button" class="chip" role="tab" id="aba-${a.id}" data-aba="${a.id}" aria-selected="${a.id === aba}" aria-controls="painel-${a.id}">${a.titulo}</button>`).join('')}
@@ -177,6 +179,7 @@ function coletar() {
     ...dados.config,
     ia_ativo: f.elements.ia_ativo.checked,
     ia_pedido: f.elements.ia_pedido.checked,
+    ia_continuar_com_equipe: f.elements.ia_continuar_com_equipe.checked,
     ia_nome: v('ia_nome'), ia_saudacao: v('ia_saudacao'), ia_tom_texto: v('ia_tom_texto'), ia_texto_livre: v('ia_texto_livre'),
     ia_tom: f.querySelector('input[name="ia_tom"]:checked')?.value ?? dados.config.ia_tom,
     ia_tamanho: f.querySelector('input[name="ia_tamanho"]:checked')?.value ?? dados.config.ia_tamanho,

@@ -40,6 +40,7 @@ function balaoHtml(m, { clicavel }) {
   const botoes = Object.entries(m.botoes ?? {});
   return `
     <li class="balao balao--loja">
+      ${m.tipo === 'equipe' ? '<span class="balao__quem">Equipe (pelo celular)</span>' : ''}
       <p>${esc(m.texto)}</p>
       ${m.link ? `<a class="balao__acao" href="${esc(m.link.url)}" target="_blank" rel="noopener">${icone('externo', 14)}${esc(m.link.rotulo)}</a>` : ''}
       ${botoes.length ? `<div class="balao__botoes">${botoes.map(([id, titulo]) => clicavel

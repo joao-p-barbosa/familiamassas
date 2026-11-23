@@ -29,16 +29,14 @@ test('registro de enviadas: guarda o id e esquece depois da validade', () => {
   assert.equal(r.tamanho(), 1);
 });
 
-test('vigia: espera o envio terminar, ignora o que o bot mandou e avisa uma vez por conversa', async () => {
-  let relogio = 0;
-  const registro = criarRegistroDeEnviadas({ agora: () => relogio });
+test('vigia: espera o envio terminar, ignora o que o bot mandou e avisa cada mensagem da equipe com o texto', async () => {
+  const registro = criarRegistroDeEnviadas();
   const avisos = [];
-  const vigia = criarVigia({ registro, avisar: async (t) => avisos.push(t), agora: () => relogio,
+  const vigia = criarVigia({ registro, avisar: async (t, texto, id) => avisos.push([t, texto, id]),
     esperar: async () => registro.marcar('DO-BOT') });   // o envio do bot termina durante a espera
-  assert.equal(await vigia('DO-BOT', '5511900000001'), false, 'mensagem do bot');
-  assert.equal(await vigia('EQUIPE-1', '5511900000001'), true, 'digitada no celular');
-  assert.equal(await vigia('EQUIPE-2', '5511900000001'), false, 'mesma conversa logo depois: não repete o aviso');
-  relogio = 61_000;
-  assert.equal(await vigia('EQUIPE-3', '5511900000001'), true, 'depois do intervalo, avisa de novo');
-  assert.deepEqual(avisos, ['5511900000001', '5511900000001']);
+  assert.equal(await vigia('DO-BOT', '5511900000001', 'do bot'), false, 'mensagem do bot');
+  assert.equal(await vigia('EQUIPE-1', '5511900000001', 'já sai!'), true, 'digitada no celular');
+  assert.equal(await vigia('EQUIPE-2', '5511900000001', 'mais 10 min'), true, 'a mensagem seguinte também vai (D123)');
+  assert.equal(await vigia('EQUIPE-2', '5511900000001', 'mais 10 min'), false, 'o mesmo id repetido, não');
+  assert.deepEqual(avisos, [['5511900000001', 'já sai!', 'EQUIPE-1'], ['5511900000001', 'mais 10 min', 'EQUIPE-2']]);
 });

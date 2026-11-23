@@ -1696,6 +1696,24 @@ $fonePi6 = '5511977771006';
 $botPi->equipeRespondeu($fonePi6);
 $antesChamadasPi = count($pedidosIa);
 conferir('A equipe respondeu pelo celular: a conversa vai para atendimento humano e o bot não chama a IA', [$dizPi($fonePi6, 'oi?'), count($pedidosIa) - $antesChamadasPi], ['humano', 0]);
+
+// 8b. D123: com "o assistente continua quando a equipe responde", o bot não pausa e a IA lê o que a pessoa escreveu.
+$repoIa->salvarConfig(['ia_continuar_com_equipe' => '1']);
+$fonePi8 = '5511977771008';
+$pausouPi = $botPi->equipeRespondeu($fonePi8, 'Oi! Aqui é a Ana, da loja. Temos nhoque hoje sim.', 'EQ-1');
+$botPi->equipeRespondeu($fonePi8, 'Oi! Aqui é a Ana, da loja. Temos nhoque hoje sim.', 'EQ-1');   // o conector repetiu o mesmo id
+$msgsEquipe = array_values(array_filter((new App\WhatsApp\Conversas())->mensagens($fonePi8), static fn (array $m): bool => $m['tipo'] === 'equipe'));
+conferir('D123: o bot continua quando a equipe responde (não pausa) e a mensagem da pessoa fica na conversa uma vez só', [
+    $pausouPi, (new App\WhatsApp\Conversas())->emAtendimentoHumano($fonePi8), count($msgsEquipe), $msgsEquipe[0]['direcao'] ?? null,
+], [false, false, 1, 'out']);
+$filaIa = [$textoIa('Perfeito! Qual tamanho do nhoque?')];
+$antesChamadasPi = count($pedidosIa);
+$resPi8 = $dizPi($fonePi8, 'então quero um nhoque');
+$historicoPi8 = json_encode($pedidosIa[$antesChamadasPi]['corpo']['messages'] ?? [], JSON_UNESCAPED_UNICODE);
+conferir('D123: o cliente escreve depois da pessoa, a IA continua atendendo e lê o que a pessoa escreveu', [
+    $resPi8, str_contains($historicoPi8, '[escrito por uma pessoa da equipe da loja ao cliente, não pelo cliente] Oi! Aqui é a Ana'),
+], ['ia', true]);
+$repoIa->salvarConfig(['ia_continuar_com_equipe' => '0']);
 $repoIa->salvarConfig(['ia_pedido' => '0']);
 $botPi->equipeRespondeu('5511977771007');
 conferir('Com o pedido pela IA desligado, a mensagem do celular da loja não pausa o bot (a saudação do WhatsApp Business também sai de lá)', (new App\WhatsApp\Conversas())->emAtendimentoHumano('5511977771007'), false);

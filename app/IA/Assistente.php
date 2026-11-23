@@ -232,7 +232,11 @@ final class Assistente
         if ($ultima !== null && $ultima['direcao'] === 'in' && trim((string) $ultima['texto']) === trim($atual)) {
             array_pop($lista);   // o Bot já registrou a mensagem de agora
         }
-        $mensagens = array_map(static fn (array $m): array => ['role' => $m['direcao'] === 'in' ? 'user' : 'assistant', 'content' => mb_substr((string) $m['texto'], 0, 600)], array_slice($lista, -$memoria));
+        // D123: o que alguém da loja escreveu pelo celular vai como nota marcada (não como fala da IA, e sem ser descartada quando
+        // abre a conversa), para a IA seguir o que a pessoa combinou com o cliente.
+        $mensagens = array_map(static fn (array $m): array => $m['tipo'] === 'equipe'
+            ? ['role' => 'user', 'content' => '[escrito por uma pessoa da equipe da loja ao cliente, não pelo cliente] ' . mb_substr((string) $m['texto'], 0, 600)]
+            : ['role' => $m['direcao'] === 'in' ? 'user' : 'assistant', 'content' => mb_substr((string) $m['texto'], 0, 600)], array_slice($lista, -$memoria));
         while ($mensagens !== [] && $mensagens[0]['role'] !== 'user') {
             array_shift($mensagens);   // alguns modelos exigem que a conversa comece pelo cliente
         }

@@ -2,8 +2,9 @@
 
 /**
  * Quem escreveu pelo celular da loja (D106). O WhatsApp entrega ao conector, como "fromMe", tanto o que o bot enviou quanto o
- * que alguém da equipe digitou no aparelho. O registro guarda os ids do que o bot enviou; o resto é a equipe, e o site põe a
- * conversa em atendimento humano (o bot fica quieto nela).
+ * que alguém da equipe digitou no aparelho. O registro guarda os ids do que o bot enviou; o resto é a equipe. O site recebe o
+ * texto e decide: põe a conversa em atendimento humano (o bot fica quieto) ou, com "o bot continua" ligado (D123), só guarda a
+ * mensagem para a IA saber o que a pessoa disse.
  *
  * O id só chega depois que o envio termina, e o WhatsApp pode avisar da mensagem antes disso: por isso a decisão espera
  * alguns segundos (esperaMs) antes de conferir o registro.
@@ -40,19 +41,18 @@ function podeSerDaEquipe(m, conteudo, agoraSegundos, segundosDaMensagem) {
 }
 
 /**
- * Junta as decisões: espera, confere o registro e avisa o site uma vez por conversa a cada `intervaloMs`.
- * @param {{ registro: ReturnType<typeof criarRegistroDeEnviadas>, avisar: (telefone: string) => Promise<unknown>, esperaMs?: number, intervaloMs?: number, agora?: () => number, esperar?: (ms: number) => Promise<void> }} opcoes
+ * Junta as decisões: espera o envio do bot terminar, confere o registro e avisa o site de cada mensagem da equipe
+ * (uma vez por id), com o texto dela.
+ * @param {{ registro: ReturnType<typeof criarRegistroDeEnviadas>, avisar: (telefone: string, texto: string, id: string) => Promise<unknown>, esperaMs?: number, esperar?: (ms: number) => Promise<void> }} opcoes
  */
-function criarVigia({ registro, avisar, esperaMs = 4000, intervaloMs = 60_000, agora = () => Date.now(), esperar = (ms) => new Promise((r) => setTimeout(r, ms)) }) {
-  const avisados = new Map();   // telefone → quando avisou
-  return async function conferir(id, telefone) {
+function criarVigia({ registro, avisar, esperaMs = 4000, esperar = (ms) => new Promise((r) => setTimeout(r, ms)) }) {
+  const avisados = criarRegistroDeEnviadas();   // ids já avisados (o WhatsApp pode entregar o mesmo evento duas vezes)
+  return async function conferir(id, telefone, texto = '') {
     if (!id || !telefone) return false;
     await esperar(esperaMs);
-    if (registro.doBot(id)) return false;
-    const ultimo = avisados.get(telefone);
-    if (ultimo !== undefined && agora() - ultimo < intervaloMs) return false;
-    avisados.set(telefone, agora());
-    await avisar(telefone);
+    if (registro.doBot(id) || avisados.doBot(id)) return false;
+    avisados.marcar(id);
+    await avisar(telefone, String(texto ?? '').slice(0, 1000), id);
     return true;
   };
 }
