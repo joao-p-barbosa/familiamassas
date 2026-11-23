@@ -489,7 +489,7 @@ conferir('Comanda do iFood a cobrar: o valor é o de payments.pending, não o to
 conferir('Comanda do iFood: código de coleta e quem entrega', [str_contains($doIfood, 'Código de coleta: '), str_contains($doIfood, 'Entregador do iFood')], [true, true]);
 $comum = $pedidos->porId($pedidoComum());
 $comPreco = $texto(Comanda::linhas($comum, ['nome_loja' => 'Família Massas', 'com_preco' => true]));
-conferir('Comanda comum com preço: total, telefone e o pagamento num quadro em destaque (D97)', [str_contains($comPreco, 'TOTAL | R$ 24,90'), str_contains($comPreco, 'PAGAMENTO: PIX'), str_contains($comPreco, '(11) 91234-5678')], [true, true, true]);
+conferir('Comanda comum com preço: total e o pagamento num quadro em destaque (D97); sem o telefone (D122)', [str_contains($comPreco, 'TOTAL | R$ 24,90'), str_contains($comPreco, 'PAGAMENTO: PIX'), str_contains($comPreco, '91234-5678')], [true, true, false]);
 $semPreco = Comanda::linhas($comum, ['nome_loja' => 'X', 'com_preco' => false]);
 $quadroPagamento = array_values(array_filter($semPreco, static fn (array $l): bool => str_starts_with($l['t'], 'PAGAMENTO')));
 conferir('Comanda sem preço por item: o pagamento sai no quadro e o TOTAL sai no resumo mesmo assim (D118)', [$quadroPagamento[0]['t'] ?? null, $quadroPagamento[0]['e'] ?? null, str_contains($texto($semPreco), 'TOTAL | R$ 24,90')], ['PAGAMENTO: PIX', 'caixa', true]);
@@ -503,24 +503,17 @@ conferir('Dinheiro com troco, pedido da mesa ("na mesa", D112) e salão pra viag
     Comanda::pagamentoEmDestaque(['pagamento' => 'dinheiro', 'troco_para_centavos' => null]), Comanda::pagamentoEmDestaque(['pagamento' => 'caixa', 'tipo' => 'viagem', 'troco_para_centavos' => null]),
 ], ['PAGAMENTO: DINHEIRO, TROCO PARA R$ 100,00', 'PAGAMENTO NA MESA', 'PAGAMENTO: DINHEIRO, SEM TROCO', 'PAGAMENTO NA CONTA']);
 
-// D111: o resumo do pedido vem depois dos pratos e antes do pagamento, uma linha por item com o valor.
+// D122: depois dos pratos, só a taxa, o total e o pagamento (saíram o "CLIENTE:", o telefone e o resumo dos itens).
 $linhasTeste = Comanda::teste(['nome_loja' => 'X', 'com_preco' => true]);
 $textos = array_column($linhasTeste, 't');
-$posResumo = array_search('RESUMO DO PEDIDO', $textos, true);
 $posPagamento = array_key_first(array_filter($textos, static fn (string $t): bool => str_starts_with($t, 'PAGAMENTO')));
 $posUltimoPrato = max(array_keys(array_filter($textos, static fn (string $t): bool => str_starts_with($t, 'Molho: '))));
-conferir('Resumo do pedido: depois das escolhas dos ingredientes e antes do pagamento', [$posResumo !== false && $posResumo > $posUltimoPrato, $posResumo < $posPagamento], [true, true]);
-$doResumo = array_values(array_filter(array_slice($linhasTeste, (int) $posResumo + 1, 4), static fn (array $l): bool => str_contains($l['t'], 'x ')));
-conferir('No resumo: Monte seu prato pela massa e tamanho, prato da casa pelo nome e tamanho, bebida pelo nome, cada um com o valor', array_map(static fn (array $l): string => $l['t'] . ' | ' . ($l['d'] ?? ''), $doResumo), [
-    '1x Penne (Inteiro) | R$ 46,90', '1x Lasanha da casa (Meio) | R$ 29,90', '2x Refrigerante lata | R$ 13,00',
-]);
-$posFone = array_search('(11) 91234-5678', $textos, true);
-conferir('Telefone só no fim, grande, depois do "CLIENTE:" e antes do resumo; o nome segue lá em cima (D119)', [
-    $posFone !== false && $posFone > $posUltimoPrato && $posFone < $posResumo, $linhasTeste[(int) $posFone]['e'] ?? null, $textos[(int) $posFone - 1] ?? null,
-    count(array_filter($textos, static fn (string $t): bool => str_contains($t, '91234-5678'))), $textos[5] ?? null,
-], [true, 'caixa', 'CLIENTE: Comanda de teste', 1, 'Comanda de teste']);
-conferir('Os pratos lá em cima saem sem valor (o valor está no resumo)', array_values(array_filter($linhasTeste, static fn (array $l): bool => $l['t'] === '1x Monte seu prato'))[0]['d'] ?? null, null);
-conferir('Comanda do navegador recebe o nome curto do resumo', Comanda::comChecklist(['itens' => [['nome' => 'Monte seu prato', 'item_id' => null, 'montagem' => ['tamanho' => ['nome' => 'Meio'], 'massa' => ['nome' => 'Nhoque'], 'molho' => ['nome' => 'Sugo'], 'inclusos' => [], 'extras' => []]]]])['itens'][0]['nome_resumo'], 'Nhoque (Meio)');
+$posTotal = array_search('TOTAL', $textos, true);
+conferir('Fim da comanda: taxa, TOTAL e pagamento, depois dos pratos; nada de resumo, "CLIENTE:" ou telefone (D122)', [
+    $posTotal > $posUltimoPrato && $posTotal < $posPagamento, $textos[$posTotal - 1] ?? null, in_array('RESUMO DO PEDIDO', $textos, true),
+    count(array_filter($textos, static fn (string $t): bool => str_contains($t, '91234-5678') || str_starts_with($t, 'CLIENTE:'))), $textos[5] ?? null,
+], [true, 'Taxa de entrega', false, 0, 'Comanda de teste']);
+conferir('Os pratos saem sem valor', array_values(array_filter($linhasTeste, static fn (array $l): bool => $l['t'] === '1x Monte seu prato'))[0]['d'] ?? null, null);
 conferir('Comanda de teste tem acentos (o agente precisa imprimi-los)', str_contains($texto(Comanda::teste(['nome_loja' => 'X', 'com_preco' => true])), 'ação, pão'), true);
 
 echo "\nCOMANDA COMO LISTA DE MARCAR (D95)\n";

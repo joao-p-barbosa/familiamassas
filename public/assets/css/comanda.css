@@ -84,11 +84,6 @@
   font-weight: 900;
 }
 /* Lista de marcar do prato montado (D95): todas as opções, a escolhida com o quadrado cheio e em negrito. */
-.comanda__secao {
-  margin-top: 2mm;
-  font-weight: 700;
-  text-align: center;
-}
 .comanda__opcao {
   display: flex;
   align-items: center;

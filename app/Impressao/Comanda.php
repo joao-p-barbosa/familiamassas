@@ -21,8 +21,7 @@ use App\Services\PedidoService;
  * D111: depois dos pratos, antes do pagamento, o "RESUMO DO PEDIDO": uma linha por item ("1x Nhoque (Meio)", "2x Coca-Cola lata"),
  * com o valor (se a comanda leva preço), a taxa e o total. Dinheiro sai com "troco para R$ ..." ou "sem troco".
  *
- * D119: lá em cima fica só o nome (e o endereço, se entrega). Depois dos pratos vem "CLIENTE: nome" e o telefone em letra grande,
- * e então o resumo, a taxa, o total e o pagamento.
+ * D122: o fim da comanda ficou só com a taxa, o total e o pagamento (saíram o "CLIENTE:", o telefone e o resumo dos itens).
  */
 final class Comanda
 {
@@ -59,7 +58,10 @@ final class Comanda
 
         // ---- Cliente e endereço ----
         $l[] = ['t' => '', 'e' => 'linha'];
-        $l[] = ['t' => (string) $pedido['cliente_nome'], 'e' => 'negrito'];   // o telefone vai no fim, grande (D119)
+        $l[] = ['t' => (string) $pedido['cliente_nome'], 'e' => 'negrito'];
+        if ($ifood !== null && $ifood['telefone'] !== '') {   // o iFood pede o telefone e o localizador na comanda
+            $l[] = ['t' => $ifood['telefone'] . ($ifood['localizador'] !== '' ? ' · localizador ' . $ifood['localizador'] : ''), 'e' => 'normal'];
+        }
         if ($pedido['tipo'] === 'entrega') {
             $l[] = ['t' => trim($pedido['endereco_rua'] . ', ' . $pedido['endereco_numero'] . ($pedido['endereco_complemento'] ? ' · ' . $pedido['endereco_complemento'] : ''), ', '), 'e' => 'normal'];
             if ($pedido['endereco_bairro']) {
@@ -111,30 +113,10 @@ final class Comanda
             $l[] = ['t' => 'OBS DO PEDIDO: ' . $pedido['observacoes'], 'e' => 'negrito'];
         }
 
-        // ---- Cliente e telefone (D119): no fim, perto do resumo, com o telefone em letra grande para quem liga ou entrega ----
-        $l[] = ['t' => '', 'e' => 'linha'];
-        $l[] = ['t' => 'CLIENTE: ' . $pedido['cliente_nome'], 'e' => 'negrito'];
-        $fone = $ifood !== null ? (string) $ifood['telefone'] : self::telefone((string) ($pedido['cliente_telefone'] ?? ''));
-        if ($fone !== '') {
-            $l[] = ['t' => $fone, 'e' => 'caixa', 'a' => 'c'];
-        }
-        if ($ifood !== null && $ifood['localizador'] !== '') {
-            $l[] = ['t' => 'Localizador ' . $ifood['localizador'], 'e' => 'pequeno', 'a' => 'c'];
-        }
-
-        // ---- Resumo do pedido (D111) e valores ----
-        $l[] = ['t' => '', 'e' => 'linha'];
-        $l[] = ['t' => 'RESUMO DO PEDIDO', 'e' => 'negrito', 'a' => 'c'];
-        foreach ($pedido['itens'] as $item) {
-            $linha = ['t' => $item['quantidade'] . 'x ' . self::nomeNoResumo($item), 'e' => 'normal'];
-            if ($comPreco) {
-                $linha['d'] = self::reais($item['preco_unit_centavos'] * $item['quantidade']);
-            }
-            $l[] = $linha;
-        }
-        // D118: o total sai sempre no resumo (mesmo na comanda sem preço por item). No iFood, quem manda é o "pago ou cobrar".
+        // ---- Valores (D122: sem cliente, telefone e resumo dos itens no fim; ficam a taxa, o total e o pagamento) ----
+        // D118: o total sai sempre (mesmo na comanda sem preço por item). No iFood, quem manda é o "pago ou cobrar".
         if ($comPreco || $ifood === null) {
-            $l[] = ['t' => '', 'e' => 'espaco'];
+            $l[] = ['t' => '', 'e' => 'linha'];
             if ((int) $pedido['taxa_entrega_centavos'] > 0) {
                 $l[] = ['t' => 'Taxa de entrega', 'e' => 'normal', 'd' => self::reais((int) $pedido['taxa_entrega_centavos'])];
             } elseif (str_starts_with((string) ($pedido['observacoes'] ?? ''), PedidoService::TAXA_A_CONFIRMAR)) {
@@ -232,7 +214,6 @@ final class Comanda
                 $catalogo ??= (new CardapioRepository())->publico();
                 $pedido['itens'][$i]['checklist'] = self::checklist($item['montagem'], $catalogo);
             }
-            $pedido['itens'][$i]['nome_resumo'] = self::nomeNoResumo($item);
         }
         return $pedido;
     }
@@ -277,21 +258,6 @@ final class Comanda
         return "PAGAMENTO: {$forma}{$troco}";
     }
 
-    /**
-     * O item numa linha curta, para o resumo (D111). Monte seu prato: a massa e o tamanho ("Nhoque (Meio)"); prato da casa: o nome e o
-     * tamanho ("Lasanha (Inteiro)"); bebida e sobremesa: o nome.
-     */
-    public static function nomeNoResumo(array $item): string
-    {
-        $m = $item['montagem'] ?? null;
-        if (!is_array($m)) {
-            return (string) $item['nome'];
-        }
-        $tamanho = trim((string) ($m['tamanho']['nome'] ?? ''));
-        $base = empty($item['item_id']) && !empty($m['massa']['nome']) ? (string) $m['massa']['nome'] : (string) $item['nome'];
-        return $base . ($tamanho !== '' ? " ({$tamanho})" : '');
-    }
-
     private static function reais(int $centavos): string
     {
         return 'R$ ' . number_format($centavos / 100, 2, ',', '.');
@@ -307,15 +273,5 @@ final class Comanda
     private static function hora(string $iso): string
     {
         return (new \DateTimeImmutable($iso))->setTimezone(Relogio::fusoDaLoja())->format('H:i');
-    }
-
-    /** 5511912345678 → (11) 91234-5678 */
-    private static function telefone(string $digitos): string
-    {
-        $local = str_starts_with($digitos, '55') && strlen($digitos) >= 12 ? substr($digitos, 2) : $digitos;
-        if (preg_match('/^(\d{2})(\d{4,5})(\d{4})$/', $local, $m) === 1) {
-            return "({$m[1]}) {$m[2]}-{$m[3]}";
-        }
-        return $digitos;
     }
 }

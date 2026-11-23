@@ -4,7 +4,7 @@
 //   * A comanda é montada em HTML num <iframe> oculto e mandada para a impressora padrão.
 //     Com o Chrome aberto em --kiosk-printing, sai direto, sem a janela de impressão.
 import { esc, guardado } from '../shared/dom.js';
-import { reais, hora, dataHora, telefone } from '../shared/formato.js';
+import { reais, hora, dataHora } from '../shared/formato.js';
 import { api } from '../shared/api.js';
 import { ORIGENS, PAGAMENTOS, rotuloDoTipo } from '../shared/pedido.js';
 import { ajustes, mostrarErro } from './casca.js';
@@ -60,8 +60,6 @@ export function comandaHtml(pedido, { largura = ajustes.comanda_largura_mm, comP
   }).join('');
 
   const troco = pedido.pagamento !== 'dinheiro' ? '' : pedido.troco_para_centavos ? `, troco para ${reais(pedido.troco_para_centavos)}` : ', sem troco';
-  // Resumo do pedido (D111): uma linha por item, com o valor; o nome curto vem do servidor (Comanda::nomeNoResumo).
-  const resumo = pedido.itens.map((item) => `<p class="comanda__meta"><span>${item.quantidade}x ${esc(item.nome_resumo ?? item.nome)}</span>${comPreco ? `<span>${reais(item.preco_unit_centavos * item.quantidade)}</span>` : ''}</p>`).join('');
   // Pedido do iFood: número do app, quem entrega, código de coleta e "pago ou cobrar" (sai mesmo na comanda sem preço).
   const ifood = pedido.ifood;
   const doIfood = ifood ? `
@@ -70,8 +68,6 @@ export function comandaHtml(pedido, { largura = ajustes.comanda_largura_mm, comP
   const ifoodCliente = ifood ? `
         ${pedido.tipo === 'entrega' ? `<p><b>${ifood.entregue_por === 'IFOOD' ? 'Entregador do iFood' : 'Entrega da loja'}</b></p>` : ''}
         ${ifood.codigo_coleta ? `<p><b>Código de coleta: ${esc(ifood.codigo_coleta)}</b></p>` : ''}` : '';
-  // D119: o telefone sai no fim, grande, perto do resumo (lá em cima fica só o nome).
-  const fone = ifood ? ifood.telefone : pedido.cliente_telefone ? telefone(pedido.cliente_telefone) : '';
   const ifoodPagamento = ifood ? `
       <div class="comanda__bloco">
         <p class="comanda__tipo">${ifood.pago_online ? 'Pago online - não cobrar' : `Cobrar ${reais(ifood.a_cobrar_centavos ?? pedido.total_centavos)}`}</p>
@@ -87,19 +83,11 @@ export function comandaHtml(pedido, { largura = ajustes.comanda_largura_mm, comP
       <p class="comanda__meta"><span>${dataHora(pedido.criado_em)}</span><span>${esc(ORIGENS[pedido.origem] ?? pedido.origem)}</span></p>
       <div class="comanda__bloco">
         <p class="comanda__cliente">${esc(pedido.cliente_nome)}</p>
+        ${ifood?.telefone ? `<p>${esc(ifood.telefone)}${ifood.localizador ? ` · localizador ${esc(ifood.localizador)}` : ''}</p>` : ''}
         ${endereco}${ifoodCliente}
       </div>
       <div class="comanda__bloco">${itens}</div>
       ${pedido.observacoes ? `<div class="comanda__bloco"><p class="comanda__obs">OBS DO PEDIDO: ${esc(pedido.observacoes)}</p></div>` : ''}
-      <div class="comanda__bloco">
-        <p class="comanda__cliente">Cliente: ${esc(pedido.cliente_nome)}</p>
-        ${fone ? `<p class="comanda__tipo">${esc(fone)}</p>` : ''}
-        ${ifood?.localizador ? `<p class="comanda__via">Localizador ${esc(ifood.localizador)}</p>` : ''}
-      </div>
-      <div class="comanda__bloco">
-        <p class="comanda__secao">Resumo do pedido</p>
-        ${resumo}
-      </div>
       ${comPreco || !ifood ? `
       <div class="comanda__bloco">
         ${pedido.taxa_entrega_centavos ? `<p class="comanda__meta"><span>Taxa de entrega</span><span>${reais(pedido.taxa_entrega_centavos)}</span></p>`
