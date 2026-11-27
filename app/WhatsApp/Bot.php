@@ -146,6 +146,7 @@ final class Bot
         $loja = $this->config->get('nome_loja', 'Família Massas');
         $estado = $this->loja->estado();
         $texto = ($primeiro !== '' ? "Olá, {$primeiro}!" : 'Olá!') . " Aqui é a {$loja}.\n"
+            . WhatsApp::AVISO_CARDAPIO_WEB . "\n\n"
             . $estado['mensagem'] . ".\n\nComo podemos ajudar?";
         WhatsApp::enviar($telefone, WhatsApp::botoes($texto, WhatsApp::BOTOES), 'boas_vindas');
         return 'boas_vindas';

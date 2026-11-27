@@ -17,6 +17,9 @@ final class WhatsApp
     /** Os três botões do bot (a API aceita no máximo 3; título com até 20 caracteres). */
     public const BOTOES = ['pedir' => 'Fazer pedido', 'acompanhar' => 'Acompanhar pedido', 'atendente' => 'Falar com atendente'];
 
+    /** Vai na apresentação do bot (menu de boas-vindas e primeira resposta da IA). Escrito pelo sistema: o link não passa pelo modelo. */
+    public const AVISO_CARDAPIO_WEB = "Nosso cardápio agora é na web! 🍝 Veja e faça o seu pedido em:\nhttps://familia-massas.onrender.com/";
+
     private static ?Mensageiro $mensageiro = null;
 
     public static function simulado(): bool

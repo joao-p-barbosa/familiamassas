@@ -705,6 +705,7 @@ conferir('"oi" → boas-vindas com o nome do cliente, o status da loja e os 3 bo
     str_contains($boasVindas['interactive']['body']['text'] ?? '', 'Olá, Maria!'), str_contains($boasVindas['interactive']['body']['text'] ?? '', 'Aberto agora'),
     array_column(array_column($boasVindas['interactive']['action']['buttons'] ?? [], 'reply'), 'id'),
 ], [1, 1, 'interactive', true, true, ['pedir', 'acompanhar', 'atendente']]);
+conferir('As boas-vindas avisam que o cardápio agora é na web, com o link', str_contains($boasVindas['interactive']['body']['text'] ?? '', 'https://familia-massas.onrender.com/'), true);
 $r = $webhook->processar($mensagemWa('wamid.oi.1', 'oi'));
 conferir('Evento repetido da Meta (mesmo wamid): não responde de novo', [$r['repetidas'], $r['mensagens'], count($falsoWhats->enviadas) - $antes], [1, 0, 1]);
 conferir('A mensagem do cliente abre a janela de 24 h', $conversasWa->janelaAberta($foneWa), true);
@@ -1046,6 +1047,7 @@ conferir('A conversa anterior vai junto (o que o cliente e o assistente já diss
     count(array_keys($historicoEnviado, 'quero pedir', true)),
 ], [true, true, 1]);
 conferir('Só a primeira mensagem tem o aviso de "primeira mensagem" no prompt', str_contains((string) ($pedidosIa[0]['corpo']['messages'][0]['content'] ?? ''), 'primeira mensagem da conversa'), false);
+conferir('O aviso do cardápio na web vai só na apresentação, não nas respostas seguintes', str_contains($textoFinalDoLink, 'familia-massas.onrender.com'), false);
 $registroFerramenta = $pdoIa->query('SELECT ferramentas FROM ia_uso ORDER BY id DESC LIMIT 1')->fetchColumn();
 conferir('O registro diz quais ferramentas foram usadas', $registroFerramenta, 'enviar_link_do_cardapio');
 
@@ -1059,10 +1061,10 @@ $filaIa = [$ferramentaIa('enviar_link_do_cardapio'), $textoIa('Pronto! Monte aqu
 $comMarcador = $assistenteIa->responder('5511977770099', 'quero pedir', null, ['historico' => [], 'origem' => 'teste', 'simulacao' => true]);
 conferir('O modelo escreve o marcador: o texto sai com o link real, uma vez só e sem sobra do marcador', [
     $comMarcador['texto'], substr_count($comMarcador['texto'], 'https://exemplo.test/?t=teste'), str_contains($comMarcador['texto'], '{{'),
-], ['Pronto! Monte aqui: https://exemplo.test/?t=teste e bom apetite.', 1, false]);
+], ['Pronto! Monte aqui: https://exemplo.test/?t=teste e bom apetite.' . "\n\n" . App\WhatsApp\WhatsApp::AVISO_CARDAPIO_WEB, 1, false]);
 $filaIa = [$textoIa('Veja o cardápio: {{LINK_DO_CARDAPIO}}')];
 $semFerramenta = $assistenteIa->responder('5511977770099', 'quero pedir', null, ['historico' => [], 'origem' => 'teste', 'simulacao' => true]);
-conferir('Marcador inventado, sem a ferramenta por trás: some (nunca vai "{{...}}" para o cliente)', [$semFerramenta['texto'], str_contains($semFerramenta['texto'], '{{')], ['Veja o cardápio:', false]);
+conferir('Marcador inventado, sem a ferramenta por trás: some (nunca vai "{{...}}" para o cliente)', [$semFerramenta['texto'], str_contains($semFerramenta['texto'], '{{')], ['Veja o cardápio:' . "\n\n" . App\WhatsApp\WhatsApp::AVISO_CARDAPIO_WEB, false]);
 $filaIa = [$textoIa("Vou te mandar o link. <function=enviar_link_do_cardapio>{}</function>\nO link já vai.")];
 $vazou = $assistenteIa->responder('5511977770099', 'quero pedir', null, ['historico' => [], 'origem' => 'teste', 'simulacao' => true]);
 conferir('Chamada de ferramenta vazada como texto (<function=...>) é retirada da resposta ao cliente', [str_contains($vazou['texto'], 'function'), str_contains($vazou['texto'], 'O link já vai.')], [false, true]);
@@ -1117,7 +1119,7 @@ conferir('Teste do painel: usa o modelo pedido, não mexe em conversa nenhuma e 
     $pedidosIa[0]['corpo']['model'] ?? null, $conversasWa->conversa('teste'), $usoTeste['origem'], $usoTeste['telefone'], $usoTeste['modelo'],
 ], ['openai/gpt-oss-20b', null, 'teste', null, 'openai/gpt-oss-20b']);
 conferir('Modelo que não é da Anthropic não recebe o parâmetro de raciocínio', array_key_exists('reasoning', $pedidosIa[0]['corpo'] ?? []), false);
-conferir('A resposta sai limpa: negrito do WhatsApp (*assim*) e sem raciocínio em tags', [$teste['texto'], $teste['ferramentas']], ['*Pronto*, já chamei alguém.', ['falar_com_atendente']]);
+conferir('A resposta sai limpa: negrito do WhatsApp (*assim*) e sem raciocínio em tags', [$teste['texto'], $teste['ferramentas']], ['*Pronto*, já chamei alguém.' . "\n\n" . App\WhatsApp\WhatsApp::AVISO_CARDAPIO_WEB, ['falar_com_atendente']]);
 
 // Modelo informado à mão e saldo.
 conferir('Identificador de modelo: aceita o formato do OpenRouter e recusa lixo', [
@@ -1613,7 +1615,7 @@ $resPi = $dizPi($fonePi, 'oi, quero 2 carbonara e uma água, vou retirar, pago n
 $saidasPi = $enviadasPi($antesPi);
 conferir('Pedido na primeira mensagem: a IA monta tudo de uma vez e o sistema manda o resumo dele logo depois da frase da IA', [
     $resPi, count($saidasPi), $saidasPi[0] ?? null, str_contains($saidasPi[1] ?? '', '*Total: ' . $reaisPi($esperadoPi) . '*'), str_contains($saidasPi[1] ?? '', '2x Carbonara da casa'), str_contains($saidasPi[1] ?? '', '(sem pimenta)'), str_contains($saidasPi[1] ?? '', 'Retirada no balcão'), str_contains($saidasPi[1] ?? '', 'Responda *sim*'),
-], ['ia', 2, 'Anotei tudo! Confere o resumo aqui embaixo:', true, true, true, true, true]);
+], ['ia', 2, 'Anotei tudo! Confere o resumo aqui embaixo:' . "\n\n" . App\WhatsApp\WhatsApp::AVISO_CARDAPIO_WEB, true, true, true, true, true]);
 $primeiraPi = $pedidosIa[0]['corpo'] ?? [];
 $sistemaPi = $primeiraPi['messages'][0]['content'] ?? '';
 conferir('O modelo recebe as ferramentas do pedido, o cardápio com os códigos, as regras do pedido e a situação de agora', [
