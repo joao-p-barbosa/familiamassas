@@ -70,6 +70,14 @@ final class Conversas
         return $ultima !== null && $ultima >= gmdate('Y-m-d H:i:s', time() - self::JANELA_SEGUNDOS);
     }
 
+    /** O bot (ou alguém da loja) já mandou alguma mensagem a este telefone nas últimas 24 h? Falha de envio não conta. */
+    public function enviouNasUltimas24h(string $telefone): bool
+    {
+        $consulta = Banco::conexao()->prepare("SELECT 1 FROM whatsapp_eventos WHERE telefone = ? AND direcao = 'out' AND tipo NOT IN ('falha', 'falha_entrega') AND criado_em >= ? LIMIT 1");
+        $consulta->execute([$telefone, gmdate('Y-m-d H:i:s', time() - self::JANELA_SEGUNDOS)]);
+        return $consulta->fetchColumn() !== false;
+    }
+
     /** A Meta disse que a janela fechou (o nosso registro estava otimista): os próximos avisos vão como template. */
     public function fecharJanela(string $telefone): void
     {

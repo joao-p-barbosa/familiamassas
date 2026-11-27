@@ -9,6 +9,7 @@ use App\Repositories\ConfigRepository;
 use App\Services\LojaService;
 use App\Services\PrecoService;
 use App\WhatsApp\Conversas;
+use App\WhatsApp\WhatsApp;
 
 /**
  * O assistente de atendimento (D70). Monta o prompt a partir do que o dono configurou (humor, conhecimento, fluxos) e dos dados
@@ -114,8 +115,13 @@ final class Assistente
         $rodadas = max(2, (int) ($opcoes['rodadas'] ?? self::RODADAS));
         $primeira = array_filter($historico, static fn (array $m): bool => $m['role'] === 'assistant') === [];
 
+        // D124: apresentação = o bot não mandou nada a este cliente nas últimas 24 h (no teste do painel, a primeira mensagem).
+        $apresentacao = $simulacao ? $primeira : !$this->conversas->enviouNasUltimas24h($telefone);
+
         $mensagens = array_merge(
-            [['role' => 'system', 'content' => $this->prompt($c, $primeira, $nome, $pedido) . (isset($opcoes['contexto']) ? "\n\nSITUAÇÃO AGORA\n" . $opcoes['contexto'] : '')]],
+            [['role' => 'system', 'content' => $this->prompt($c, $primeira, $nome, $pedido)
+                . ($apresentacao ? "\n\nO sistema acrescenta no fim desta mensagem o aviso de que o cardápio agora é na web, com o link: não repita o aviso nem mande link do cardápio." : '')
+                . (isset($opcoes['contexto']) ? "\n\nSITUAÇÃO AGORA\n" . $opcoes['contexto'] : '')]],
             $historico,
             [['role' => 'user', 'content' => mb_substr($texto, 0, 1000)]],
         );
@@ -158,6 +164,9 @@ final class Assistente
         }
         if ($erro === null && $final === '') {
             $erro = 'O modelo não devolveu texto.';
+        }
+        if ($erro === null && $apresentacao) {
+            $final .= "\n\n" . WhatsApp::AVISO_CARDAPIO_WEB;   // o aviso é do sistema: vai sempre, com o link certo
         }
 
         $this->repo->registrarUso($origem, $simulacao ? null : $telefone, $modelo, $tokensIn, $tokensOut, $custo, $ms, $usadas, $erro);
